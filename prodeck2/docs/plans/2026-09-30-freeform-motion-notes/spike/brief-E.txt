@@ -1,0 +1,8 @@
+Brief:
+- Stage: W = 1080, H = 900 px (it sits over the lower-middle of a 1080×1920 frame; the speaker's face is above it).
+- D = 3.0 seconds.
+- What the speaker says, with the time each word is said: "เขาไปเอง" 0.20 · "ได้ไหม" 0.70 · "ในปัจจุบัน" 1.30 · "ไม่ได้" 1.95.
+- The point to make: can an astronaut get to space on his own? Today, no. Design a small animated moment that shows the attempt and the "no"; it should feel designed for this sentence, not like a generic template.
+- Palette: ink #1F2227, white #FFFFFF, yellow #FFD447 (accent), sky blue #6EC1FF (second), coral #FF7A59 (sparingly).
+
+Return only the fragment, with no code fence and no explanation.

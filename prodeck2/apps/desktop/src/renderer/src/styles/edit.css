@@ -1,0 +1,801 @@
+/* The editing room: beats on the left, the beat in hand on the right. */
+
+.edit-room {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+/* the beats */
+
+.beat-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 12px;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.sidebar-label {
+  padding: 2px 8px 6px;
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.beat-picks {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.beat-pick {
+  display: grid;
+  grid-template-columns: 5px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.beat-pick:hover {
+  background: var(--row-hover);
+}
+
+.beat-pick.on {
+  background: var(--accent-soft);
+}
+
+.beat-colour {
+  min-height: 34px;
+  border-radius: 3px;
+}
+
+.beat-pick-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.beat-pick-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beat-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.mark {
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.mark.text {
+  background: var(--hl-soft);
+  color: var(--hl-text);
+}
+
+.mark.sound {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.mark.zoom {
+  background: var(--zoom-soft);
+  color: var(--zoom);
+}
+
+.mark.insert {
+  background: var(--ins-soft);
+  color: var(--ins);
+}
+
+.mark.graphic {
+  background: var(--gfx-soft);
+  color: var(--gfx);
+}
+
+.sidebar-summary {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: auto;
+  padding: 12px 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+/* the beat in hand */
+
+.edit-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 18px 28px 0;
+  overflow: auto;
+}
+
+.beat-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.beat-panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.beat-panel-head h1 {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.beat-panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 0 20px;
+  overflow: auto;
+  transition: opacity 0.15s;
+}
+
+.beat-panel-body.busy {
+  opacity: 0.5;
+}
+
+.tab-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.tab-section {
+  margin: 16px 0 6px;
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.tab-section:first-child {
+  margin-top: 0;
+}
+
+/* speech */
+
+.speech-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.speech-line {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+}
+
+.speech-line .mono {
+  flex: none;
+}
+
+.speech-row q {
+  flex: 1;
+  min-width: 0;
+}
+
+.speech-actions {
+  flex: none;
+  margin-left: auto;
+}
+
+.speech-line:hover {
+  background: var(--row-hover);
+}
+
+.pill {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.speech-row.used .pill {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.speech-row.cut .pill {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.speech-row.kept .pill {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.speech-row q {
+  quotes: "“" "”";
+  user-select: text;
+}
+
+.speech-row.cut q {
+  color: var(--sub);
+  text-decoration: line-through;
+}
+
+.speech-actions {
+  /* the picture picker hangs off this box */
+  position: relative;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+}
+
+.speech-line:hover .speech-actions,
+.speech-actions:focus-within,
+.speech-actions:has(.popover) {
+  opacity: 1;
+}
+
+.speech-line .mark {
+  flex: none;
+}
+
+.speech-player {
+  padding: 6px 10px 10px;
+}
+
+.speech-player .scene-player {
+  width: 420px;
+  max-width: 100%;
+}
+
+.pause-fold {
+  padding-top: 6px;
+}
+
+/* highlight text */
+
+.highlight-groups {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.highlight-group {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--hl);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: var(--surface);
+}
+
+.highlight-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--sub);
+}
+
+.highlight-head b {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.look-anchor {
+  position: relative;
+}
+
+.highlight-lines {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.highlight-lines li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.highlight-lines input {
+  -webkit-app-region: no-drag;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  user-select: text;
+}
+
+/* subtitles */
+
+.subtitle-lines {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.subtitle-lines li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.subtitle-lines input {
+  -webkit-app-region: no-drag;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  user-select: text;
+}
+
+/* flair */
+
+.flair-rows {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* the columns a row has depend on which kinds are on, so they line up rather than being reserved */
+.flair-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+}
+
+.flair-row .mono {
+  flex: none;
+  width: 56px;
+}
+
+.flair-row .select {
+  flex: none;
+  width: 220px;
+}
+
+.flair-row:hover {
+  background: var(--row-hover);
+}
+
+.flair-what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flair-length {
+  flex: none;
+  color: var(--sub);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* a graphic's row is taller than the rest: its poster, then what it is, why, and how it stands */
+.flair-row.graphic {
+  align-items: flex-start;
+}
+
+/* switched off, what it shows fades; that it is off, and the button that turns it back on, stay readable. The
+   lines of highlight text a graphic takes the place of fade the same way: they are not drawn in the clip either */
+.flair-row.graphic.off .graphic-poster,
+.flair-row.graphic.off .graphic-poster-none,
+.flair-row.graphic.off .flair-what,
+.flair-row.graphic.off .graphic-why,
+.highlight-group.off .highlight-lines {
+  opacity: 0.55;
+}
+
+/* posters are transparent graphics, often white or yellow, so they sit on the dark of a footage cover in either theme */
+.graphic-poster,
+.graphic-poster-none {
+  flex: none;
+  width: 68px;
+  height: 68px;
+  border-radius: var(--radius);
+  background: var(--cover-bg);
+}
+
+.graphic-poster {
+  object-fit: contain;
+}
+
+.graphic-poster-none {
+  display: inline-block;
+}
+
+/* a failed render's error can be one long unbroken line, which must wrap rather than push the buttons away */
+.graphic-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* a motion graphic's idea can run to several sentences: two lines of it show, and the whole is in its title */
+.graphic-body .flair-what {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  flex: none;
+  white-space: normal;
+}
+
+.graphic-state {
+  color: var(--sub);
+  font-size: 12px;
+}
+
+/* the whole error is in its title; three lines are enough to say what went wrong */
+.graphic-state.failed,
+.graphic-state.warn-text {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  display: -webkit-box;
+  overflow: hidden;
+}
+
+.graphic-state.failed {
+  color: var(--danger);
+}
+
+/* a writing that failed is put right by asking for it again: it warns, which a state's own grey would otherwise hide */
+.graphic-state.warn-text {
+  color: var(--warn);
+}
+
+.graphic-state.ready {
+  color: var(--ok);
+}
+
+.graphic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* the colours of a style, and the user's own */
+
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.colour-inputs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.colour-input {
+  display: grid;
+  gap: 4px;
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.colour-input input {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* the AI menu, and the list of what a write is about to write */
+
+.ai-menu {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.ai-items {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-items li {
+  display: grid;
+  gap: 1px;
+}
+
+.ai-items .btn {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.write-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* the write button on the post page: why it is off, and the notice of a failed read */
+
+/* one line beside the button, cut with … when it is long: the whole of it is the reason's title, and the button's */
+.write-reason {
+  /* the bar is a drag area, and a drag area takes the pointer, and with it the title's tooltip */
+  -webkit-app-region: no-drag;
+  /* it gives way before anything else on the bar: it only takes the room the bar has spare, so the
+     buttons after it never move and nothing is pushed off the bar (the button's title says it whole) */
+  flex: 0 1000 auto;
+  min-width: 0;
+  max-width: 288px;
+  overflow: hidden;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* where the bar is full (the stage chips give up their names here too) there is no room left to say it in:
+   the button's title and its description (this element, hidden but still named by aria-describedby) say it */
+@media (max-width: 1060px) {
+  .write-reason {
+    display: none;
+  }
+}
+
+.read-failed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* the post-production page: the whole clip, the settings at the head of each tab, the plan, and the points */
+
+.beat-colour.whole {
+  background: var(--line-strong);
+}
+
+.mark.emphasis {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mark.subtitles {
+  background: var(--surface-2);
+  color: var(--sub);
+}
+
+.tab-settings {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-cta {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.plan-strip {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.plan-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--sub);
+  font-size: 12.5px;
+}
+
+.emphasis-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.emphasis-points,
+.emphasis-sentences,
+.emphasis-scenes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emphasis-point {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.emphasis-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.emphasis-text {
+  font-weight: 600;
+}
+
+/* a point the level holds back: listed so it can be changed, faded since nothing plays on it */
+.emphasis-point.off .emphasis-text {
+  color: var(--muted);
+}
+
+.emphasis-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.emphasis-reason {
+  -webkit-app-region: no-drag;
+  flex: 1;
+  min-width: 180px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  user-select: text;
+}
+
+.emphasis-sentence,
+.emphasis-scene {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+}
+
+.emphasis-sentence .mono,
+.emphasis-scene .mono {
+  flex: none;
+  width: 56px;
+}
+
+.emphasis-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+/* one word of a sentence, picked to make or move a point */
+.word {
+  -webkit-app-region: no-drag;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.word:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--row-hover);
+}
+
+/* the words wait while a change is saved, but still hold the focus */
+.word[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.word[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* a word another point already stresses */
+.word.taken {
+  color: var(--muted);
+  text-decoration: underline dotted;
+}
+
+/* which point an item was made for: it gives way to what the item is, cut short with its whole name in its tip */
+.from-point {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the heading of the points' list, which takes the focus when the last point is deleted */
+h2.tab-section {
+  font-weight: inherit;
+}

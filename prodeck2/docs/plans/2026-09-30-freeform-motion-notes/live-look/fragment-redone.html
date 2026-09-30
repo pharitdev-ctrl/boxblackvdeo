@@ -1,0 +1,50 @@
+<style>
+#st{position:absolute;left:0;top:0;width:972px;height:290px;overflow:hidden;animation:show .2s 0s both,hide .35s 1.62s both}
+#st svg{position:absolute;left:0;top:0}
+@keyframes show{from{opacity:0}to{opacity:1}}
+@keyframes hide{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-14px)}}
+.walker{animation:walk 1.3s cubic-bezier(.35,.05,.45,1) calc(var(--w1) * 1s) both,gone .25s ease-in calc(var(--w7) * 1s - .3s) both}
+@keyframes walk{from{transform:translateX(150px)}to{transform:translateX(762px)}}
+@keyframes gone{from{opacity:1}to{opacity:0}}
+.bob{animation:bob 1.3s linear calc(var(--w1) * 1s) both}
+@keyframes bob{0%,16%,33%,50%,66%,83%,100%{transform:translateY(0)}8%,25%,41%,58%,75%,91%{transform:translateY(-6px)}}
+.leg{transform-box:fill-box;transform-origin:top center}
+.la{animation:swa 1.3s linear calc(var(--w1) * 1s) both}
+.lb{animation:swb 1.3s linear calc(var(--w1) * 1s) both}
+@keyframes swa{0%,100%{transform:rotate(0)}8%,41%,75%{transform:rotate(24deg)}25%,58%,91%{transform:rotate(-24deg)}}
+@keyframes swb{0%,100%{transform:rotate(0)}8%,41%,75%{transform:rotate(-24deg)}25%,58%,91%{transform:rotate(24deg)}}
+.door{transform-box:fill-box;transform-origin:top center;animation:shut .22s cubic-bezier(.5,0,.8,1) calc(var(--w7) * 1s - .22s) both}
+@keyframes shut{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.rk{transform-box:fill-box;transform-origin:bottom center;animation:bump .4s ease-out calc(var(--w7) * 1s) both}
+@keyframes bump{0%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-16px) scale(.97,1.04)}60%{transform:translateY(0) scale(1.04,.96)}100%{transform:translateY(0) scale(1,1)}}
+</style>
+<div id="st">
+<svg width="972" height="290" viewBox="0 0 972 290">
+<rect x="70" y="242" width="832" height="10" rx="5" fill="var(--paper)" stroke="var(--ink)" stroke-width="4"/>
+<g transform="translate(760 0)">
+<g class="rk">
+<path d="M-55 225 L-95 250 L-95 200 L-55 175 Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="6" stroke-linejoin="round"/>
+<path d="M55 225 L95 250 L95 200 L55 175 Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-55 244 L-55 95 Q-55 45 0 14 Q55 45 55 95 L55 244 Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-45 70 Q-25 32 0 18 Q25 32 45 70 Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="0" cy="112" r="17" fill="var(--accent)" stroke="var(--ink)" stroke-width="6"/>
+<rect x="-30" y="150" width="60" height="92" rx="8" fill="var(--ink)"/>
+</g>
+</g>
+<g class="walker">
+<g class="bob">
+<rect class="leg la" x="-15" y="214" width="12" height="28" rx="6" fill="var(--paper)" stroke="var(--ink)" stroke-width="4"/>
+<rect class="leg lb" x="3" y="214" width="12" height="28" rx="6" fill="var(--paper)" stroke="var(--ink)" stroke-width="4"/>
+<rect x="-30" y="182" width="16" height="30" rx="6" fill="var(--alt)" stroke="var(--ink)" stroke-width="4"/>
+<rect x="-20" y="178" width="40" height="42" rx="12" fill="var(--paper)" stroke="var(--ink)" stroke-width="5"/>
+<circle cx="0" cy="158" r="25" fill="var(--paper)" stroke="var(--ink)" stroke-width="5"/>
+<rect x="-6" y="146" width="28" height="20" rx="9" fill="var(--accent)" stroke="var(--ink)" stroke-width="4"/>
+</g>
+</g>
+<g transform="translate(760 0)">
+<g class="rk">
+<rect class="door" x="-30" y="150" width="60" height="92" rx="8" fill="var(--alt)" stroke="var(--ink)" stroke-width="6"/>
+</g>
+</g>
+</svg>
+</div>

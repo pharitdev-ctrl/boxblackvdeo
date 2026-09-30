@@ -1,0 +1,111 @@
+<style>
+.dx{position:absolute;left:0;top:0;width:1080px;height:900px;overflow:hidden;animation:dxOut .32s 2.86s both cubic-bezier(.5,0,.9,.4)}
+.dx>svg{position:absolute;left:0;top:0}
+.dx svg *{transform-origin:0 0}
+.dx-disc{animation:dxPop .2s 0s both ease-out}
+.dx-moon{animation:dxPop .15s .7s both ease-out}
+.dx-rb,.dx-rf{fill:none;stroke-linecap:round;stroke-dasharray:1}
+.dx-rb{animation:dxDraw .12s .62s both ease-in}
+.dx-rf{animation:dxDraw .11s .74s both ease-out}
+.dx-tw{animation:dxTw .4s 1.04s both ease-in-out}
+.dx-fl{animation:dxFl 3.2s 0s both linear}
+.dx-bs use{animation:dxBurst .46s 1.16s both cubic-bezier(.1,.7,.3,1)}
+.dx-a{position:absolute;width:0;height:0;display:flex;align-items:center;justify-content:center}
+.dx-jolt{flex:none;animation:dxJolt .26s 1.7s both ease-out}
+.dx-plate{white-space:nowrap;font-size:150px;line-height:1.25;color:#1F2227;background:#FFD447;border:10px solid #1F2227;border-radius:36px;padding:0 56px 10px;box-shadow:0 14px 0 #1F2227;animation:dxSlam .2s 1s both cubic-bezier(.3,0,.4,1)}
+.dx-shock{flex:none;box-sizing:border-box;width:180px;height:180px;border:12px solid #FFD447;border-radius:50%;animation:dxShock .34s 1.7s both ease-out}
+.dx-stamp{flex:none;display:flex;align-items:center;gap:14px;white-space:nowrap;font-size:72px;line-height:1.4;color:#1F2227;background:#FF7A59;border:8px solid #1F2227;border-radius:999px;padding:6px 36px 10px 20px;animation:dxStamp .15s 1.55s both cubic-bezier(.6,0,.9,.6)}
+.dx-stamp svg{flex:none}
+@keyframes dxPop{0%{transform:scale(0)}70%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes dxDraw{0%{stroke-dashoffset:1;opacity:0}8%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}
+@keyframes dxTw{0%{transform:scale(1) rotate(0deg)}40%{transform:scale(1.9) rotate(45deg)}100%{transform:scale(1) rotate(90deg)}}
+@keyframes dxFl{0%,18%{transform:scale(1,1.6)}24%{transform:scale(1,.7)}40%{transform:scale(.95,1)}55%{transform:scale(1,.8)}70%{transform:scale(.95,1.05)}85%{transform:scale(1,.8)}100%{transform:scale(.95,1)}}
+@keyframes dxBurst{
+  0%{transform:translate(0,0) scale(.4) rotate(0deg);opacity:0}
+  10%{opacity:1}
+  55%{transform:translate(calc(var(--x)*.85),calc(var(--y)*.85)) scale(2.6) rotate(0deg);opacity:1}
+  100%{transform:translate(var(--x),var(--y)) scale(0) rotate(90deg);opacity:1}
+}
+@keyframes dxSlam{0%{transform:rotate(-3deg) scale(1.9);opacity:0}55%{transform:rotate(-3deg) scale(.94);opacity:1}100%{transform:rotate(-3deg) scale(1);opacity:1}}
+@keyframes dxJolt{0%{transform:translate(0,0) rotate(0deg)}25%{transform:translate(-5px,9px) rotate(-1.2deg)}100%{transform:translate(0,0) rotate(0deg)}}
+@keyframes dxShock{0%{transform:scale(.3);opacity:0}5%{opacity:1}100%{transform:scale(1.5);opacity:0}}
+@keyframes dxStamp{0%{transform:rotate(12deg) scale(2.8);opacity:0}30%{opacity:1}100%{transform:rotate(-6deg) scale(1);opacity:1}}
+@keyframes dxOut{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-40px) scale(.9)}}
+</style>
+<div class="dx">
+<svg width="1080" height="900" viewBox="0 0 1080 900">
+  <defs><path id="dxS" d="M0,-16 Q3,-3 16,0 Q3,3 0,16 Q-3,3 -16,0 Q-3,-3 0,-16Z"/></defs>
+  <g transform="translate(540,285) rotate(-16)">
+    <path class="dx-rb" pathLength="1" d="M-300,0 A300,78 0 0 1 300,0" stroke="#1F2227" stroke-width="28"/>
+    <path class="dx-rb" pathLength="1" d="M-300,0 A300,78 0 0 1 300,0" stroke="#FFD447" stroke-width="14"/>
+  </g>
+  <g transform="translate(540,285)"><g class="dx-disc">
+    <circle r="215" fill="#1F2227" stroke="#FFFFFF" stroke-width="12"/>
+    <g transform="translate(-140,-70) scale(1.4)"><use href="#dxS" class="dx-tw" fill="#FFFFFF"/></g>
+    <g transform="translate(132,-118) scale(1.7)"><use href="#dxS" class="dx-tw" fill="#FFD447"/></g>
+    <g transform="translate(-100,112) scale(1.1)"><use href="#dxS" class="dx-tw" fill="#FFD447"/></g>
+    <g transform="translate(152,58)"><use href="#dxS" class="dx-tw" fill="#FFFFFF"/></g>
+    <g transform="translate(-42,-168) scale(.8)"><use href="#dxS" class="dx-tw" fill="#6EC1FF"/></g>
+    <circle cx="-170" cy="30" r="6" fill="#FFFFFF"/><circle cx="70" cy="-176" r="6" fill="#FFFFFF"/><circle cx="96" cy="150" r="7" fill="#6EC1FF"/>
+  </g></g>
+  <g transform="translate(540,285) rotate(-16)">
+    <path class="dx-rf" pathLength="1" d="M300,0 A300,78 0 0 1 -300,0" stroke="#1F2227" stroke-width="28"/>
+    <path class="dx-rf" pathLength="1" d="M300,0 A300,78 0 0 1 -300,0" stroke="#FFD447" stroke-width="14"/>
+    <g transform="translate(300,0)"><circle class="dx-moon" r="24" fill="#6EC1FF" stroke="#1F2227" stroke-width="9"/></g>
+  </g>
+  <path class="dx-trail" opacity="0" d="M150,780 C150,600 440,460 540,285" fill="none" stroke="#1F2227" stroke-width="26" stroke-linecap="round"/>
+  <path class="dx-trail" opacity="0" d="M150,780 C150,600 440,460 540,285" fill="none" stroke="#FFD447" stroke-width="12" stroke-linecap="round"/>
+  <g id="dxRk" opacity="0">
+    <g transform="translate(0,58)"><g class="dx-fl">
+      <path d="M-24,0 Q0,100 24,0Z" fill="#FFD447" stroke="#1F2227" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M-11,0 Q0,52 11,0Z" fill="#FFFFFF"/>
+    </g></g>
+    <path d="M-36,14 L-72,72 L-34,60Z M36,14 L72,72 L34,60Z" fill="#6EC1FF" stroke="#1F2227" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M0,-100 C45,-60 50,0 38,60 L-38,60 C-50,0 -45,-60 0,-100Z" fill="#FFFFFF" stroke="#1F2227" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M0,-100 C20,-82 31,-62 37,-42 L-37,-42 C-31,-62 -20,-82 0,-100Z" fill="#FF7A59" stroke="#1F2227" stroke-width="10" stroke-linejoin="round"/>
+    <circle cy="-2" r="19" fill="#6EC1FF" stroke="#1F2227" stroke-width="9"/>
+  </g>
+  <g class="dx-bs" transform="translate(540,600)" stroke="#1F2227" stroke-width="3" stroke-linejoin="round">
+    <use href="#dxS" fill="#FFD447" style="--x:-410px;--y:-50px"/>
+    <use href="#dxS" fill="#FFFFFF" style="--x:-350px;--y:130px"/>
+    <use href="#dxS" fill="#6EC1FF" style="--x:-200px;--y:225px"/>
+    <use href="#dxS" fill="#FFD447" style="--x:10px;--y:250px"/>
+    <use href="#dxS" fill="#FFFFFF" style="--x:215px;--y:230px"/>
+    <use href="#dxS" fill="#FFD447" style="--x:360px;--y:120px"/>
+    <use href="#dxS" fill="#6EC1FF" style="--x:415px;--y:-70px"/>
+    <use href="#dxS" fill="#FFFFFF" style="--x:-300px;--y:-150px"/>
+    <use href="#dxS" fill="#FFD447" style="--x:310px;--y:-160px"/>
+  </g>
+</svg>
+<div class="dx-a" style="left:540px;top:600px"><div class="dx-jolt"><div class="dx-plate">อวกาศ</div></div></div>
+<div class="dx-a" style="left:770px;top:745px"><div class="dx-shock"></div></div>
+<div class="dx-a" style="left:770px;top:745px"><div class="dx-stamp">
+  <svg width="68" height="68" viewBox="0 0 68 68">
+    <circle cx="34" cy="34" r="28" fill="#FFFFFF" stroke="#1F2227" stroke-width="8"/>
+    <path d="M21,35 L30,44 L47,26" fill="none" stroke="#1F2227" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>ถึงแล้ว!</div></div>
+</div>
+<script>
+(function(){
+  var rk=document.getElementById('dxRk'),tr=document.querySelectorAll('.dx-trail'),p=tr[0],L=p.getTotalLength();
+  function cl(v){return v<0?0:v>1?1:v}
+  window.frame=function(t){
+    var q=cl((t-0.22)/0.38),e=1-Math.pow(1-q,3),d=e*L;
+    var a=p.getPointAtLength(d),b=p.getPointAtLength(Math.min(L,d+2)),c=p.getPointAtLength(Math.max(0,d-2));
+    var ang=Math.atan2(b.x-c.x,-(b.y-c.y))*180/Math.PI;
+    var land=cl((t-0.6)/0.2),hop=cl((t-1.7)/0.35),idle=t>0.6?t-0.6:0;
+    var s=(0.45+0.55*e)*(1+0.12*Math.sin(Math.PI*land));
+    var y=a.y+7*Math.sin(idle*3.6)-26*Math.sin(Math.PI*hop);
+    ang+=3*Math.sin(idle*2.4);
+    rk.setAttribute('transform','translate('+a.x+','+y+') rotate('+ang+') scale('+s+')');
+    rk.setAttribute('opacity',cl((t-0.22)/0.06));
+    var tail=260*(1-e)*cl((t-0.22)/0.1),s0=Math.max(0,d-tail),len=d-s0;
+    for(var i=0;i<tr.length;i++){
+      tr[i].style.strokeDasharray=len+' '+(L+10);
+      tr[i].style.strokeDashoffset=-s0;
+      tr[i].style.opacity=len>1?1:0;
+    }
+  };
+  window.frame(0);
+})();
+</script>

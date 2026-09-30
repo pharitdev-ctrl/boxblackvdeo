@@ -1,0 +1,41 @@
+<style>
+  .q { position: absolute; left: 0; right: 0; top: 60px; text-align: center; color: #fff; font-size: 84px; -webkit-text-stroke: 6px #1F2227; paint-order: stroke fill; opacity: 0; animation: q 1.9s both; }
+  .q b { color: #FFD447; font-weight: inherit; }
+  .chip { position: absolute; top: 300px; width: 200px; height: 200px; border-radius: 48px; background: #fff; color: #1F2227; font-size: 120px; display: flex; align-items: center; justify-content: center; opacity: 0; }
+  .c3 { left: 190px; animation: pop .45s .8s both, out .3s 2.2s forwards; }
+  .c2 { left: 440px; animation: pop .45s 1.3s both, out .3s 2.2s forwards; }
+  .c1 { left: 690px; animation: pop .45s 1.8s both, out .3s 2.2s forwards; }
+  .label { position: absolute; left: 80px; right: 80px; top: 560px; padding: 36px 40px; border-radius: 48px; background: #FFD447; color: #1F2227; font-size: 64px; text-align: center; opacity: 0; animation: up .4s 4s both, fade .4s 5.6s forwards; }
+  .probe { position: absolute; left: 0; top: 960px; width: 40px; height: 40px; background: #00FF00; animation: probe 6s linear both; }
+  .count { position: absolute; right: 20px; top: 900px; color: #fff; font-size: 40px; }
+  @keyframes q { 0% { opacity: 0; transform: scale(.6) } 16% { opacity: 1; transform: scale(1.08) } 24%, 84% { opacity: 1; transform: scale(1) } 100% { opacity: 0 } }
+  @keyframes pop { 0% { opacity: 0; transform: scale(.3) } 70% { opacity: 1; transform: scale(1.15) } 100% { opacity: 1; transform: scale(1) } }
+  @keyframes out { to { opacity: 0; transform: translateY(60px) } }
+  @keyframes up { from { opacity: 0; transform: translateY(80px) } to { opacity: 1; transform: none } }
+  @keyframes fade { to { opacity: 0 } }
+  @keyframes probe { from { transform: translateX(0) } to { transform: translateX(1000px) } }
+</style>
+<div class="q">ขึ้นอวกาศได้ <b>ยังไง?</b></div>
+<div class="chip c3">3</div><div class="chip c2">2</div><div class="chip c1">1</div>
+<svg width="1080" height="1000" viewBox="0 0 1080 1000" style="position:absolute;left:0;top:0">
+  <path id="trail" d="M 120 940 C 400 800 700 500 980 60" pathLength="1" fill="none" stroke="#6EC1FF" stroke-width="14" stroke-linecap="round" stroke-dasharray="1" stroke-dashoffset="1"/>
+  <g id="rocket" opacity="0"><path d="M-50 0 C-30 -28 10 -36 50 0 C10 36 -30 28 -50 0 Z" fill="#fff" stroke="#1F2227" stroke-width="5"/><circle cx="12" cy="0" r="12" fill="#6EC1FF"/><path d="M-50 0 L-82 -16 L-70 0 L-82 16 Z" fill="#FFD447"/></g>
+</svg>
+<div class="label">ต้องไปกับยานอวกาศเท่านั้น</div>
+<div class="probe"></div>
+<div class="count" id="count">0.00</div>
+<script>
+  const trail = document.getElementById("trail"), rocket = document.getElementById("rocket"), count = document.getElementById("count")
+  const L = trail.getTotalLength()
+  trail.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 1500, delay: 2400, fill: "both", easing: "ease-in-out" })
+  trail.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, delay: 5600, fill: "forwards" })
+  const ease = (p) => (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2)
+  window.frame = (t) => {
+    count.textContent = t.toFixed(2)
+    const p = Math.max(0, Math.min(1, (t - 2.4) / 1.5))
+    const at = trail.getPointAtLength(L * ease(p)), ahead = trail.getPointAtLength(Math.min(L, L * ease(p) + 1))
+    const angle = Math.atan2(ahead.y - at.y, ahead.x - at.x) * 180 / Math.PI
+    rocket.setAttribute("transform", `translate(${at.x} ${at.y}) rotate(${angle})`)
+    rocket.setAttribute("opacity", t >= 2.4 && t < 4.1 ? 1 : 0)
+  }
+</script>

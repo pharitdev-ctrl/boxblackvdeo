@@ -1,0 +1,77 @@
+<style>
+.st{position:absolute;left:0;top:0;width:996px;height:366px;animation:gout .36s 2.68s both}
+.pan{transform-box:fill-box;transform-origin:center;animation:pin .3s 0s both}
+.dark{transform-box:fill-box;transform-origin:50% 100%;animation:rise .95s calc(var(--w2) * 1s) both}
+.earth{transform-box:fill-box;transform-origin:50% 0%;animation:ein .5s 0s both}
+.rk{animation:blast .62s calc(var(--w3) * 1s - .31s) both}
+.bob{animation:bob 1.8s calc(var(--w5) * 1s) both}
+.fl{transform-box:fill-box;transform-origin:50% 0%;animation:flick 2.6s 0s both}
+.boom{transform-box:fill-box;transform-origin:center;animation:boom .5s calc(var(--w3) * 1s - .05s) both}
+.star{transform-box:fill-box;transform-origin:center}
+@keyframes gout{from{opacity:1}to{opacity:0}}
+@keyframes pin{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes rise{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes ein{from{transform:translateY(40px)}to{transform:translateY(0)}}
+@keyframes blast{0%{transform:translateY(300px)}50%{transform:translateY(118px)}80%{transform:translateY(-12px)}100%{transform:translateY(0)}}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-8px) rotate(3deg)}50%{transform:translateY(0) rotate(0deg)}75%{transform:translateY(-8px) rotate(-3deg)}}
+@keyframes flick{0%,20%,40%,60%,80%,100%{transform:scaleY(1)}10%,30%,50%,70%,90%{transform:scaleY(1.35)}}
+@keyframes boom{0%{transform:scale(.2);opacity:0}30%{opacity:1}100%{transform:scale(1.6);opacity:0}}
+</style>
+<div class="st">
+<svg width="996" height="366" viewBox="0 0 996 366">
+<defs>
+<clipPath id="cp"><rect x="178" y="18" width="640" height="330" rx="28"/></clipPath>
+</defs>
+<g class="pan">
+<g clip-path="url(#cp)">
+<rect x="178" y="18" width="640" height="330" style="fill:color-mix(in srgb, var(--alt) 45%, var(--paper))"/>
+<rect class="dark" x="178" y="18" width="640" height="330" style="fill:color-mix(in srgb, var(--ink) 82%, var(--alt))"/>
+<g id="stars"></g>
+<g class="earth">
+<circle cx="498" cy="1110" r="850" style="fill:none;stroke:var(--paper);stroke-width:4;stroke-dasharray:14 12;opacity:.9"/>
+<circle cx="498" cy="1110" r="810" style="fill:color-mix(in srgb, var(--alt) 55%, var(--accent));stroke:var(--ink);stroke-width:6"/>
+<path d="M300 330 q30 -18 70 -8 q20 12 50 4 L420 360 L300 360Z" style="fill:color-mix(in srgb, var(--accent) 60%, var(--paper));stroke:var(--ink);stroke-width:4"/>
+<path d="M600 322 q40 -14 80 0 q20 10 40 2 L720 360 L600 360Z" style="fill:color-mix(in srgb, var(--accent) 60%, var(--paper));stroke:var(--ink);stroke-width:4"/>
+</g>
+<g transform="translate(498 260)"><ellipse class="boom" cx="0" cy="0" rx="90" ry="22" style="fill:none;stroke:var(--paper);stroke-width:6"/></g>
+<g transform="translate(498 140)">
+<g class="rk"><g class="bob">
+<g class="fl"><path d="M-11 24 Q0 66 11 24Z" style="fill:var(--accent);stroke:var(--ink);stroke-width:4;stroke-linejoin:round"/></g>
+<path d="M-16 4 L-32 28 L-16 23Z" style="fill:var(--accent);stroke:var(--ink);stroke-width:4;stroke-linejoin:round"/>
+<path d="M16 4 L32 28 L16 23Z" style="fill:var(--accent);stroke:var(--ink);stroke-width:4;stroke-linejoin:round"/>
+<path d="M0 -48 C19 -31 21 -5 16 24 L-16 24 C-21 -5 -19 -31 0 -48Z" style="fill:var(--paper);stroke:var(--ink);stroke-width:5;stroke-linejoin:round"/>
+<circle cx="0" cy="-12" r="8" style="fill:var(--alt);stroke:var(--ink);stroke-width:4"/>
+</g></g>
+</g>
+</g>
+<rect x="178" y="18" width="640" height="330" rx="28" style="fill:none;stroke:var(--ink);stroke-width:7"/>
+</g>
+</svg>
+</div>
+<script>
+const g = document.getElementById("stars");
+const ns = "http://www.w3.org/2000/svg";
+const n = 34;
+for (let i = 0; i < n; i++) {
+  const a = Math.sin(i * 12.9898 + 4.1) * 43758.5453;
+  const b = Math.sin(i * 78.233 + 1.7) * 12345.6789;
+  const fx = a - Math.floor(a);
+  const fy = b - Math.floor(b);
+  const x = 200 + fx * 596;
+  const y = 36 + fy * 220;
+  if (Math.abs(x - 498) < 50 && y > 80 && y < 210) continue;
+  const s = 4 + ((i * 7) % 5) * 1.6;
+  const p = document.createElementNS(ns, "path");
+  p.setAttribute("d", "M" + x + " " + (y - s * 1.6) + " Q" + x + " " + y + " " + (x + s * 1.6) + " " + y + " Q" + x + " " + y + " " + x + " " + (y + s * 1.6) + " Q" + x + " " + y + " " + (x - s * 1.6) + " " + y + " Q" + x + " " + y + " " + x + " " + (y - s * 1.6) + "Z");
+  p.setAttribute("class", "star");
+  p.style.fill = i % 4 === 0 ? "var(--accent)" : "var(--paper)";
+  g.appendChild(p);
+  p.animate([
+    { transform: "scale(0)", opacity: 0 },
+    { transform: "scale(1.4)", opacity: 1, offset: 0.2 },
+    { transform: "scale(0.8)", opacity: 0.7, offset: 0.45 },
+    { transform: "scale(1.2)", opacity: 1, offset: 0.7 },
+    { transform: "scale(0.9)", opacity: 0.8 }
+  ], { duration: 700, delay: T[8] * 1000 - 180 + (i % 12) * 22, fill: "both", easing: "ease-out" });
+}
+</script>

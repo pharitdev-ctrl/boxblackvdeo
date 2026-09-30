@@ -1,0 +1,14 @@
+<style>
+  .b { position:absolute; left:100px; top:100px; width:200px; height:200px; background:var(--accent); animation: a 1s both; }
+  @keyframes a { from { opacity:0 } to { opacity:1 } }
+</style>
+<div class="b"></div>
+<script>
+  try { fetch("http://127.0.0.1:18934/loop-fetch").catch(() => {}) } catch (e) {}
+  try { new Image().src = "http://127.0.0.1:18934/loop-img" } catch (e) {}
+  try { navigator.sendBeacon("http://127.0.0.1:18934/loop-beacon", "x") } catch (e) {}
+  try { const f = document.createElement("form"); f.method = "POST"; f.action = "http://127.0.0.1:18934/loop-form"; f.target = "_blank"; document.body.appendChild(f); f.submit() } catch (e) {}
+  try { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "http://127.0.0.1:18934/loop-css"; document.head.appendChild(l) } catch (e) {}
+  try { window.open("http://127.0.0.1:18934/loop-open") } catch (e) {}
+  try { const i = document.createElement("iframe"); i.src = "http://127.0.0.1:18934/loop-iframe"; document.body.appendChild(i) } catch (e) {}
+</script>

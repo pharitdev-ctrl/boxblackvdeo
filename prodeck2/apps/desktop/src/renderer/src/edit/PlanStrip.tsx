@@ -1,0 +1,59 @@
+import { POST_WORKS, type PostRunView, type PostWork, type PostWorkState } from "../../../shared/api.ts"
+import { t, type MessageKey } from "../i18n.ts"
+import { Progress } from "../ui/Progress.tsx"
+import { failureText } from "./postTabs.ts"
+
+/** What one work's state says, line by line; a `warn` line asks the user to look. */
+function linesOf(work: PostWork, state: PostWorkState): { text: string; warn: boolean }[] {
+  const name = t(`post.work.${work}` as MessageKey)
+  switch (state.state) {
+    case "waiting":
+      return []
+    case "running":
+      // the graphics work counts the graphics whose writing has ended, once it is writing them: before that it plans, with nothing to count
+      if (work === "graphics" && state.done !== undefined && state.total !== undefined) return [{ text: t("post.run.writingGraphics", { done: state.done, total: state.total }), warn: false }]
+      return [{ text: t("post.run.running", { work: name }), warn: false }]
+    case "done":
+      return [
+        { text: t("post.run.done", { work: name, count: state.count }), warn: false },
+        ...(state.dropped > 0 ? [{ text: t("post.run.dropped", { work: name, count: state.dropped }), warn: true }] : []),
+      ]
+    case "skipped":
+      if (state.reason === "off") return [{ text: t("post.run.off", { work: name }), warn: false }]
+      if (state.reason === "no-emphasis") return [{ text: t("post.run.noEmphasis", { work: name }), warn: true }]
+      // the work the stop caught says so; the ones after it were never begun
+      return []
+    case "failed": {
+      // the user's stop is not a failure, and a work that ran out of time says so in plain words
+      const message = failureText(state.error)
+      if (message === null) return [{ text: t("post.run.stopped", { work: name }), warn: false }]
+      return [{ text: t("post.run.failed", { work: name, message }), warn: true }]
+    }
+  }
+}
+
+/**
+ * The line under the tabs: which work of the plan runs, and how each finished one went. Nothing before the
+ * first run. The bar counts the works of the run going (`current`), not how the others last ended; with
+ * those not known (the room opened on a run already going) it counts every work there is word of.
+ */
+export function PlanStrip({ run, current }: { run: PostRunView; current: readonly PostWork[] | null }) {
+  const works = POST_WORKS.filter((work) => run.states[work] !== undefined)
+  if (works.length === 0) return null
+  const counted = current === null ? works : works.filter((work) => current.includes(work))
+  const over = counted.filter((work) => !["waiting", "running"].includes(run.states[work]!.state)).length
+  return (
+    <div className="plan-strip" aria-live="polite">
+      {run.running && <Progress value={counted.length > 0 ? over / counted.length : null} label={t("post.planRunning")} />}
+      <ul className="plan-lines">
+        {works.flatMap((work) =>
+          linesOf(work, run.states[work]!).map((line, index) => (
+            <li key={`${work}-${index}`} className={line.warn ? "warn-text" : undefined}>
+              {line.text}
+            </li>
+          )),
+        )}
+      </ul>
+    </div>
+  )
+}

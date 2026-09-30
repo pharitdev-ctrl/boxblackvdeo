@@ -1,0 +1,11 @@
+{
+  "name": "boxblack-graphics-pack",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "hyperframes": "0.8.65"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}

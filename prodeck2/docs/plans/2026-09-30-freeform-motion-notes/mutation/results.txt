@@ -1,0 +1,70 @@
+caught     packages/core/src/graphics/motion/lint.ts  lint: createElement('script') in code no longer refused
+caught     packages/core/src/graphics/motion/lint.ts  lint: src="#id" allowed like href (only srcset refused for a shape reference)
+caught     packages/core/src/graphics/motion/lint.ts  lint: open( refused only as window.open(
+caught     packages/core/src/graphics/motion/lint.ts  lint: prefixed WebRTC names (webkitRTC/mozRTC) no longer refused
+caught     packages/core/src/graphics/motion/lint.ts  lint: size cap doubled
+caught     packages/core/src/graphics/motion/lint.ts  lint: refused tags matched case-sensitively (<CANVAS> passes)
+caught     packages/core/src/graphics/motion/lint.ts  lint: <canvas> dropped from the refused tags
+caught     packages/core/src/graphics/motion/html.ts  CSP: connect-src 'none' dropped
+caught     packages/core/src/graphics/motion/html.ts  CSP: default-src * instead of 'none'
+caught     packages/core/src/graphics/motion/html.ts  word variables numbered from --w0
+caught     packages/core/src/graphics/motion/html.ts  ink: flipped comparison picks the lighter of style text and #1F2227
+caught     packages/core/src/graphics/motion/html.ts  composition duration rounded up to whole seconds
+caught     packages/core/src/graphics/motion/direct.ts  box: max height limit removed
+caught     packages/core/src/graphics/motion/direct.ts  empty idea no longer drops the answer
+caught     packages/core/src/graphics/motion/direct.ts  unknown start word drops the answer instead of moving to the point's start
+SURVIVED   packages/core/src/graphics/motion/direct.ts  a point filled twice is kept
+caught     packages/core/src/graphics/motion/direct.ts  same start place twice is kept
+caught     packages/core/src/graphics/motion/direct.ts  until stretch ignored: seconds stay as asked
+caught     packages/core/src/graphics/motion/direct.ts  idea cap raised to 4000
+caught     packages/core/src/graphics/motion/write.ts  fragmentOf: a fence with a language is kept
+caught     packages/core/src/graphics/motion/write.ts  brief words line numbered from --w0
+caught     packages/core/src/graphics/motion/write.ts  repair brief leaves out the first brief
+caught     apps/desktop/src/main/graphics-render.ts  inspection: a frame at the empty threshold counts as drawn
+caught     apps/desktop/src/main/graphics-render.ts  inspection: gone-at-end read from the first frame
+caught     apps/desktop/src/main/graphics-render.ts  failed render with a launched browser blamed on the machine (and the reverse)
+caught     apps/desktop/src/main/graphics-render.ts  host reports not ordered window.frame-first
+caught     apps/desktop/src/main/graphics-render.ts  hash leaves out the words' times
+caught     apps/desktop/src/main/graphics-render.ts  hash leaves out MOTION_VERSION
+caught     apps/desktop/src/main/graphics-render.ts  timeout no longer reported as running out of time
+caught     apps/desktop/src/main/motion-write.ts  a second repair is allowed
+caught     apps/desktop/src/main/motion-write.ts  pool of four at once
+caught     apps/desktop/src/main/motion-write.ts  pool of one at once
+caught     apps/desktop/src/main/motion-write.ts  machine not ready (null) treated as problems and repaired
+caught     apps/desktop/src/main/motion-write.ts  no stop check after the call returns
+caught     apps/desktop/src/main/motion-write.ts  no stop check after the render returns
+caught     apps/desktop/src/main/graphics-cues.ts  render job times from the words as written, not wordsNow
+caught     apps/desktop/src/main/graphics-cues.ts  stale: words compared by count only, not text
+caught     apps/desktop/src/main/graphics-cues.ts  stale: cut-short tolerance raised to 1 s
+caught     apps/desktop/src/main/graphics-cues.ts  run-on tolerance removed
+caught     apps/desktop/src/main/graphics-cues.ts  rule A: the point's own text is not left out of the bands to dodge
+caught     apps/desktop/src/main/graphics-cues.ts  rule B: a graphic with no job (unwritten/stale) replaces its point's text
+caught     apps/desktop/src/main/graphics-cues.ts  isMotionCue accepts old-kit graphics
+caught     apps/desktop/src/main/timeline.ts  write draws replaced groups' text anyway
+caught     apps/desktop/src/main/timeline.ts  replaced groups hide subtitle words
+caught     apps/desktop/src/main/timeline.ts  looks computed over drawn groups only
+caught     apps/desktop/src/main/timeline.ts  group count checked over drawn groups only
+caught     apps/desktop/src/main/timeline.ts  Pro exits held counted over every group, replaced too
+caught     apps/desktop/src/main/highlights.ts  preview never marks a group replaced
+caught     apps/desktop/src/main/post-cleanup.ts  kit cleanup runs on any version but 2 (an outline with no version too)
+caught     apps/desktop/src/main/post-cleanup.ts  M25 cleanup runs again on a version-1 outline
+caught     apps/desktop/src/main/post-cleanup.ts  kit cleanup keeps any graphic with a place (isMotion dropped)
+caught     apps/desktop/src/main/project-files.ts  backup goes to the last changing step's folder, not the first
+caught     apps/desktop/src/main/project-files.ts  original copied after the write (copy holds the new file)
+caught     apps/desktop/src/main/flair.ts  merge: an edited old-kit graphic counts as the user's own
+caught     apps/desktop/src/main/flair.ts  merge: an edited graphic that goes keeps Claude's sounds
+caught     apps/desktop/src/main/flair.ts  render check that throws counts as the fragment's problem, not null
+caught     apps/desktop/src/main/flair.ts  plan run does not forget the machine before writing
+caught     apps/desktop/src/main/flair.ts  redo does not forget the machine before writing
+caught     apps/desktop/src/renderer/src/edit/FlairTab.tsx  state line: stale read before a failed writing
+caught     apps/desktop/src/renderer/src/edit/FlairTab.tsx  redo button enabled while a plan runs
+caught     apps/desktop/src/renderer/src/edit/FlairTab.tsx  redo mark by object identity instead of cueKey
+caught     apps/desktop/src/renderer/src/edit/PlanStrip.tsx  graphics writing count line not shown for the graphics work
+caught     apps/desktop/src/renderer/src/edit/WriteButton.tsx  stale graphics counted as written in the sheet
+caught     apps/desktop/src/renderer/src/edit/WriteButton.tsx  groupCount sent without the replaced groups
+caught     apps/desktop/src/renderer/src/edit/HighlightTab.tsx  replaced note not shown on a replaced group
+caught     apps/desktop/src/renderer/src/room/ClipRoom.tsx  subtitle lines read before an unsaved setting is saved
+caught     apps/desktop/scripts/release-check.ts  host check: white space alone passes as a script
+caught     apps/desktop/scripts/release-check.ts  stray check: anything named host.js* is let be
+caught     apps/desktop/scripts/release-check.ts  host/stray checks skipped on local builds
+68/69 caught

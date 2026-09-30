@@ -1,0 +1,33 @@
+<style>
+.st{position:absolute;left:0;top:0;width:1080px;height:720px;overflow:hidden;animation:out .35s 2.8s both}
+.old{position:absolute;left:350px;top:80px;width:380px;height:150px;background:var(--paper);border:8px solid var(--ink);border-radius:28px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:var(--ink);font-size:100px;line-height:1;animation:pop .4s calc(var(--w1) * 1s - .1s) both,dim .4s calc(var(--w4) * 1s - .3s) both}
+.strike{position:absolute;left:30px;top:58px;width:320px;height:22px;background:var(--accent);border:6px solid var(--ink);border-radius:12px;box-sizing:border-box;transform-origin:left center;animation:cut .3s calc(var(--w3) * 1s - .15s) both}
+.neo{position:absolute;left:230px;top:300px;width:620px;height:300px;background:var(--bar);border:10px solid var(--ink);border-radius:40px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:210px;line-height:1;transform-origin:50% 100%;animation:slam .45s calc(var(--w4) * 1s - .35s) both}
+.hole{position:absolute;left:28px;top:28px;width:34px;height:34px;border-radius:50%;background:var(--paper);border:7px solid var(--ink);box-sizing:border-box}
+svg{position:absolute;left:0;top:0}
+.ring{transform-box:fill-box;transform-origin:center;animation:ring .5s calc(var(--w4) * 1s) both}
+.sp{transform-box:fill-box;transform-origin:center;animation:spark .6s both}
+@keyframes pop{0%{opacity:0;transform:scale(.6)}70%{opacity:1;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+@keyframes dim{from{transform:scale(1)}to{transform:scale(.85);opacity:.75}}
+@keyframes cut{from{transform:rotate(-10deg) scaleX(0)}to{transform:rotate(-10deg) scaleX(1)}}
+@keyframes slam{0%{opacity:0;transform:translateY(-560px) scale(1.1)}40%{opacity:1}78%{transform:translateY(0) scale(1.12,.86)}90%{transform:translateY(-12px) scale(.97,1.04)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes ring{0%{opacity:0;transform:scale(.4)}20%{opacity:1}100%{opacity:0;transform:scale(1.5)}}
+@keyframes spark{0%{opacity:0;transform:scale(0) rotate(-60deg)}50%{opacity:1;transform:scale(1.2) rotate(10deg)}100%{opacity:1;transform:scale(1) rotate(0deg)}}
+@keyframes out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.92)}}
+</style>
+<div class="st">
+<svg width="1080" height="720" viewBox="0 0 1080 720">
+<defs><path id="star" d="M0,-40 L10,-10 L40,0 L10,10 L0,40 L-10,10 L-40,0 L-10,-10Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="6" stroke-linejoin="round"/></defs>
+<ellipse class="ring" cx="540" cy="450" rx="360" ry="200" fill="none" stroke="var(--alt)" stroke-width="16"/>
+</svg>
+<div class="old"><span>2,900</span><div class="strike"></div></div>
+<div class="neo"><div class="hole"></div><span>1,500</span></div>
+<svg width="1080" height="720" viewBox="0 0 1080 720">
+<g transform="translate(200,300)"><use class="sp" href="#star" style="animation-delay:calc(var(--w4) * 1s + .02s)"/></g>
+<g transform="translate(880,290) scale(.8)"><use class="sp" href="#star" style="animation-delay:calc(var(--w4) * 1s + .1s)"/></g>
+<g transform="translate(900,560) scale(1.1)"><use class="sp" href="#star" style="animation-delay:calc(var(--w4) * 1s + .05s)"/></g>
+<g transform="translate(180,580) scale(.7)"><use class="sp" href="#star" style="animation-delay:calc(var(--w4) * 1s + .14s)"/></g>
+<g transform="translate(540,650) scale(.6)"><use class="sp" href="#star" style="animation-delay:calc(var(--w4) * 1s + .18s)"/></g>
+<g transform="translate(960,420) scale(.55)"><use class="sp" href="#star" style="animation-delay:calc(var(--w4) * 1s + .22s)"/></g>
+</svg>
+</div>

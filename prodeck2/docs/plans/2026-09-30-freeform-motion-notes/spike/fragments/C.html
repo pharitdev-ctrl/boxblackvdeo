@@ -1,0 +1,94 @@
+<style>
+.lc{position:absolute;left:0;top:0;width:1080px;height:900px;overflow:hidden}
+.lc-in{position:absolute;left:0;top:0;width:1080px;height:900px;animation:lc-life 4.2s linear both}
+.lc svg{position:absolute;left:0;top:0;width:1080px;height:900px;display:block}
+.lc-n{position:absolute;left:100px;top:260px;width:340px;height:340px;display:flex;align-items:center;justify-content:center;font-size:240px;line-height:1;color:#FFFFFF;animation:lc-num .96s linear both}
+.lc-go{position:absolute;left:60px;top:335px;width:420px;height:190px;box-sizing:border-box;padding-top:10px;display:flex;align-items:center;justify-content:center;border:10px solid #1F2227;border-radius:64px;background:#FFD447;color:#1F2227;font-size:104px;line-height:1;white-space:nowrap;box-shadow:0 14px 26px rgba(31,34,39,.35);animation:lc-pop .22s cubic-bezier(.34,1.56,.64,1) 2.78s both}
+.lc-dial{transform-origin:270px 430px;animation:lc-dialout .16s ease-in 2.78s both}
+.lc-lit{animation:lc-lit .12s linear both}
+.lc-arm{animation:lc-arm .2s cubic-bezier(.5,0,.8,.3) both}
+.lc-j{animation:lc-jolt .3s linear both}
+.lc-rum{animation:lc-rumble .76s linear 2.1s both}
+.lc-lift{animation:lc-lift .99s linear 2.86s both}
+.lc-fl{transform-box:fill-box;transform-origin:50% 0%;animation:lc-flame 1.75s linear 2.1s both}
+.lc-pf{transform-box:fill-box;transform-origin:50% 50%;animation:lc-puff .3s cubic-bezier(.34,1.56,.64,1) both}
+.lc-sk{transform-box:fill-box;transform-origin:50% 100%;animation:lc-streak .22s ease-out both}
+@keyframes lc-life{0%{opacity:0;transform:translateY(50px);animation-timing-function:ease-out}5.2%{opacity:1;transform:translateY(0)}91.7%{opacity:1;transform:translateY(0);animation-timing-function:ease-in}100%{opacity:0;transform:translateY(-40px)}}
+@keyframes lc-num{0%{opacity:0;transform:scale(.3);animation-timing-function:cubic-bezier(.34,1.56,.64,1)}23%{opacity:1;transform:scale(1)}84%{opacity:1;transform:scale(1);animation-timing-function:ease-in}97%,100%{opacity:0;transform:scale(.55)}}
+@keyframes lc-pop{from{transform:rotate(-16deg) scale(0)}to{transform:rotate(-5deg) scale(1)}}
+@keyframes lc-dialout{from{transform:scale(1)}to{transform:scale(0)}}
+@keyframes lc-lit{from{opacity:0}to{opacity:1}}
+@keyframes lc-arm{from{transform:translateX(0)}to{transform:translateX(-150px)}}
+@keyframes lc-jolt{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}50%{transform:translateX(6px)}75%{transform:translateX(-3px)}}
+@keyframes lc-rumble{0%,100%{transform:translateX(0)}8%{transform:translateX(-8px)}16%{transform:translateX(7px)}24%,40%,90%{transform:translateX(-4px)}32%,48%{transform:translateX(4px)}56%,72%{transform:translateX(-5px)}64%,80%{transform:translateX(5px)}}
+@keyframes lc-lift{0%{transform:translateY(0);animation-timing-function:ease-out}14%{transform:translateY(14px);animation-timing-function:cubic-bezier(.6,0,.9,.5)}100%{transform:translateY(-980px)}}
+@keyframes lc-flame{0%{transform:scale(.5,0)}8%{transform:scale(1,.5)}17%{transform:scale(.9,.38)}26%{transform:scale(1,.52)}35%{transform:scale(.9,.4)}44%{transform:scale(1,.5)}51.4%{transform:scale(1.1,1)}62%{transform:scale(1,.9)}74%{transform:scale(1.15,1.35)}87%{transform:scale(1.05,1.25)}100%{transform:scale(1.15,1.5)}}
+@keyframes lc-puff{from{transform:translate(var(--dx),24px) scale(0)}to{transform:translate(0px,0px) scale(1)}}
+@keyframes lc-streak{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+</style>
+<div class="lc"><div class="lc-in">
+<svg viewBox="0 0 1080 900">
+  <defs>
+    <clipPath id="lc-armclip"><rect x="518" y="0" width="300" height="900"/></clipPath>
+    <clipPath id="lc-bodyclip"><path d="M0,200 C52,250 70,320 70,390 L70,650 L-70,650 L-70,390 C-70,320 -52,250 0,200 Z"/></clipPath>
+  </defs>
+  <rect x="425" y="416" width="90" height="28" fill="#1F2227" stroke="#FFFFFF" stroke-width="6"/>
+  <g fill="#FFFFFF" stroke="#1F2227" stroke-width="6">
+    <rect class="lc-sk" style="animation-delay:3.3s" x="628" y="430" width="14" height="230" rx="7"/>
+    <rect class="lc-sk" style="animation-delay:3.38s" x="798" y="380" width="14" height="250" rx="7"/>
+  </g>
+  <g class="lc-lift"><g class="lc-j" style="animation-delay:.3s"><g class="lc-j" style="animation-delay:1.2s"><g class="lc-rum">
+    <g transform="translate(720 0)" stroke="#1F2227" stroke-width="10" stroke-linejoin="round">
+      <g class="lc-fl">
+        <path d="M-40,700 C-56,760 -24,800 0,850 C24,800 56,760 40,700 Z" fill="#FF7A59" stroke-width="8"/>
+        <path d="M-20,700 C-28,735 -10,760 0,785 C10,760 28,735 20,700 Z" fill="#FFD447" stroke="none"/>
+      </g>
+      <path d="M-66,560 L-132,670 L-132,700 L-66,660 Z" fill="#6EC1FF"/>
+      <path d="M66,560 L132,670 L132,700 L66,660 Z" fill="#6EC1FF"/>
+      <path d="M-40,648 L40,648 L52,700 L-52,700 Z" fill="#1F2227"/>
+      <path d="M0,200 C52,250 70,320 70,390 L70,650 L-70,650 L-70,390 C-70,320 -52,250 0,200 Z" fill="#FFFFFF" stroke="none"/>
+      <g clip-path="url(#lc-bodyclip)">
+        <rect x="-90" y="150" width="180" height="150" fill="#FF7A59"/>
+        <rect x="-90" y="585" width="180" height="40" fill="#FFD447" stroke-width="8"/>
+      </g>
+      <path d="M0,200 C52,250 70,320 70,390 L70,650 L-70,650 L-70,390 C-70,320 -52,250 0,200 Z" fill="none"/>
+      <circle cx="0" cy="420" r="34" fill="#6EC1FF"/>
+    </g>
+  </g></g></g></g>
+  <g clip-path="url(#lc-armclip)">
+    <g class="lc-arm" style="animation-delay:.3s">
+      <rect x="520" y="382" width="122" height="26" fill="#1F2227" stroke="#FFFFFF" stroke-width="5"/>
+      <rect x="630" y="371" width="24" height="48" rx="8" fill="#FFD447" stroke="#1F2227" stroke-width="6"/>
+    </g>
+    <g class="lc-arm" style="animation-delay:1.2s">
+      <rect x="520" y="445" width="122" height="26" fill="#1F2227" stroke="#FFFFFF" stroke-width="5"/>
+      <rect x="630" y="434" width="24" height="48" rx="8" fill="#FFD447" stroke="#1F2227" stroke-width="6"/>
+    </g>
+    <g class="lc-arm" style="animation-delay:2.1s">
+      <rect x="520" y="508" width="122" height="26" fill="#1F2227" stroke="#FFFFFF" stroke-width="5"/>
+      <rect x="630" y="497" width="24" height="48" rx="8" fill="#FFD447" stroke="#1F2227" stroke-width="6"/>
+    </g>
+  </g>
+  <rect x="500" y="240" width="36" height="580" rx="18" fill="#1F2227" stroke="#FFFFFF" stroke-width="6"/>
+  <rect x="470" y="800" width="470" height="50" rx="25" fill="#1F2227" stroke="#FFFFFF" stroke-width="6"/>
+  <g fill="#FFFFFF" stroke="#1F2227" stroke-width="8">
+    <circle class="lc-pf" style="--dx:50px;animation-delay:2.1s" cx="655" cy="800" r="40"/>
+    <circle class="lc-pf" style="--dx:-50px;animation-delay:2.1s" cx="785" cy="800" r="40"/>
+    <circle class="lc-pf" style="--dx:150px;animation-delay:2.97s" cx="525" cy="815" r="36"/>
+    <circle class="lc-pf" style="--dx:-150px;animation-delay:2.97s" cx="915" cy="815" r="36"/>
+    <circle class="lc-pf" style="--dx:100px;animation-delay:2.9s" cx="590" cy="802" r="52"/>
+    <circle class="lc-pf" style="--dx:-100px;animation-delay:2.9s" cx="850" cy="802" r="52"/>
+  </g>
+  <g class="lc-dial" fill="none" stroke-width="16" stroke-linecap="round">
+    <circle cx="270" cy="430" r="170" fill="#1F2227" stroke="#FFFFFF" stroke-width="8"/>
+    <circle cx="270" cy="430" r="138" stroke="#6EC1FF" stroke-dasharray="245 44.03" transform="rotate(-80.9 270 430)"/>
+    <circle class="lc-lit" style="animation-delay:.18s" cx="270" cy="430" r="138" stroke="#FFD447" stroke-dasharray="245 622.08" transform="rotate(-80.9 270 430)"/>
+    <circle class="lc-lit" style="animation-delay:1.08s" cx="270" cy="430" r="138" stroke="#FFD447" stroke-dasharray="245 622.08" transform="rotate(39.1 270 430)"/>
+    <circle class="lc-lit" style="animation-delay:1.98s" cx="270" cy="430" r="138" stroke="#FFD447" stroke-dasharray="245 622.08" transform="rotate(159.1 270 430)"/>
+  </g>
+</svg>
+<div class="lc-n" style="animation-delay:.08s">3</div>
+<div class="lc-n" style="animation-delay:.98s">2</div>
+<div class="lc-n" style="animation-delay:1.88s">1</div>
+<div class="lc-go">ขึ้นไป!</div>
+</div></div>

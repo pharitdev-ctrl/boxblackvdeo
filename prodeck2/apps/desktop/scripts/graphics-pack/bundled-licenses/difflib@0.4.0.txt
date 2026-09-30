@@ -1,0 +1,30 @@
+This file carries the MIT license text for the Rust crate difflib 0.4.0, which librsvg 2.62.91's
+Cargo.lock takes from crates.io (see section 5 of THIRD-PARTY-NOTICES.txt). Its Cargo.toml
+declares license = "MIT" and authors = ["Dima Kudosh <dimakudosh@gmail.com>"], but its published
+crate (https://static.crates.io/crates/difflib/difflib-0.4.0.crate, checked 2026-09-25) holds no
+license file. Its repository has no tags; the text below is the LICENSE at its HEAD
+(f035fb8e656f27119e23eca9d5b996df14f3885e, 2018-07-22, the day 0.4.0 was published; checked
+2026-09-25), exactly as it stands there, naming Kevin B. Knapp as the copyright holder. Source:
+https://github.com/DimaKudosh/difflib
+
+The MIT License (MIT)
+
+Copyright (c) 2015-2016 Kevin B. Knapp
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

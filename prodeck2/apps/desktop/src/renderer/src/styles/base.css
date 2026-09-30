@@ -1,0 +1,497 @@
+/* The page itself, and the pieces in `src/ui/` that every screen is built from. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* transparent so the window's vibrancy shows through behind the top bar */
+  background: transparent;
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Thonburi, "Leelawadee UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.hint {
+  color: var(--sub);
+  font-size: 12.5px;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.warn-text {
+  color: var(--warn);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+/* buttons */
+
+.btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.btn.primary {
+  padding: 0 14px;
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--sub);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.btn.ai {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-soft), var(--zoom-soft));
+  font-weight: 600;
+}
+
+.btn.sm {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn.xs {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+}
+
+/* field */
+
+.field {
+  display: grid;
+  gap: 5px;
+}
+
+.field label {
+  display: grid;
+  gap: 5px;
+}
+
+.field-label {
+  color: var(--sub);
+  font-size: 12.5px;
+}
+
+/* segmented */
+
+.segmented {
+  display: flex;
+  /* four long Thai labels do not fit one line in a popover; they fold rather than spill */
+  flex-wrap: wrap;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.segment {
+  flex: 1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--sub);
+  font-size: 12.5px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.segment input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segment.on {
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.segment:has(input:disabled) {
+  opacity: 0.45;
+}
+
+.segment:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* switch */
+
+.switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+}
+
+.switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 10px;
+  background: var(--muted);
+  transition: background 0.15s;
+}
+
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+
+.switch:has(input:checked) .switch-track {
+  background: var(--ok);
+}
+
+.switch:has(input:checked) .switch-track::after {
+  left: 16px;
+}
+
+.switch.off {
+  opacity: 0.45;
+}
+
+.switch:has(input:focus-visible) .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch-label {
+  display: grid;
+  gap: 1px;
+}
+
+/* select */
+
+.select {
+  -webkit-app-region: no-drag;
+  height: 30px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* tabs */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: -1px;
+  padding: 9px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--sub);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: default;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.on {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tab[aria-disabled="true"] {
+  color: var(--muted);
+}
+
+.tab-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+/* words for a screen reader alone, beside what the eye reads from a symbol */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* a work of the tab is running */
+.tab-busy {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* sheet */
+
+.veil {
+  /* a sheet drawn from a button on the bar sits inside the bar's drag area, and a drag area takes the pointer
+     whatever lies over it: without this the backdrop over the bar would drag the window instead of closing the sheet */
+  -webkit-app-region: no-drag;
+  /* fixed, not absolute: a sheet dims the whole window wherever it is rendered from */
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: start center;
+  padding: 64px 24px 24px;
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.sheet {
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 18px 20px 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sheet-body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.sheet-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* popover */
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  /* whatever the anchor's own alignment, the panel reads left to right */
+  text-align: left;
+  z-index: 15;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 10px;
+}
+
+.popover.right {
+  right: 0;
+}
+
+.popover.left {
+  left: 0;
+}
+
+/* toast */
+
+/* the app's toasts in one column at the foot of the window, the newest last */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 18px;
+  left: 16px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toasts > .toast {
+  position: static;
+  transform: none;
+  pointer-events: auto;
+}
+
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px 9px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
+/* progress */
+
+.progress {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+.progress.unknown span {
+  width: 35%;
+  animation: slide 1.2s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* empty */
+
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 22px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  color: var(--sub);
+}
+
+.empty-title {
+  color: var(--text);
+  font-weight: 600;
+}

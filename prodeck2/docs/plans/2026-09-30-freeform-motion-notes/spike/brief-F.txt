@@ -1,0 +1,6 @@
+Brief:
+- Stage: W = 1080, H = 800 px (it sits over the lower-middle of a 1080×1920 frame; the speaker's face is above it).
+- D = 3.4 seconds.
+- Words, in order, with the time each is said now: --w1 "เขาต้อง" 0.15 · --w2 "ไปด้วยกับ" 0.55 · --w3 "ยานอวกาศ" 1.10 · --w4 "เท่านั้น" 1.80.
+- What to draw: นักบินอวกาศขึ้นยานแล้วยานพุ่งไปอวกาศ ปิดด้วยตราประทับ "เท่านั้น" — the answer of the clip: an astronaut can only get to space with a spacecraft.
+- The clip is about: how astronauts get to space (a short, playful explainer).

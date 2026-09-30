@@ -1,0 +1,31 @@
+# Lines HyperFrames 0.8.65 printed for pages with a broken script (spike, 2026-09-30). Each render exited 0.
+# A normal render prints about 51 lines, none of which starts with [Browser: and none of which holds WARN.
+
+## A syntax error in the fragment's script (the timeline never registers; the render waits 20 s)
+[initSession:screenshot] page.goto start (0ms)
+[initSession:screenshot] page.goto start (0ms)
+[Browser:PAGEERROR] Unexpected token ';'
+[Browser:PAGEERROR] Unexpected token ';'
+[FrameCapture:sub_timeline_readiness_timeout] Sub-composition timelines did not become ready within 20000ms { timeoutMs: 20000, sources: [] }
+[WARN] Render completed capture with correctness warnings {"renderJobId":"cb2f4f5d-4fdb-4d7e-a344-0869287aac74","strictness":"best-effort","warningCodes":["sub_timeline_readiness_timeout"],"warningReasons":[],"warningStages":[],"warningOwners":[]}
+  [sub_timeline_readiness_timeout] Sub-composition timelines did not become ready within 20000ms
+
+## window.frame throws, under the second host (the timeline registers; the render takes 2 s). The thrown message held the time, so every frame's message was distinct.
+[initSession:screenshot] page.goto complete (69ms)
+[Browser:ERROR] BOXBLACK motion error: window.frame threw: boom in frame at 0
+[Browser:ERROR] BOXBLACK motion error: window.frame threw: boom in frame at 0
+[Browser:ERROR] BOXBLACK motion error: window.frame threw: boom in frame at 0.0002
+[Browser:ERROR] BOXBLACK motion error: window.frame threw: boom in frame at 0.001
+
+## The same throw under the first host: nothing is printed about it, only the 20 s timeout
+[FrameCapture:sub_timeline_readiness_timeout] Sub-composition timelines did not become ready within 20000ms { timeoutMs: 20000, sources: [] }
+[WARN] Render completed capture with correctness warnings {"renderJobId":"3ebf8532-9ef9-47d0-9667-d6e23f79d9ec","strictness":"best-effort","warningCodes":["sub_timeline_readiness_timeout"],"warningReasons":[],"warningStages":[],"warningOwners":[]}
+  [sub_timeline_readiness_timeout] Sub-composition timelines did not become ready within 20000ms
+
+## A page that navigates away (the renderer loses the page: this one exits non-zero)
+[WARN] [Render] Capture attempt made no forward progress; composition is likely structurally broken — not retrying. {"renderJobId":"9a5efd1e-fd2c-4cea-b478-d08acf2f9efb","attempt":0,"frameCount":60,"remainingCount":60,"workers":2}
+[INFO] [Render] Failure summary {"renderJobId":"9a5efd1e-fd2c-4cea-b478-d08acf2f9efb","failedStage":"Capturing frame 0/60 (2 workers)","error":"[Parallel] Capture failed: Worker 0: Parallel worker cancelled; Worker 1: [FrameCapture] window.__hf not ready after 20000ms. Page must expose window.__hf = { duration, seek }.\n  State: __hf=false, seek=false, player=false, renderReady=false, duration=-1","elapsedMs":20413,"
+
+## A policy violation (linter skipped): the request is blocked and the render goes on
+[Browser:ERROR] Connecting to 'http://127.0.0.1:18934/loop-fetch' violates the following Content Security Policy directive: "connect-src 'none'". The action has been blocked.
+[Browser:ERROR] Fetch API cannot load http://127.0.0.1:18934/loop-fetch. Refused to connect because it violates the document's Content Security Policy.

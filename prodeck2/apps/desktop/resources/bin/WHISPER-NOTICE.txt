@@ -1,0 +1,4 @@
+BOXBLACK ships whisper-cli from whisper.cpp 1.9.2 (https://github.com/ggml-org/whisper.cpp),
+with the ggml library of that release built in. Both are MIT licensed: see WHISPER-LICENSE.
+Built, unmodified, from https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.2.tar.gz
+(SHA-256 a6abd064fcca8b85e794d205abf328c522e9451db43a3eadc178b883b7d0e9cd).

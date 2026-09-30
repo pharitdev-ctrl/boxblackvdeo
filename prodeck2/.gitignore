@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+# M0 spike backups of real CapCut drafts — never commit user projects
+.backups/
+out/
+
+# license server: secrets, local database, Next build output
+apps/server/.env*.local
+apps/server/.admin-password.local
+apps/server/.data/
+apps/server/.next/
+apps/server/tsconfig.tsbuildinfo
+
+# desktop packaging output
+apps/desktop/release/

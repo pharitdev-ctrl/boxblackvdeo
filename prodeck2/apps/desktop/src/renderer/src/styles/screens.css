@@ -1,0 +1,891 @@
+/* The stages themselves: the project list, and the prepare screen. */
+
+.screen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 28px 28px;
+}
+
+/* a head that sits above the scrolling content pays its own way in from the window edge */
+.screen > .screen-head {
+  padding: 20px 28px 0;
+  margin-bottom: 0;
+}
+
+.screen-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.screen-head h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.section-head h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.search {
+  -webkit-app-region: no-drag;
+  width: 220px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  user-select: text;
+}
+
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 28px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.action-summary {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.notice {
+  max-width: 560px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--sub);
+}
+
+.notice.error {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.warnings {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.warnings li {
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12.5px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--sub);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tag.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.tag.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+/* how far the app got with a project: the badge and the time it got there */
+.project-stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  margin-top: 3px;
+}
+
+/* project list */
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 18px;
+}
+
+.project-card {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.project-card:hover {
+  border-color: var(--line-strong);
+}
+
+.cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 9 / 16;
+  background: var(--cover-bg);
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-empty {
+  color: #8e8e93;
+  font-size: 12px;
+}
+
+.cover-duration {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+}
+
+.project-meta {
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px 11px;
+}
+
+.project-meta h3 {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* prepare */
+
+.video-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  list-style: none;
+}
+
+/* rounded at the ends without `overflow: hidden`, which would clip the peek popover */
+.video-row:first-child {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.video-row:last-child {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.video-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 11px 16px;
+}
+
+.video-row .video-pick {
+  flex: 1;
+}
+
+.video-row .mono {
+  flex: none;
+}
+
+.video-row + .video-row {
+  border-top: 1px solid var(--line);
+}
+
+.video-row:hover {
+  background: var(--row-hover);
+}
+
+.video-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.video-pick input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.video-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-row.missing .video-name {
+  color: var(--sub);
+  text-decoration: line-through;
+}
+
+/* read already: still in the story and still tickable, but nothing here needs doing */
+.video-row.analysed .video-name,
+.video-row.analysed .mono {
+  color: var(--sub);
+}
+
+.video-row.analysed .video-name {
+  font-weight: 400;
+}
+
+.video-row.analysed .video-pick input {
+  accent-color: var(--sub);
+}
+
+.video-row .mono {
+  text-align: right;
+}
+
+.video-progress {
+  display: grid;
+  flex: none;
+  gap: 5px;
+  width: min(300px, 40%);
+}
+
+.video-progress .step {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.video-progress .step-text {
+  grid-column: 2;
+  color: var(--sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-progress .step.done .step-text {
+  color: var(--ok);
+}
+
+.video-progress .step.done .progress span {
+  background: var(--ok);
+}
+
+.video-progress .step.failed .progress span {
+  background: var(--danger);
+}
+
+.video-progress .step.failed .step-text {
+  color: var(--danger);
+}
+
+.video-peek {
+  position: relative;
+  flex: none;
+  width: 44px;
+  text-align: right;
+}
+
+.peek-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  list-style: none;
+  user-select: text;
+}
+
+.peek-list li {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+/* outline */
+
+.outline-body {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.brief-panel {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.brief-panel h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.brief-panel textarea,
+.brief-panel input[type="text"] {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+  user-select: text;
+}
+
+.brief-panel .btn {
+  justify-self: start;
+}
+
+.brief-planning {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.brief-revise {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.rule {
+  height: 1px;
+  background: var(--line);
+}
+
+.outline-main {
+  display: grid;
+  gap: 0;
+  align-content: start;
+  transition: opacity 0.15s;
+}
+
+.outline-main.busy {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.beats {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.beat {
+  display: grid;
+  grid-template-columns: 14px 18px 64px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.beat.dragging {
+  opacity: 0.4;
+}
+
+.beat.over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.beat-grip {
+  color: var(--muted);
+  font-size: 15px;
+  letter-spacing: -3px;
+  line-height: 1.2;
+  cursor: grab;
+}
+
+.beat-number {
+  color: var(--sub);
+  font-weight: 600;
+}
+
+.beat-thumb {
+  width: 64px;
+  overflow: hidden;
+  aspect-ratio: 9 / 16;
+  border-radius: 6px;
+  background: var(--cover-bg);
+}
+
+.beat-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.beat-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.beat-body h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.beat-body blockquote {
+  margin: 5px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--accent);
+  user-select: text;
+}
+
+.beat-actions {
+  position: relative;
+  display: flex;
+  gap: 4px;
+}
+
+.beat-actions .popover {
+  width: 420px;
+}
+
+/* what the planner left out, at the foot of the outline */
+
+.unused {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.unused h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.unused-clip {
+  display: grid;
+  gap: 4px;
+}
+
+.unused-clip h3 {
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.unused-part .speech-line {
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+}
+
+.pill.retake {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* the player a preview opens */
+
+.scene-player {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* sized by height, so a portrait clip is a narrow picture rather than a wide black box */
+.scene-player video {
+  width: auto;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.scene-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scene-controls input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.scene-clock {
+  color: var(--sub);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* settings */
+
+/* one column in the middle of the window, a strip of tabs, and cards under it */
+.settings {
+  display: grid;
+  gap: 16px;
+  width: min(640px, 100%);
+  margin: 0 auto;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-panel .warnings {
+  margin: 0;
+}
+
+.tab-flag {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: middle;
+}
+
+/* a card: a rounded surface whose pieces are stacked with a line between */
+.card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.card > * + * {
+  border-top: 1px solid var(--line);
+}
+
+.card-head {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+}
+
+.card-head h2 {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.card-body {
+  padding: 12px 14px;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.card-foot .hint {
+  flex: 1;
+}
+
+.card .backup-confirm {
+  border-radius: 0;
+}
+
+/* label on the left, its control on the right */
+.settings-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-rows li + li {
+  border-top: 1px solid var(--line);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 46px;
+  padding: 8px 14px;
+}
+
+.row-label {
+  display: grid;
+  gap: 1px;
+  font-size: 13.5px;
+}
+
+.row-value {
+  flex: none;
+  max-width: 62%;
+  font-size: 13px;
+  text-align: right;
+}
+
+.settings-row .segmented {
+  flex: none;
+  width: 280px;
+}
+
+.settings-row .select {
+  flex: none;
+  width: 220px;
+}
+
+/* the four facts of a license */
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.facts dt {
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.facts dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.choice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+}
+
+.choice + .choice,
+.choice-detail + .choice {
+  border-top: 1px solid var(--line);
+}
+
+.choice input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.choice > span {
+  display: grid;
+  gap: 2px;
+}
+
+.choice.selected {
+  background: var(--row-hover);
+}
+
+.choice-detail {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px 41px;
+  background: var(--row-hover);
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.model-status {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.key-form {
+  display: grid;
+  gap: 6px;
+}
+
+.key-input {
+  display: flex;
+  gap: 8px;
+}
+
+.key-input input {
+  -webkit-app-region: no-drag;
+  flex: 1;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  user-select: text;
+}
+
+.command {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--row-hover);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  user-select: all;
+}
+
+/* activation */
+
+.activation {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  max-width: 560px;
+  padding-top: 48px;
+}
+
+.activation h1 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.activation-form {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.activation-form input {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  user-select: text;
+}
+
+.notice.warning-block {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: none;
+  background: var(--warn-soft);
+  border-color: transparent;
+  color: var(--warn);
+}
+
+.notice.success {
+  max-width: none;
+  border-color: transparent;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.notice ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+/* the field under the target buttons, for a length of the user's own */
+.brief-custom {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.brief-custom input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.brief-custom .hint.invalid {
+  color: var(--danger);
+}

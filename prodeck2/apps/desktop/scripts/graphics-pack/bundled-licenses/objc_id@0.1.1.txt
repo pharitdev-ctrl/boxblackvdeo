@@ -1,0 +1,30 @@
+This file carries the MIT license text for the Rust crate objc_id 0.1.1, which librsvg 2.62.91's
+Cargo.lock takes from crates.io (see section 5 of THIRD-PARTY-NOTICES.txt). Its Cargo.toml
+declares license = "MIT" and authors = ["Steven Sheldon"], but its published crate
+(https://static.crates.io/crates/objc_id/objc_id-0.1.1.crate, checked 2026-09-25) holds no license
+file. Its repository has none either, at the 0.1.1 tag or at HEAD (checked 2026-09-25). The text
+below is the standard MIT License; the copyright holder is that author, and the year is when 0.1.1
+was published (2018-07-22, per https://crates.io/api/v1/crates/objc_id/0.1.1). Source:
+https://github.com/SSheldon/rust-objc-id
+
+MIT License
+
+Copyright (c) 2018 Steven Sheldon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

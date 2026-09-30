@@ -1,0 +1,34 @@
+<style>
+.wrap{position:absolute;left:150px;top:50px;width:780px;animation:out .4s ease-in 3.7s both}
+.title{display:inline-block;background:var(--bar);color:var(--text);font-size:56px;line-height:1.2;padding:12px 38px;border-radius:20px;border:6px solid var(--ink);animation:tin .4s cubic-bezier(.2,.9,.3,1.3) calc(var(--w1)*1s - .2s) both}
+.row{position:relative;margin-top:26px;height:120px;display:flex;align-items:center;gap:30px;padding:0 30px;background:var(--paper);border:6px solid var(--ink);border-radius:26px;box-shadow:0 10px 0 var(--ink);animation:rin .45s cubic-bezier(.2,.9,.3,1.2) calc(var(--d)*1s - .65s) both}
+.box{width:86px;height:86px;flex:none;overflow:visible;animation:pop .4s ease-out calc(var(--d)*1s - .2s) both}
+.ck path{stroke-dasharray:1;stroke-dashoffset:1;fill:none;stroke-linecap:round;stroke-linejoin:round;animation:draw .28s ease-out calc(var(--d)*1s - .28s) both}
+.lab{position:relative;font-size:56px;line-height:1.2;color:var(--ink)}
+.mark{position:absolute;left:-6px;right:-6px;bottom:-4px;height:14px;border-radius:7px;background:var(--accent);transform:scaleX(0);transform-origin:left;animation:grow .3s ease-out calc(var(--d)*1s - .05s) both}
+.ico{width:92px;height:92px;margin-left:auto;flex:none;overflow:visible}
+@keyframes tin{from{opacity:0;transform:translateY(-30px) scale(.8)}to{opacity:1;transform:none}}
+@keyframes rin{from{opacity:0;transform:translateX(-160px)}to{opacity:1;transform:none}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes pop{0%{transform:scale(1)}55%{transform:scale(1.22)}100%{transform:scale(1)}}
+@keyframes grow{to{transform:scaleX(1)}}
+@keyframes out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(40px)}}
+</style>
+<div class="wrap">
+<div class="title">ก่อนขึ้นบิน</div>
+<div class="row" style="--d:var(--w2)">
+<svg class="box" viewBox="0 0 86 86"><rect x="4" y="4" width="78" height="78" rx="16" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/><g class="ck"><path pathLength="1" d="M20 45 L37 61 L68 24" stroke="var(--ink)" stroke-width="20"/><path pathLength="1" d="M20 45 L37 61 L68 24" stroke="var(--accent)" stroke-width="10"/></g></svg>
+<span class="lab">ชุดอวกาศ<span class="mark" style="z-index:-1"></span></span>
+<svg class="ico" viewBox="0 0 92 92"><circle cx="46" cy="44" r="36" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/><rect x="22" y="28" width="48" height="30" rx="14" fill="var(--alt)" stroke="var(--ink)" stroke-width="6"/><rect x="26" y="78" width="40" height="10" rx="4" fill="var(--ink)"/></svg>
+</div>
+<div class="row" style="--d:var(--w3)">
+<svg class="box" viewBox="0 0 86 86"><rect x="4" y="4" width="78" height="78" rx="16" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/><g class="ck"><path pathLength="1" d="M20 45 L37 61 L68 24" stroke="var(--ink)" stroke-width="20"/><path pathLength="1" d="M20 45 L37 61 L68 24" stroke="var(--accent)" stroke-width="10"/></g></svg>
+<span class="lab">ออกซิเจน<span class="mark" style="z-index:-1"></span></span>
+<svg class="ico" viewBox="0 0 92 92"><rect x="28" y="4" width="36" height="12" rx="4" fill="var(--ink)"/><rect x="18" y="14" width="56" height="74" rx="22" fill="var(--alt)" stroke="var(--ink)" stroke-width="7"/><rect x="30" y="40" width="32" height="22" rx="6" fill="var(--paper)" stroke="var(--ink)" stroke-width="5"/></svg>
+</div>
+<div class="row" style="--d:var(--w4)">
+<svg class="box" viewBox="0 0 86 86"><rect x="4" y="4" width="78" height="78" rx="16" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/><g class="ck"><path pathLength="1" d="M20 45 L37 61 L68 24" stroke="var(--ink)" stroke-width="20"/><path pathLength="1" d="M20 45 L37 61 L68 24" stroke="var(--accent)" stroke-width="10"/></g></svg>
+<span class="lab">เชื้อเพลิง<span class="mark" style="z-index:-1"></span></span>
+<svg class="ico" viewBox="0 0 92 92"><path d="M46 6 C60 30 76 44 76 60 A30 30 0 0 1 16 60 C16 44 32 30 46 6 Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="7" stroke-linejoin="round"/><path d="M32 60 A14 14 0 0 0 44 74" fill="none" stroke="var(--paper)" stroke-width="7" stroke-linecap="round"/></svg>
+</div>
+</div>

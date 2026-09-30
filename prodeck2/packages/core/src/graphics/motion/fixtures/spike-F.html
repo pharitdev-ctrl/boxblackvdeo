@@ -1,0 +1,52 @@
+<style>
+.st{position:absolute;left:0;top:0;width:1080px;height:800px;overflow:hidden;animation:out .35s 3s both}
+@keyframes out{to{opacity:0}}
+.gr{position:absolute;left:120px;top:590px;width:840px;height:16px;border-radius:8px;background:var(--ink);animation:pop .35s 0s both}
+.ast{position:absolute;left:190px;top:440px;width:120px;height:160px;animation:walk .6s calc(var(--w1) * 1s - .1s) both}
+.ast svg{width:100%;height:100%;animation:inside .3s calc(var(--w2) * 1s + .05s) both;transform-origin:50% 70%}
+@keyframes walk{0%{transform:translate(0,0)}25%{transform:translate(70px,-14px)}50%{transform:translate(140px,0)}75%{transform:translate(210px,-14px)}100%{transform:translate(260px,0)}}
+@keyframes inside{0%{transform:scale(1);opacity:1}100%{transform:scale(.1) translate(250px,-40px);opacity:0}}
+.rk{position:absolute;left:450px;top:250px;width:180px;height:340px;animation:launch .7s calc(var(--w3) * 1s - .4s) both;transform-origin:50% 100%}
+@keyframes launch{0%{transform:translate(0,0)}10%{transform:translate(-6px,0)}20%{transform:translate(6px,0)}30%{transform:translate(-6px,0)}40%{transform:translate(0,0) scale(1)}100%{transform:translate(0,-250px) scale(.62)}}
+.rk svg{width:100%;height:100%;overflow:visible}
+.fl{transform-origin:90px 300px;animation:flame 1.6s calc(var(--w3) * 1s - .35s) both}
+@keyframes flame{0%{transform:scaleY(0)}10%{transform:scaleY(1.1)}20%{transform:scaleY(.8)}30%{transform:scaleY(1.2)}40%{transform:scaleY(.85)}50%{transform:scaleY(1.15)}60%{transform:scaleY(.8)}70%{transform:scaleY(1.2)}80%{transform:scaleY(.9)}90%{transform:scaleY(1.1)}100%{transform:scaleY(1)}}
+.sm{position:absolute;width:110px;height:110px;border-radius:50%;background:var(--paper);border:7px solid var(--ink);top:520px;animation:puff .8s calc(var(--w3) * 1s - .2s) both}
+@keyframes puff{0%{transform:scale(0);opacity:1}60%{transform:scale(1.1);opacity:1}100%{transform:scale(1.3);opacity:0}}
+.s1{left:390px}.s2{left:580px;animation-delay:calc(var(--w3) * 1s - .12s)}.s3{left:485px;top:545px;animation-delay:calc(var(--w3) * 1s - .05s)}
+.star{position:absolute;width:56px;height:56px;animation:pop .35s calc(var(--w3) * 1s) both}
+.star svg{width:100%;height:100%}
+.t1{left:180px;top:90px}.t2{left:800px;top:60px;animation-delay:calc(var(--w3) * 1s + .1s)}.t3{left:880px;top:250px;animation-delay:calc(var(--w3) * 1s + .2s)}.t4{left:260px;top:280px;animation-delay:calc(var(--w3) * 1s + .15s)}
+@keyframes pop{0%{transform:scale(0);opacity:0}70%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:1}}
+.lb{position:absolute;left:70px;top:400px;padding:10px 30px;border-radius:22px;background:var(--bar);color:var(--text);font-size:60px;line-height:1.3;border:6px solid var(--ink);animation:pop .4s calc(var(--w3) * 1s - .3s) both}
+.stamp{position:absolute;left:560px;top:520px;animation:stamp .35s calc(var(--w4) * 1s - .25s) both}
+.stamp div{transform:rotate(-10deg);padding:12px 40px;border:10px solid var(--ink);outline:6px solid var(--accent);outline-offset:-22px;border-radius:26px;background:var(--paper);color:var(--accent);font-size:104px;line-height:1.25;-webkit-text-stroke:8px var(--ink);paint-order:stroke fill}
+@keyframes stamp{0%{transform:scale(2.4);opacity:0}70%{transform:scale(.92);opacity:1}100%{transform:scale(1);opacity:1}}
+</style>
+<div class="st">
+<div class="star t1"><svg viewBox="0 0 56 56"><path d="M28 3L35 21L53 28L35 35L28 53L21 35L3 28L21 21Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/></svg></div>
+<div class="star t2"><svg viewBox="0 0 56 56"><path d="M28 3L35 21L53 28L35 35L28 53L21 35L3 28L21 21Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/></svg></div>
+<div class="star t3"><svg viewBox="0 0 56 56"><path d="M28 3L35 21L53 28L35 35L28 53L21 35L3 28L21 21Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/></svg></div>
+<div class="star t4"><svg viewBox="0 0 56 56"><path d="M28 3L35 21L53 28L35 35L28 53L21 35L3 28L21 21Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/></svg></div>
+<div class="gr"></div>
+<div class="rk"><svg viewBox="0 0 180 340">
+<g class="fl"><path d="M62 300Q90 420 118 300Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="7" stroke-linejoin="round"/><path d="M76 300Q90 370 104 300Z" fill="var(--alt)"/></g>
+<path d="M50 220L12 300L55 290Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="8" stroke-linejoin="round"/>
+<path d="M130 220L168 300L125 290Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="8" stroke-linejoin="round"/>
+<path d="M90 8C140 60 140 180 130 300L50 300C40 180 40 60 90 8Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="9" stroke-linejoin="round"/>
+<path d="M90 8C112 30 124 55 128 80L52 80C56 55 68 30 90 8Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="90" cy="140" r="24" fill="var(--alt)" stroke="var(--ink)" stroke-width="8"/>
+<rect x="72" y="200" width="36" height="60" rx="12" fill="var(--bar)" stroke="var(--ink)" stroke-width="7"/>
+</svg></div>
+<div class="sm s1"></div><div class="sm s2"></div><div class="sm s3"></div>
+<div class="ast"><svg viewBox="0 0 120 160">
+<rect x="30" y="70" width="60" height="62" rx="18" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/>
+<rect x="36" y="124" width="18" height="30" rx="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/>
+<rect x="66" y="124" width="18" height="30" rx="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/>
+<circle cx="60" cy="42" r="36" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/>
+<rect x="36" y="28" width="52" height="30" rx="14" fill="var(--alt)" stroke="var(--ink)" stroke-width="6"/>
+<rect x="52" y="86" width="18" height="14" rx="4" fill="var(--accent)" stroke="var(--ink)" stroke-width="4"/>
+</svg></div>
+<div class="lb">ยานอวกาศ</div>
+<div class="stamp"><div>เท่านั้น!</div></div>
+</div>

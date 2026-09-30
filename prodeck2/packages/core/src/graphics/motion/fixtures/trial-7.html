@@ -1,0 +1,43 @@
+<style>
+.st{position:absolute;left:0;top:0;width:1080px;height:600px;overflow:hidden;animation:out .35s 2.4s both}
+.st svg{position:absolute;left:0;top:0}
+.plate{position:absolute;top:34px;left:50%;transform:translateX(-50%);background:var(--bar);color:var(--text);font-size:54px;line-height:1.3;padding:10px 34px;border-radius:22px;border:5px solid var(--ink);white-space:nowrap;animation:plate .35s calc(var(--w1) * 1s - .25s) both}
+.drop,.ban,.pan,.sp{transform-box:fill-box;transform-origin:center}
+.drop{animation:dropIn .3s 0s both,bob .6s calc(var(--w2) * 1s - .2s) both}
+.ban{animation:ban .3s calc(var(--w1) * 1s - .22s) both}
+.pan{animation:shake .5s calc(var(--w3) * 1s - .08s) both}
+.sp{opacity:0;animation:spl .55s calc(var(--w3) * 1s - .05s) both}
+@keyframes out{to{opacity:0}}
+@keyframes plate{0%{opacity:0;transform:translateX(-50%) scale(.6)}70%{opacity:1;transform:translateX(-50%) scale(1.06)}100%{opacity:1;transform:translateX(-50%) scale(1)}}
+@keyframes dropIn{from{opacity:0;transform:translateY(-40px)}to{opacity:1;transform:none}}
+@keyframes bob{0%{transform:none}50%{transform:translateY(14px)}100%{transform:none}}
+@keyframes ban{0%{opacity:0;transform:scale(1.8) rotate(-40deg)}70%{opacity:1;transform:scale(.94)}100%{opacity:1;transform:scale(1)}}
+@keyframes shake{0%,100%{transform:none}15%{transform:translate(-12px,2px) rotate(-2deg)}35%{transform:translate(11px,-2px) rotate(2deg)}55%{transform:translate(-8px,1px) rotate(-1deg)}75%{transform:translate(5px,0)}}
+@keyframes spl{0%{opacity:1;transform:translate(0,0) scale(.4)}60%{opacity:1;transform:translate(var(--dx),var(--dy)) scale(1)}100%{opacity:0;transform:translate(var(--dx),calc(var(--dy) + 40px)) scale(.8)}}
+</style>
+<div class="st">
+<svg width="1080" height="600" viewBox="0 0 1080 600">
+<g class="pan">
+<rect x="750" y="446" width="210" height="26" rx="13" fill="var(--ink)"/>
+<path d="M340 440 L760 440 L732 518 Q722 542 698 542 L402 542 Q378 542 368 518 Z" fill="var(--ink)"/>
+<ellipse cx="550" cy="440" rx="212" ry="28" fill="color-mix(in srgb, var(--paper) 55%, var(--ink))" stroke="var(--ink)" stroke-width="8"/>
+<ellipse cx="550" cy="442" rx="182" ry="17" fill="var(--accent)" stroke="var(--ink)" stroke-width="5"/>
+</g>
+<g stroke="var(--ink)" stroke-width="5" fill="var(--accent)">
+<circle class="sp" cx="470" cy="432" r="11" style="--dx:-150px;--dy:-120px"/>
+<circle class="sp" cx="510" cy="430" r="9" style="--dx:-70px;--dy:-170px"/>
+<circle class="sp" cx="600" cy="430" r="10" style="--dx:80px;--dy:-160px"/>
+<circle class="sp" cx="640" cy="432" r="12" style="--dx:160px;--dy:-110px"/>
+<circle class="sp" cx="430" cy="436" r="8" style="--dx:-210px;--dy:-60px"/>
+<circle class="sp" cx="680" cy="436" r="8" style="--dx:220px;--dy:-70px"/>
+</g>
+<path class="drop" d="M550 222 C550 222 512 270 512 294 A38 38 0 0 0 588 294 C588 270 550 222 550 222Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="8" stroke-linejoin="round"/>
+<g class="ban" fill="none" stroke-linecap="round">
+<circle cx="550" cy="280" r="90" stroke="var(--ink)" stroke-width="30"/>
+<line x1="486" y1="216" x2="614" y2="344" stroke="var(--ink)" stroke-width="30"/>
+<circle cx="550" cy="280" r="90" stroke="var(--accent)" stroke-width="18"/>
+<line x1="486" y1="216" x2="614" y2="344" stroke="var(--accent)" stroke-width="18"/>
+</g>
+</svg>
+<div class="plate">ห้ามใส่น้ำ ตอนน้ำมันร้อน</div>
+</div>

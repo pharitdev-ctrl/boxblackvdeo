@@ -1,0 +1,72 @@
+<style>
+.st{position:absolute;left:0;top:0;width:1080px;height:640px;animation:out .45s 3.95s both ease-in}
+.st svg{position:absolute;left:0;top:0}
+.nd{transform-box:fill-box;transform-origin:center;animation:pop .5s both cubic-bezier(.3,1.6,.5,1)}
+.n1{animation-delay:calc(var(--w2) * 1s - .35s)}
+.n2{animation-delay:calc(var(--w4) * 1s - .35s)}
+.n3{animation-delay:calc(var(--w6) * 1s - .35s)}
+.trk{stroke-dasharray:720;animation:draw .5s 0s both ease-out}
+.g1{stroke-dasharray:350;stroke-dashoffset:350;animation:grow1 .7s calc(var(--w2) * 1s) both ease-in-out}
+.g2{stroke-dasharray:320;stroke-dashoffset:320;animation:grow2 .7s calc(var(--w4) * 1s) both ease-in-out}
+.icn{transform-box:fill-box;transform-origin:center;animation:wob 1s both ease-in-out}
+.i1{animation-delay:calc(var(--w2) * 1s + .1s)}
+.i2{animation-delay:calc(var(--w4) * 1s + .1s)}
+.i3{animation-delay:calc(var(--w6) * 1s + .1s)}
+.slot{position:absolute;width:400px;text-align:center}
+.tag,.lab{display:inline-block;font-size:44px;line-height:1.25;padding:6px 22px;border-radius:18px;border:5px solid var(--ink);animation:up .45s both cubic-bezier(.3,1.5,.5,1)}
+.tag{background:var(--paper);color:var(--ink)}
+.lab{background:var(--bar);color:var(--text)}
+.t1{animation-delay:calc(var(--w1) * 1s - .25s)}
+.t2{animation-delay:calc(var(--w3) * 1s - .3s)}
+.t3{animation-delay:calc(var(--w5) * 1s - .3s)}
+.l1{animation-delay:calc(var(--w2) * 1s - .2s)}
+.l2{animation-delay:calc(var(--w4) * 1s - .2s)}
+.l3{animation-delay:calc(var(--w6) * 1s - .2s)}
+@keyframes pop{0%{transform:scale(0)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes up{0%{opacity:0;transform:translateY(24px) scale(.7)}100%{opacity:1;transform:none}}
+@keyframes draw{0%{stroke-dashoffset:720}100%{stroke-dashoffset:0}}
+@keyframes grow1{0%{stroke-dashoffset:350}100%{stroke-dashoffset:0}}
+@keyframes grow2{0%{stroke-dashoffset:320}100%{stroke-dashoffset:0}}
+@keyframes wob{0%,100%{transform:rotate(0)}30%{transform:rotate(-12deg) translateY(-4px)}60%{transform:rotate(8deg)}}
+@keyframes out{0%{opacity:1;transform:none}100%{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="st">
+<svg width="1080" height="640" viewBox="0 0 1080 640">
+<path class="trk" d="M190 330 H860" stroke="var(--ink)" stroke-width="18" stroke-linecap="round" fill="none"/>
+<path class="g1" d="M190 330 H540" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" fill="none"/>
+<path class="g2" d="M540 330 H860" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" fill="none"/>
+<g class="nd n1">
+<circle cx="190" cy="330" r="58" fill="var(--paper)" stroke="var(--ink)" stroke-width="8"/>
+<g class="icn i1" transform="translate(190 326)">
+<path d="M-6 16 L0 38 L6 16Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+<path d="M-12 4 L-22 20 L-10 16Z M12 4 L22 20 L10 16Z" fill="var(--alt)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+<path d="M0 -38 C15 -24 16 -4 12 16 L-12 16 C-16 -4 -15 -24 0 -38Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="0" cy="-10" r="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="4"/>
+</g>
+</g>
+<g class="nd n2">
+<circle cx="540" cy="330" r="58" fill="var(--paper)" stroke="var(--ink)" stroke-width="8"/>
+<g class="icn i2" transform="translate(540 330)">
+<circle cx="0" cy="0" r="17" fill="var(--alt)" stroke="var(--ink)" stroke-width="5"/>
+<ellipse cx="0" cy="0" rx="38" ry="14" transform="rotate(-20)" fill="none" stroke="var(--ink)" stroke-width="5"/>
+<circle cx="33" cy="-14" r="7" fill="var(--accent)" stroke="var(--ink)" stroke-width="4"/>
+</g>
+</g>
+<g class="nd n3">
+<circle cx="860" cy="330" r="58" fill="var(--paper)" stroke="var(--ink)" stroke-width="8"/>
+<g class="icn i3" transform="translate(860 330)">
+<path d="M-20 0 H20" stroke="var(--ink)" stroke-width="5"/>
+<rect x="-40" y="-11" width="22" height="22" rx="3" fill="var(--alt)" stroke="var(--ink)" stroke-width="4"/>
+<rect x="18" y="-11" width="22" height="22" rx="3" fill="var(--alt)" stroke="var(--ink)" stroke-width="4"/>
+<rect x="-11" y="-16" width="22" height="32" rx="5" fill="var(--accent)" stroke="var(--ink)" stroke-width="5"/>
+<circle cx="0" cy="-3" r="4" fill="var(--paper)" stroke="var(--ink)" stroke-width="3"/>
+</g>
+</g>
+</svg>
+<div class="slot" style="left:-10px;top:180px"><span class="tag t1">ขั้นแรก</span></div>
+<div class="slot" style="left:340px;top:180px"><span class="tag t2">ขั้นสอง</span></div>
+<div class="slot" style="left:660px;top:180px"><span class="tag t3">ขั้นสาม</span></div>
+<div class="slot" style="left:-10px;top:410px"><span class="lab l1">ปล่อยตัว</span></div>
+<div class="slot" style="left:340px;top:410px"><span class="lab l2">เข้าวงโคจร</span></div>
+<div class="slot" style="left:660px;top:410px"><span class="lab l3">เชื่อมต่อสถานี</span></div>
+</div>

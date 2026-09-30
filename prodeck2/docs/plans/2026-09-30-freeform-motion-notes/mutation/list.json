@@ -1,0 +1,652 @@
+[
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: createElement('script') in code no longer refused",
+  "find": "new Map([...REFUSED_TAGS, \"script\"].map(",
+  "replace": "new Map([...REFUSED_TAGS].map(",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts",
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: src=\"#id\" allowed like href (only srcset refused for a shape reference)",
+  "find": "if (/src/i.test(found[1]!)) return",
+  "replace": "if (/srcset/i.test(found[1]!)) return",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts",
+   "packages/core/src/graphics/motion/write.test.ts",
+   "apps/desktop/src/main/graphics-page.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: open( refused only as window.open(",
+  "find": "called(\"open\")",
+  "replace": "called(\"window\\\\s*\\\\.\\\\s*open\")",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts",
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: prefixed WebRTC names (webkitRTC/mozRTC) no longer refused",
+  "find": "(?:webkit|moz)?RTC[A-Z]",
+  "replace": "RTC[A-Z]",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts",
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: size cap doubled",
+  "find": "if (html.length > MOTION_HTML_MAX) return",
+  "replace": "if (html.length > MOTION_HTML_MAX * 2) return",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: refused tags matched case-sensitively (<CANVAS> passes)",
+  "find": "tag(name), \"gi\", ADVICE[name]",
+  "replace": "tag(name), \"g\", ADVICE[name]",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts",
+   "packages/core/src/graphics/motion/write.test.ts",
+   "apps/desktop/src/main/graphics-page.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/lint.ts",
+  "name": "lint: <canvas> dropped from the refused tags",
+  "find": "...REFUSED_TAGS.map((name) => refuse(",
+  "replace": "...REFUSED_TAGS.filter((name) => name !== \"canvas\").map((name) => refuse(",
+  "tests": [
+   "packages/core/src/graphics/motion/lint.test.ts",
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/html.ts",
+  "name": "CSP: connect-src 'none' dropped",
+  "find": "connect-src 'none'; form-action",
+  "replace": "form-action",
+  "tests": [
+   "packages/core/src/graphics/motion/html.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/html.ts",
+  "name": "CSP: default-src * instead of 'none'",
+  "find": "default-src 'none'; style-src",
+  "replace": "default-src *; style-src",
+  "tests": [
+   "packages/core/src/graphics/motion/html.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/html.ts",
+  "name": "word variables numbered from --w0",
+  "find": "`--w${i + 1}: ${time};`",
+  "replace": "`--w${i}: ${time};`",
+  "tests": [
+   "packages/core/src/graphics/motion/html.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/html.ts",
+  "name": "ink: flipped comparison picks the lighter of style text and #1F2227",
+  "find": "const own = contrast(palette.text, WHITE) > contrast(rgbOf(INK)!, WHITE)",
+  "replace": "const own = contrast(palette.text, WHITE) < contrast(rgbOf(INK)!, WHITE)",
+  "tests": [
+   "packages/core/src/graphics/motion/html.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/html.ts",
+  "name": "composition duration rounded up to whole seconds",
+  "find": "data-duration=\"${seconds}\" data-width",
+  "replace": "data-duration=\"${Math.ceil(seconds)}\" data-width",
+  "tests": [
+   "packages/core/src/graphics/motion/html.test.ts",
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "box: max height limit removed",
+  "find": "height <= BOX.maxHeight + BOX_SLACK + 1e-9",
+  "replace": "height <= 1",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "empty idea no longer drops the answer",
+  "find": "if (!point || !box || !idea || !start",
+  "replace": "if (!point || !box || !start",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "unknown start word drops the answer instead of moving to the point's start",
+  "find": "if (first === null) return start",
+  "replace": "if (first === null) return null",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "a point filled twice is kept",
+  "find": "filled.has(answer.point) || ",
+  "replace": "",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "same start place twice is kept",
+  "find": " || started.has(place)) {",
+  "replace": ") {",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "until stretch ignored: seconds stay as asked",
+  "find": "Math.max(asked, landsAt + AFTER_LAST_WORD_S)",
+  "replace": "asked",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/direct.ts",
+  "name": "idea cap raised to 4000",
+  "find": "const IDEA_MAX = 400",
+  "replace": "const IDEA_MAX = 4000",
+  "tests": [
+   "packages/core/src/graphics/motion/direct.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/write.ts",
+  "name": "fragmentOf: a fence with a language is kept",
+  "find": "const opening = /^```[^\\n`]*\\n/.exec(text)",
+  "replace": "const opening = /^```\\n/.exec(text)",
+  "tests": [
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/write.ts",
+  "name": "brief words line numbered from --w0",
+  "find": "`--w${i + 1} \"${word.text}\"",
+  "replace": "`--w${i} \"${word.text}\"",
+  "tests": [
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/motion/write.ts",
+  "name": "repair brief leaves out the first brief",
+  "find": "    args.brief,\n    \"\",\n    \"You wrote",
+  "replace": "    \"You wrote",
+  "tests": [
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "inspection: a frame at the empty threshold counts as drawn",
+  "find": "visible: peaks.some((peak) => peak > EMPTY_FRAME_MAX)",
+  "replace": "visible: peaks.some((peak) => peak >= EMPTY_FRAME_MAX)",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "inspection: gone-at-end read from the first frame",
+  "find": "goneAtEnd: (peaks.at(-1) ?? 0) <= EMPTY_FRAME_MAX",
+  "replace": "goneAtEnd: (peaks.at(0) ?? 0) <= EMPTY_FRAME_MAX",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "failed render with a launched browser blamed on the machine (and the reverse)",
+  "find": "if (!said.split(\"\\n\").some((line) => line.startsWith(BROWSER_LAUNCHED)))",
+  "replace": "if (said.split(\"\\n\").some((line) => line.startsWith(BROWSER_LAUNCHED)))",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "host reports not ordered window.frame-first",
+  "find": "const ordered = [...reported.filter((report) => report.startsWith(FRAME_THREW)), ...reported.filter((report) => !report.startsWith(FRAME_THREW))]",
+  "replace": "const ordered = [...reported]",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "hash leaves out the words' times",
+  "find": "job.spec.seconds, job.times ?? [], job.canvas",
+  "replace": "job.spec.seconds, job.canvas",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "hash leaves out MOTION_VERSION",
+  "find": "job.font, job.palette, MOTION_VERSION]",
+  "replace": "job.font, job.palette]",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-render.ts",
+  "name": "timeout no longer reported as running out of time",
+  "find": "(limit.aborted && error === limit.reason ?",
+  "replace": "(false && error === limit.reason ?",
+  "tests": [
+   "apps/desktop/src/main/graphics-render.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "a second repair is allowed",
+  "find": "  const repaired = await attempt(repairBrief({ brief, html: first.html, problems: first.problems }))",
+  "replace": "  let repaired = await attempt(repairBrief({ brief, html: first.html, problems: first.problems }))\n  if (\"problems\" in repaired) repaired = await attempt(repairBrief({ brief, html: repaired.html, problems: repaired.problems }))",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "pool of four at once",
+  "find": "const AT_ONCE = 3",
+  "replace": "const AT_ONCE = 4",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "pool of one at once",
+  "find": "const AT_ONCE = 3",
+  "replace": "const AT_ONCE = 1",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "machine not ready (null) treated as problems and repaired",
+  "find": "return drawn === null || drawn.length === 0 ? { html } : { html, problems: drawn }",
+  "replace": "return drawn !== null && drawn.length === 0 ? { html } : { html, problems: drawn ?? [\"graphics cannot be rendered on this machine\"] }",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "no stop check after the call returns",
+  "find": "    deps.signal?.throwIfAborted()\n    const refused",
+  "replace": "    const refused",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "no stop check after the render returns",
+  "find": "    deps.signal?.throwIfAborted()\n    return drawn",
+  "replace": "    return drawn",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "render job times from the words as written, not wordsNow",
+  "find": "times: (graphic.wordsNow ?? []).map((word) => word.atS)",
+  "replace": "times: graphic.cue.spec.words.map((word) => word.atS)",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "stale: words compared by count only, not text",
+  "find": "const reworded = wordsNow.length !== spec.words.length || wordsNow.some((word, i) => word.text !== spec.words[i]!.text)",
+  "replace": "const reworded = wordsNow.length !== spec.words.length",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "stale: cut-short tolerance raised to 1 s",
+  "find": "const MOTION_CUT_SHORT_US = 100_000",
+  "replace": "const MOTION_CUT_SHORT_US = 1_000_000",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "run-on tolerance removed",
+  "find": "const MOTION_RUN_ON_US = 300_000",
+  "replace": "const MOTION_RUN_ON_US = 0",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "rule A: the point's own text is not left out of the bands to dodge",
+  "find": "(exceptPointId === undefined || entry.pointId !== exceptPointId)",
+  "replace": "true",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "rule B: a graphic with no job (unwritten/stale) replaces its point's text",
+  "find": "graphic.cue.pointId !== undefined && hasJob(graphic)",
+  "replace": "graphic.cue.pointId !== undefined",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts",
+   "apps/desktop/src/main/highlights.test.ts",
+   "apps/desktop/src/main/timeline.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "isMotionCue accepts old-kit graphics",
+  "find": "isGraphicEntry(cue) && isMotion(cue.spec)",
+  "replace": "isGraphicEntry(cue)",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/timeline.ts",
+  "name": "write draws replaced groups' text anyway",
+  "find": "const drawn = groups.filter((group) => !isReplaced(group, replaced))",
+  "replace": "const drawn = groups",
+  "tests": [
+   "apps/desktop/src/main/timeline.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/timeline.ts",
+  "name": "replaced groups hide subtitle words",
+  "find": "return hiddenWords(placed.filter((group) => !isReplaced(group, replaced)), timed",
+  "replace": "return hiddenWords(placed, timed",
+  "tests": [
+   "apps/desktop/src/main/timeline.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/timeline.ts",
+  "name": "looks computed over drawn groups only",
+  "find": "groups.map((group) => ({ id: group.groupId, lines: group.lines.map((line) => ({ lineIndex",
+  "replace": "drawn.map((group) => ({ id: group.groupId, lines: group.lines.map((line) => ({ lineIndex",
+  "tests": [
+   "apps/desktop/src/main/timeline.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/timeline.ts",
+  "name": "group count checked over drawn groups only",
+  "find": "if (groups.length !== highlights.groupCount)",
+  "replace": "if (groups.filter((group) => !isReplaced(group, replaced)).length !== highlights.groupCount)",
+  "tests": [
+   "apps/desktop/src/main/timeline.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/timeline.ts",
+  "name": "Pro exits held counted over every group, replaced too",
+  "find": "heldExits(stored, drawn.map((group) => group.groupId)",
+  "replace": "heldExits(stored, groups.map((group) => group.groupId)",
+  "tests": [
+   "apps/desktop/src/main/timeline.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/highlights.ts",
+  "name": "preview never marks a group replaced",
+  "find": "replaced: isReplaced(group, replaced),",
+  "replace": "replaced: false,",
+  "tests": [
+   "apps/desktop/src/main/highlights.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-cleanup.ts",
+  "name": "kit cleanup runs on any version but 2 (an outline with no version too)",
+  "find": "if (stored.postVersion !== M25_VERSION) return stored",
+  "replace": "if (stored.postVersion === POST_VERSION) return stored",
+  "tests": [
+   "apps/desktop/src/main/post-cleanup.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-cleanup.ts",
+  "name": "M25 cleanup runs again on a version-1 outline",
+  "find": "if (stored.postVersion !== undefined) return stored",
+  "replace": "if (stored.postVersion === POST_VERSION) return stored",
+  "tests": [
+   "apps/desktop/src/main/post-cleanup.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-cleanup.ts",
+  "name": "kit cleanup keeps any graphic with a place (isMotion dropped)",
+  "find": "isObject(entry) && isObject(entry.anchor) && isMotion(entry.spec)",
+  "replace": "isObject(entry) && isObject(entry.anchor)",
+  "tests": [
+   "apps/desktop/src/main/post-cleanup.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/project-files.ts",
+  "name": "backup goes to the last changing step's folder, not the first",
+  "find": "if (upgraded === value && next !== value) backupDir = step.backupDir",
+  "replace": "if (next !== upgraded) backupDir = step.backupDir",
+  "tests": [
+   "apps/desktop/src/main/project-files.test.ts",
+   "apps/desktop/src/main/post-cleanup.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/project-files.ts",
+  "name": "original copied after the write (copy holds the new file)",
+  "find": "        if (upgraded !== null && upgraded.value !== current) await this.keepOriginal(folder, upgraded.backupDir)\n        const next = await change(upgraded?.value ?? null)\n        await this.put(next)",
+  "replace": "        const next = await change(upgraded?.value ?? null)\n        await this.put(next)\n        if (upgraded !== null && upgraded.value !== current) await this.keepOriginal(folder, upgraded.backupDir)",
+  "tests": [
+   "apps/desktop/src/main/project-files.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "merge: an edited old-kit graphic counts as the user's own",
+  "find": "const mine = all.filter((graphic) => graphic.edited && isMotion(graphic.spec))",
+  "replace": "const mine = all.filter((graphic) => graphic.edited)",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "merge: an edited graphic that goes keeps Claude's sounds",
+  "find": "const gone = all.filter((graphic) => !graphics.includes(graphic))",
+  "replace": "const gone = all.filter((graphic) => !graphics.includes(graphic) && !graphic.edited)",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "render check that throws counts as the fragment's problem, not null",
+  "find": "      return problems.length > 0 ? problems : [\"the render failed\"]\n    } catch {\n      return null\n    }",
+  "replace": "      return problems.length > 0 ? problems : [\"the render failed\"]\n    } catch (error) {\n      return [String(error)]\n    }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "plan run does not forget the machine before writing",
+  "find": "if (unwritten.length > 0) deps.graphics?.forgetMachine()",
+  "replace": "if (unwritten.length < 0) deps.graphics?.forgetMachine()",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "redo does not forget the machine before writing",
+  "find": "      deps.graphics?.forgetMachine()\n      const ended = await writeGraphic(",
+  "replace": "      const ended = await writeGraphic(",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "state line: stale read before a failed writing",
+  "find": "  if (graphic.writeFailed !== null) return failure(\"graphics.state.writeFailed\", graphic.writeFailed, \"graphic-state warn-text\")\n  if (graphic.stale) return plain(\"graphics.state.stale\")",
+  "replace": "  if (graphic.stale) return plain(\"graphics.state.stale\")\n  if (graphic.writeFailed !== null) return failure(\"graphics.state.writeFailed\", graphic.writeFailed, \"graphic-state warn-text\")",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "redo button enabled while a plan runs",
+  "find": "disabled={busy || planning} onClick={() => onRedoGraphic(graphic.anchor)}",
+  "replace": "disabled={busy} onClick={() => onRedoGraphic(graphic.anchor)}",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "redo mark by object identity instead of cueKey",
+  "find": "const state = graphicState(graphic, key === redoingKey, writingGraphics)",
+  "replace": "const state = graphicState(graphic, graphic.anchor === redoing, writingGraphics)",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/PlanStrip.tsx",
+  "name": "graphics writing count line not shown for the graphics work",
+  "find": "if (work === \"graphics\" && state.done !== undefined",
+  "replace": "if (work !== \"graphics\" && state.done !== undefined",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/WriteButton.tsx",
+  "name": "stale graphics counted as written in the sheet",
+  "find": "const playing = switchedOn.filter((graphic) => graphic.written && !graphic.stale)",
+  "replace": "const playing = switchedOn.filter((graphic) => graphic.written)",
+  "tests": [
+   "apps/desktop/src/renderer/src/edit/WriteButton.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/WriteButton.tsx",
+  "name": "groupCount sent without the replaced groups",
+  "find": "groupCount: preview.groups.length,",
+  "replace": "groupCount: drawnGroups.length,",
+  "tests": [
+   "apps/desktop/src/renderer/src/edit/WriteButton.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/HighlightTab.tsx",
+  "name": "replaced note not shown on a replaced group",
+  "find": "{group.replaced ? <span className=\"hint\">{t(\"highlights.replaced\")}</span>",
+  "replace": "{false ? <span className=\"hint\">{t(\"highlights.replaced\")}</span>",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "subtitle lines read before an unsaved setting is saved",
+  "find": "if (!rules || !subtitlesOn || !subtitleLength || (hideUnderHighlights && unsaved.current.size > 0)) return",
+  "replace": "if (!rules || !subtitlesOn || !subtitleLength) return",
+  "tests": [
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx",
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/scripts/release-check.ts",
+  "name": "host check: white space alone passes as a script",
+  "find": "return script.trim() === \"\" ?",
+  "replace": "return script === \"\" ?",
+  "tests": [
+   "apps/desktop/scripts/release-check.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/scripts/release-check.ts",
+  "name": "stray check: anything named host.js* is let be",
+  "find": ".filter((entry) => entry.name !== \"host.js\" && entry.name !== \".DS_Store\")",
+  "replace": ".filter((entry) => !entry.name.startsWith(\"host.js\") && entry.name !== \".DS_Store\")",
+  "tests": [
+   "apps/desktop/scripts/release-check.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/scripts/release-check.ts",
+  "name": "host/stray checks skipped on local builds",
+  "find": "  problems.push(...hostProblems(join(graphicsDir, \"host.js\")), ...strayGraphicsProblems(graphicsDir))",
+  "replace": "  if (!local) problems.push(...hostProblems(join(graphicsDir, \"host.js\")), ...strayGraphicsProblems(graphicsDir))",
+  "tests": [
+   "apps/desktop/scripts/release-check.test.ts"
+  ]
+ }
+]

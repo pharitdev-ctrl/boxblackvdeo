@@ -1,0 +1,28 @@
+BOXBLACK ships ffmpeg and ffprobe 8.1.2 from the FFmpeg project (https://ffmpeg.org),
+licensed under the GNU Lesser General Public License version 2.1 or later: see FFMPEG-COPYING.LGPLv2.1.
+They are built, unmodified, from https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+(SHA-256 464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c) with this configuration:
+
+
+  configuration:
+    --prefix=/private/tmp/claude-501/-Users-ford-Desktop-Thalent-Ai-excp-prodeck2/f297d1d6-b448-49ed-8563-d0f74dd57a87/scratchpad/ffmpeg-build/install
+    --arch=arm64
+    --cc=clang
+    --extra-cflags='-mmacosx-version-min=12.0'
+    --extra-ldflags='-mmacosx-version-min=12.0'
+    --disable-autodetect
+    --enable-zlib
+    --enable-bzlib
+    --disable-doc
+    --disable-ffplay
+    --disable-network
+    --disable-devices
+    --disable-debug
+    --disable-encoders
+    --enable-encoder='mjpeg,flac,pcm_s16le,wrapped_avframe,prores_ks,png'
+    --disable-muxers
+    --enable-muxer='image2,wav,flac,pcm_s16le,null,mov'
+    --disable-protocols
+    --enable-protocol='file,pipe,fd'
+
+Exiting with exit code 0

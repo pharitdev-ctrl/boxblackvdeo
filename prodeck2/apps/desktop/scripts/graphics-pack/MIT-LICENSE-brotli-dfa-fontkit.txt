@@ -1,0 +1,28 @@
+This file carries the MIT license text for three packages this pack ships that declare
+"license": "MIT" in their own package.json but include no license file of their own, in
+their published npm package or in their source repository (checked 2026-09-24 against
+github.com/devongovett/brotli.js, github.com/devongovett/dfa and github.com/foliojs/fontkit,
+none of which have ever had a LICENSE file; the copyright year is each repository's creation
+year, the author is the one named in each package's own package.json "author" field):
+
+- brotli (node_modules/brotli), copyright (c) 2014 Devon Govett
+- dfa (node_modules/dfa), copyright (c) 2016 Devon Govett
+- fontkit (node_modules/fontkit), copyright (c) 2014 Devon Govett
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

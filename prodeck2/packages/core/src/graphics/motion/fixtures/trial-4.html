@@ -1,0 +1,79 @@
+<style>
+#root{position:absolute;left:0;top:0;width:1080px;height:900px;animation:out .4s 3.35s both}
+#root svg{position:absolute;left:0;top:0}
+.pop{transform-box:fill-box;transform-origin:center;animation:pop .5s cubic-bezier(.3,1.6,.5,1) both}
+#earth{animation-delay:calc(var(--w1) * 1s - .35s)}
+#stn{animation-delay:calc(var(--w3) * 1s - .4s)}
+#blink{transform-box:fill-box;transform-origin:center;animation:blink .6s calc(var(--w4) * 1s - .05s) both}
+#ring{transform-box:fill-box;transform-origin:center;animation:ring .7s calc(var(--w4) * 1s) both}
+#flash{animation:flash .5s calc(var(--w4) * 1s) both}
+#lab{position:absolute;left:670px;top:330px;width:320px;text-align:center;padding:10px 0 16px;background:var(--bar);color:var(--text);font-size:52px;border-radius:20px;border:5px solid var(--ink);animation:lab .45s cubic-bezier(.3,1.5,.5,1) calc(var(--w4) * 1s - .3s) both}
+@keyframes pop{0%{opacity:0;transform:scale(.3)}100%{opacity:1;transform:scale(1)}}
+@keyframes blink{0%,100%{transform:scale(1)}35%{transform:scale(1.18)}}
+@keyframes ring{0%{opacity:0;transform:scale(.6)}20%{opacity:1}100%{opacity:0;transform:scale(1.8)}}
+@keyframes flash{0%,100%{opacity:0}25%,60%{opacity:1}}
+@keyframes lab{0%{opacity:0;transform:translateY(30px) scale(.7)}100%{opacity:1;transform:none}}
+@keyframes out{0%{opacity:1}100%{opacity:0}}
+</style>
+<div id="root">
+<svg width="1080" height="900" viewBox="0 0 1080 900">
+<defs>
+<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="1080" height="900">
+<path id="mp" d="M 280 650 C 330 330, 560 190, 760 235" fill="none" stroke="#fff" stroke-width="40" stroke-linecap="round"/>
+</mask>
+</defs>
+<g id="earth" class="pop">
+<circle cx="170" cy="760" r="125" fill="var(--alt)" stroke="var(--ink)" stroke-width="8"/>
+<path d="M 90 700 q 40 -40 80 -10 q 30 25 -10 50 q -40 20 -70 -40 z M 180 790 q 50 -20 80 10 q 10 40 -40 50 q -50 0 -40 -60 z" fill="var(--accent)" stroke="var(--ink)" stroke-width="6"/>
+</g>
+<g mask="url(#m)">
+<path d="M 280 650 C 330 330, 560 190, 760 235" fill="none" stroke="var(--ink)" stroke-width="20" stroke-linecap="round" stroke-dasharray="0.1 30"/>
+<path d="M 280 650 C 330 330, 560 190, 760 235" fill="none" stroke="var(--paper)" stroke-width="11" stroke-linecap="round" stroke-dasharray="0.1 30"/>
+</g>
+<g transform="translate(840 235)">
+<g id="stn" class="pop">
+<circle id="ring" cx="0" cy="0" r="80" fill="none" stroke="var(--accent)" stroke-width="10"/>
+<g id="blink">
+<rect x="-110" y="-30" width="70" height="60" rx="6" fill="var(--alt)" stroke="var(--ink)" stroke-width="7"/>
+<rect x="40" y="-30" width="70" height="60" rx="6" fill="var(--alt)" stroke="var(--ink)" stroke-width="7"/>
+<rect x="-40" y="-6" width="80" height="12" fill="var(--ink)"/>
+<rect x="-30" y="-40" width="60" height="80" rx="14" fill="var(--paper)" stroke="var(--ink)" stroke-width="7"/>
+<rect id="flash" x="-30" y="-40" width="60" height="80" rx="14" fill="var(--accent)" stroke="var(--ink)" stroke-width="7"/>
+<circle cx="0" cy="0" r="10" fill="var(--ink)"/>
+</g>
+</g>
+</g>
+<g id="cap" opacity="0">
+<g id="capr">
+<path d="M -26 -16 L 10 -16 Q 34 0 10 16 L -26 16 Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="6" stroke-linejoin="round"/>
+<path d="M -26 -10 L -44 0 L -26 10 Z" fill="var(--accent)" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="4" cy="0" r="6" fill="var(--alt)" stroke="var(--ink)" stroke-width="4"/>
+</g>
+</g>
+</svg>
+<div id="lab">สถานีอวกาศ</div>
+</div>
+<script>
+const mp = document.getElementById("mp");
+const cap = document.getElementById("cap");
+const capr = document.getElementById("capr");
+const L = mp.getTotalLength();
+mp.setAttribute("stroke-dasharray", L + " " + (L + 10));
+const cl = (v) => Math.max(0, Math.min(1, v));
+const ease = (p) => p < .5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p);
+window.frame = (t) => {
+  const dp = ease(cl((t - T[0]) / (T[2] + 0.2 - T[0])));
+  mp.setAttribute("stroke-dashoffset", String(L * (1 - dp)));
+  const t0 = T[1] - 0.15, t1 = T[3];
+  const cp = ease(cl((t - t0) / (t1 - t0)));
+  const s = Math.min(L - 1, cp * L);
+  const a = mp.getPointAtLength(s);
+  const b = mp.getPointAtLength(Math.min(L, s + 1));
+  const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+  const vis = t < t0 - 0.1 ? 0 : (t > t1 + 0.05 ? cl(1 - (t - t1 - 0.05) / 0.15) : cl((t - t0 + 0.1) / 0.15));
+  cap.setAttribute("opacity", String(vis));
+  cap.setAttribute("transform", "translate(" + a.x + " " + a.y + ")");
+  capr.setAttribute("transform", "rotate(" + ang + ")");
+};
+window.frame(0);
+</script>

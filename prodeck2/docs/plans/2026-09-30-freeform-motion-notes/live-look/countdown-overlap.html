@@ -1,0 +1,39 @@
+<style>
+.st{position:absolute;left:0;top:0;width:996px;height:290px;overflow:hidden}
+.st svg{position:absolute;left:0;top:0}
+.dial{animation:dialIn .3s 0s both,fadeOut .14s 2.36s both}
+.cen{position:absolute;left:0;top:0;width:996px;height:290px;display:flex;align-items:center;justify-content:center}
+.num{position:absolute;font-size:170px;line-height:1;color:var(--ink);opacity:0}
+.n3{animation:slam .32s calc(var(--w1) * 1s) both,shrinkOut .16s calc(var(--w2) * 1s - .16s) both}
+.n2{animation:slam .32s calc(var(--w2) * 1s - .18s) both,shrinkOut .16s calc(var(--w3) * 1s - .16s) both}
+.n1{animation:slam .32s calc(var(--w3) * 1s - .18s) both,shrinkOut .12s 2.3s both}
+.pulse{transform-box:fill-box;transform-origin:center;opacity:0}
+.p2{animation:burst .45s calc(var(--w2) * 1s - .05s) both}
+.p3{animation:burst .45s calc(var(--w3) * 1s - .05s) both}
+.go{background:var(--bar);color:var(--text);font-size:84px;line-height:1;padding:22px 48px 28px;border-radius:26px;border:6px solid var(--ink);white-space:nowrap;opacity:0;animation:flash .3s 2.4s both}
+@keyframes dialIn{0%{opacity:0;transform:scale(.6)}100%{opacity:1;transform:scale(1)}}
+@keyframes fadeOut{0%{opacity:1}100%{opacity:0}}
+@keyframes slam{0%{opacity:0;transform:scale(2.3)}55%{opacity:1;transform:scale(.88)}100%{opacity:1;transform:scale(1)}}
+@keyframes shrinkOut{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.4)}}
+@keyframes burst{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.14)}}
+@keyframes flash{0%{opacity:0;transform:scale(1.5)}30%{opacity:1;transform:scale(.95)}45%{opacity:1;transform:scale(1)}75%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.1)}}
+</style>
+<div class="st">
+<div class="cen"><div class="cen dial">
+<svg width="996" height="290" viewBox="0 0 996 290">
+<circle cx="498" cy="145" r="126" fill="none" stroke="var(--ink)" stroke-width="24"/>
+<circle id="ring" cx="498" cy="145" r="126" fill="none" stroke="var(--accent)" stroke-width="13" pathLength="100" stroke-dasharray="100 100" stroke-linecap="round" transform="rotate(-90 498 145)"/>
+<circle cx="498" cy="145" r="108" fill="var(--paper)" stroke="var(--ink)" stroke-width="6"/>
+<circle class="pulse p2" cx="498" cy="145" r="108" fill="none" stroke="var(--alt)" stroke-width="8"/>
+<circle class="pulse p3" cx="498" cy="145" r="108" fill="none" stroke="var(--alt)" stroke-width="8"/>
+</svg>
+<span class="num n3">3</span>
+<span class="num n2">2</span>
+<span class="num n1">1</span>
+</div></div>
+<div class="cen"><div class="go">ปล่อยตัว!</div></div>
+</div>
+<script>
+const ring = document.getElementById("ring");
+ring.animate([{ strokeDashoffset: 0 }, { strokeDashoffset: 100 }], { duration: Math.max(400, T[2] * 1000 + 150), delay: T[0] * 1000, fill: "both", easing: "linear" });
+</script>

@@ -1,0 +1,91 @@
+<style>
+.mgA{position:absolute;left:0;top:0;width:1080px;height:900px;overflow:hidden;color:#1F2227;animation:mgA-out .3s cubic-bezier(.5,0,.9,.5) 2.85s both}
+.mgA>div,.mgA>svg{position:absolute}
+.mgA svg{display:block;width:100%;height:100%;overflow:visible}
+.mgA .ea{left:60px;top:545px;width:310px;height:310px;animation:mgA-pop .18s cubic-bezier(.3,1.4,.5,1) 0s both}
+.mgA .as{left:135px;top:346px;width:180px;height:222px;animation:mgA-drop .18s cubic-bezier(.2,.8,.3,1) .02s both}
+.mgA .hop{transform-origin:45% 96%;animation:mgA-hop .46s linear .72s both}
+.mgA .tag{left:340px;top:440px;padding:8px 30px;border:8px solid #1F2227;border-radius:30px;background:#FFFFFF;font-size:58px;line-height:1.35;white-space:nowrap;transform-origin:0 50%;animation:mgA-tag 1.65s linear 0s both}
+.mgA .tr{left:0;top:0;width:1080px;height:900px}
+.mgA .b,.mgA .d{transform-box:fill-box;transform-origin:center}
+.mgA .d{animation:mgA-pop .12s cubic-bezier(.3,1.5,.5,1) calc(.88s + var(--i)*.055s) both}
+.mgA .b{animation:mgA-beat .3s ease-in-out calc(2.2s + var(--i)*.05s) both}
+.mgA .sp{left:695px;top:55px;width:310px;height:310px;animation:mgA-pop .22s cubic-bezier(.3,1.5,.5,1) 1.13s both}
+.mgA .orb{transform-origin:0px 0px;animation:mgA-spin 1.55s linear 1.3s both}
+.mgA .q{right:60px;top:500px;padding:8px 46px;border:10px solid #1F2227;border-radius:38px;background:#FFD447;box-shadow:0 12px 0 #1F2227;font-size:132px;line-height:1.3;white-space:nowrap;animation:mgA-slam .34s linear 1.68s both}
+@keyframes mgA-pop{from{opacity:0;transform:scale(.35)}to{opacity:1;transform:scale(1)}}
+@keyframes mgA-drop{from{opacity:0;transform:translateY(-80px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mgA-hop{
+0%{transform:translateY(0) scale(1,1);animation-timing-function:ease-out}
+17%{transform:translateY(0) scale(1.1,.84);animation-timing-function:cubic-bezier(.2,.7,.4,1)}
+50%{transform:translateY(-84px) scale(.94,1.08);animation-timing-function:cubic-bezier(.6,0,.8,.4)}
+83%{transform:translateY(0) scale(1.1,.86);animation-timing-function:ease-out}
+100%{transform:translateY(0) scale(1,1)}}
+@keyframes mgA-tag{
+0%{opacity:0;transform:scale(.4);animation-timing-function:cubic-bezier(.3,1.5,.5,1)}
+12.1%{opacity:1;transform:scale(1)}
+88%{opacity:1;transform:scale(1);animation-timing-function:ease-in}
+100%{opacity:0;transform:scale(.7)}}
+@keyframes mgA-slam{
+0%{opacity:0;transform:rotate(-16deg) scale(.3);animation-timing-function:cubic-bezier(.2,.8,.3,1)}
+65%{opacity:1;transform:rotate(-5deg) scale(1.1);animation-timing-function:ease-out}
+100%{opacity:1;transform:rotate(-5deg) scale(1)}}
+@keyframes mgA-beat{0%,100%{transform:scale(1)}45%{transform:scale(1.6)}}
+@keyframes mgA-spin{from{transform:rotate(-24deg)}to{transform:rotate(-6deg)}}
+@keyframes mgA-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-40px)}}
+</style>
+<div class="mgA">
+  <div class="ea"><svg viewBox="0 0 310 310">
+    <circle cx="155" cy="155" r="150" fill="#6EC1FF"/>
+    <g fill="#FFFFFF">
+      <path d="M70 95q35-35 80-15q30 18 8 48q-28 24-62 8q-40-10-26-41z"/>
+      <path d="M185 175q45-12 62 28q6 38-34 50q-40 6-46-34q-4-28 18-44z"/>
+      <ellipse cx="88" cy="215" rx="30" ry="16"/>
+    </g>
+    <circle cx="155" cy="155" r="150" fill="none" stroke="#1F2227" stroke-width="10"/>
+  </svg></div>
+  <div class="as"><svg class="hop" viewBox="-80 -210 180 222">
+    <g stroke="#1F2227" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+      <rect x="-62" y="-122" width="124" height="70" rx="16" fill="#6EC1FF"/>
+      <rect x="-38" y="-52" width="32" height="52" rx="12" fill="#FFFFFF"/>
+      <rect x="6" y="-52" width="32" height="52" rx="12" fill="#FFFFFF"/>
+      <path d="M-46 -92L-66 -48" stroke-width="34"/>
+      <path d="M-46 -92L-66 -48" stroke="#FFFFFF" stroke-width="18"/>
+      <rect x="-44" y="-112" width="88" height="74" rx="24" fill="#FFFFFF"/>
+      <path d="M46 -96L76 -138" stroke-width="34"/>
+      <path d="M46 -96L76 -138" stroke="#FFFFFF" stroke-width="18"/>
+      <circle cx="0" cy="-152" r="48" fill="#FFFFFF"/>
+    </g>
+    <rect x="-22" y="-92" width="30" height="14" rx="6" fill="#FF7A59"/>
+    <circle cx="22" cy="-85" r="7" fill="#FFD447"/>
+    <rect x="-26" y="-178" width="64" height="46" rx="23" fill="#1F2227"/>
+    <path d="M14 -167q11 4 13 15" fill="none" stroke="#6EC1FF" stroke-width="7" stroke-linecap="round"/>
+  </svg></div>
+  <svg class="tr" viewBox="0 0 1080 900">
+    <g fill="#FFD447" stroke="#1F2227" stroke-width="6">
+      <g class="b" style="--i:0"><circle class="d" cx="335" cy="385" r="13"/></g>
+      <g class="b" style="--i:1"><circle class="d" cx="363" cy="348" r="13"/></g>
+      <g class="b" style="--i:2"><circle class="d" cx="409" cy="320" r="13"/></g>
+      <g class="b" style="--i:3"><circle class="d" cx="467" cy="300" r="13"/></g>
+      <g class="b" style="--i:4"><circle class="d" cx="534" cy="285" r="13"/></g>
+      <g class="b" style="--i:5"><circle class="d" cx="604" cy="273" r="13"/></g>
+      <g class="b" style="--i:6"><circle class="d" cx="672" cy="262" r="13"/></g>
+    </g>
+  </svg>
+  <div class="sp"><svg viewBox="0 0 310 310">
+    <circle cx="155" cy="155" r="150" fill="#1F2227" stroke="#FFFFFF" stroke-width="10"/>
+    <path transform="translate(78 92) scale(1.5)" fill="#FFD447" d="M0-16Q3-3 16 0Q3 3 0 16Q-3 3-16 0Q-3-3 0-16Z"/>
+    <path transform="translate(232 72) scale(.9)" fill="#FFFFFF" d="M0-16Q3-3 16 0Q3 3 0 16Q-3 3-16 0Q-3-3 0-16Z"/>
+    <path transform="translate(86 232) scale(.8)" fill="#FFFFFF" d="M0-16Q3-3 16 0Q3 3 0 16Q-3 3-16 0Q-3-3 0-16Z"/>
+    <path transform="translate(246 236)" fill="#FFD447" d="M0-16Q3-3 16 0Q3 3 0 16Q-3 3-16 0Q-3-3 0-16Z"/>
+    <circle cx="150" cy="56" r="5" fill="#FFFFFF"/>
+    <circle cx="50" cy="160" r="4" fill="#FFFFFF"/>
+    <g transform="translate(178 172)"><g class="orb" fill="none" stroke="#FFD447" stroke-width="9" stroke-linecap="round">
+      <ellipse cx="0" cy="0" rx="64" ry="17"/>
+      <circle cx="0" cy="0" r="38" fill="#FF7A59" stroke="none"/>
+      <path d="M-64 0A64 17 0 0 0 64 0"/>
+    </g></g>
+  </svg></div>
+  <div class="tag">นักบินอวกาศ</div>
+  <div class="q">ได้ยังไง?</div>
+</div>

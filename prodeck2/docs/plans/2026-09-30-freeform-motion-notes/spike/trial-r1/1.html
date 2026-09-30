@@ -1,0 +1,73 @@
+<style>
+#spd{position:absolute;left:0;top:0;width:1080px;height:700px;animation:out .4s 3.15s both}
+#spd svg{position:absolute;left:0;top:0;width:1080px;height:700px;overflow:hidden}
+#dial{transform-origin:540px 400px;animation:popin .5s calc(var(--w1) * 1s - .3s) both}
+#num{position:absolute;left:280px;top:410px;width:520px;animation:rise .45s calc(var(--w1) * 1s - .15s) both}
+#numin{display:block;background:var(--bar);color:var(--text);border:6px solid var(--ink);border-radius:28px;text-align:center;font-size:100px;line-height:1.15;padding:6px 0;animation:punch .35s calc(var(--w3) * 1s - .05s) both}
+#unit{position:absolute;left:0;top:572px;width:1080px;text-align:center;animation:popup .45s calc(var(--w4) * 1s - .35s) both}
+#unitin{display:inline-block;background:var(--paper);color:var(--ink);border:6px solid var(--ink);border-radius:40px;font-size:52px;line-height:1.2;padding:2px 34px}
+@keyframes popin{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes rise{0%{transform:translateY(60px);opacity:0}100%{transform:translateY(0);opacity:1}}
+@keyframes punch{0%{transform:scale(1)}45%{transform:scale(1.12)}100%{transform:scale(1)}}
+@keyframes popup{0%{transform:translateY(40px) scale(.2);opacity:0}65%{transform:translateY(-8px) scale(1.15);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}
+@keyframes out{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.9)}}
+</style>
+<div id="spd">
+<svg viewBox="0 0 1080 700">
+<g id="dial">
+<path d="M 270 400 A 270 270 0 0 1 810 400 Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="10" stroke-linejoin="round"/>
+<path d="M 310 400 A 230 230 0 0 1 770 400" fill="none" stroke="color-mix(in srgb, var(--ink) 18%, var(--paper))" stroke-width="30"/>
+<path id="prog" d="M 310 400 A 230 230 0 0 1 770 400" pathLength="100" fill="none" stroke="var(--accent)" stroke-width="30" stroke-dasharray="100 100" stroke-dashoffset="100"/>
+<g id="ticks"></g>
+<g id="needle" transform="rotate(-90 540 400)">
+<polygon points="528,400 540,210 552,400" fill="var(--alt)" stroke="var(--ink)" stroke-width="6" stroke-linejoin="round"/>
+</g>
+<circle cx="540" cy="400" r="24" fill="var(--ink)"/>
+<circle cx="540" cy="400" r="9" fill="var(--paper)"/>
+</g>
+</svg>
+<div id="num"><span id="numin">0</span></div>
+<div id="unit"><span id="unitin">กม./ชม.</span></div>
+</div>
+<script>
+const tg = document.getElementById("ticks");
+for (let i = 0; i <= 8; i++) {
+  const a = Math.PI - (Math.PI * i) / 8;
+  const r1 = 200, r2 = i % 2 === 0 ? 160 : 176;
+  const ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  ln.setAttribute("x1", 540 + r1 * Math.cos(a));
+  ln.setAttribute("y1", 400 - r1 * Math.sin(a));
+  ln.setAttribute("x2", 540 + r2 * Math.cos(a));
+  ln.setAttribute("y2", 400 - r2 * Math.sin(a));
+  ln.setAttribute("stroke", "var(--ink)");
+  ln.setAttribute("stroke-width", i % 2 === 0 ? "10" : "6");
+  ln.setAttribute("stroke-linecap", "round");
+  tg.appendChild(ln);
+}
+const numEl = document.getElementById("numin");
+const needle = document.getElementById("needle");
+const prog = document.getElementById("prog");
+function fmt(n) {
+  const s = String(n);
+  let o = "";
+  for (let i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 === 0) o += ",";
+    o += s[i];
+  }
+  return o;
+}
+window.frame = (t) => {
+  const s = T[1] - 0.15, e = T[2];
+  let p = (t - s) / (e - s);
+  p = Math.max(0, Math.min(1, p));
+  const k = 1 - Math.pow(1 - p, 3);
+  const v = p >= 1 ? 28000 : Math.round((28000 * k) / 10) * 10;
+  numEl.textContent = fmt(v);
+  let wob = 0;
+  if (t > e) wob = 4 * Math.sin((t - e) * 22) * Math.exp(-(t - e) * 5);
+  const ang = -90 + 180 * k * 0.92 + wob;
+  needle.setAttribute("transform", "rotate(" + ang + " 540 400)");
+  prog.setAttribute("stroke-dashoffset", String(100 - 92 * k));
+};
+window.frame(0);
+</script>

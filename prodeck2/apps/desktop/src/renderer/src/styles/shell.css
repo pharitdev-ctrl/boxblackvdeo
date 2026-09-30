@@ -1,0 +1,263 @@
+/* The frame: the bar across the top, the stage chips on it, and what the app has to say. */
+
+.app {
+  display: grid;
+  /* one column exactly as wide as the window: a row that wants more room (the bar with a long reason on it)
+     gives way inside its row rather than widening the column and pushing the whole app past the window */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 48px auto 1fr;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  /* as wide as its column and no wider, so what is on it shrinks as each item's rules say */
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px 0 84px;
+  border-bottom: 1px solid var(--line);
+  /* transparent, so the window's vibrancy comes through the bar only */
+  background: transparent;
+  -webkit-app-region: drag;
+}
+
+/* the first thing to give way when the bar is full: a long project name is cut, not pushed off */
+.topbar-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-gap {
+  flex: 1;
+}
+
+/* the stage's buttons are drawn into this box; it has none of its own, so they sit in the bar's row as if they were the bar's */
+.toolbar-slot {
+  display: contents;
+}
+
+/* stage chips */
+
+.stages {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+/*
+ * At the window's smallest, the bar holds back, title, three chips, the room's own buttons, backups
+ * and settings — more than fits. The stages the user is not on keep their number and give up their
+ * name, which stays readable to a screen reader.
+ */
+@media (max-width: 1060px) {
+  .topbar {
+    gap: 6px;
+    padding-right: 12px;
+  }
+
+  .stage:not(.now) .stage-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.stage {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sub);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+
+.stage + .stage::before {
+  content: "›";
+  margin-right: 4px;
+  color: var(--muted);
+}
+
+.stage:hover:not(:disabled):not(.now) {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.stage:disabled {
+  color: var(--muted);
+}
+
+.stage-number {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+.stage.done {
+  color: var(--text);
+}
+
+.stage.done .stage-number {
+  border-color: transparent;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.stage.now {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stage.now .stage-number {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* alerts */
+
+.alerts {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 10px 28px 0;
+}
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+
+.alert.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.alert.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.alert.info {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.alert-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.alert-text {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+}
+
+.alert-text .hint {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* backups */
+
+.backup-menu {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.popover-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ok-text {
+  color: var(--ok);
+  font-size: 12.5px;
+}
+
+.backup-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 12.5px;
+}
+
+.backup-row + .backup-row {
+  border-top: 1px solid var(--line);
+}
+
+.backup-confirm {
+  display: grid;
+  flex-basis: 100%;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.backup-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* the screen itself */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
