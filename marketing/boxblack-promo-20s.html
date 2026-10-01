@@ -435,7 +435,7 @@ body.rec .viewport { border-radius: 0; }
   });
 
   let t = 0, playing = true, cur = -1, last = null, soundOn = false;
-  const audio = new Audio('boxblack-music.m4a'); audio.preload = 'auto';
+  const audio = new Audio('boxblack-music.mp3'); audio.preload = 'auto';
   const soundBtn = document.getElementById('sound');
   const syncAudio = () => { if (!soundOn) return; audio.currentTime = t; if (playing) audio.play().catch(() => {}); else audio.pause(); };
   soundBtn.onclick = () => { soundOn = !soundOn; soundBtn.textContent = soundOn ? 'ปิดเสียง' : 'เปิดเสียง'; soundBtn.setAttribute('aria-pressed', soundOn); if (soundOn) syncAudio(); else audio.pause(); };
