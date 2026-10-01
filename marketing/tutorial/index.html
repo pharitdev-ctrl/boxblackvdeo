@@ -1,0 +1,533 @@
+<title>BOXBLACK Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@300;500;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a 1920×1080 stage. The Mac screen (1440×900, shown at 0.86) sits left with a camera that can push in;
+   the step explanation sits in a fixed right column. Single light look on purpose: it is a video, and the app is light. */
+:root {
+  color-scheme: light;
+  --bg: #eef0f4;
+  --panel: #ffffff;
+  --ink: #1d1d1f;
+  --sub: #5d6068;
+  --muted: #9a9ca3;
+  --line: rgba(20, 24, 40, 0.09);
+  --accent: #0a7aff;
+  --accent-soft: rgba(10, 122, 255, 0.1);
+  --ok: #1f8a3b;
+  --tip: #fff7e6;
+  --tip-ink: #7a5200;
+
+  --sans: "IBM Plex Sans Thai", "Thonburi", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --mac: -apple-system, "Helvetica Neue", "IBM Plex Sans Thai", system-ui, sans-serif;
+}
+[hidden] { display: none !important; }
+html, body { margin: 0; background: #e4e6eb; color: var(--ink); font-family: var(--sans); }
+body { padding-inline: 16px; padding-block: 20px 32px; }
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 12px; }
+.viewport { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: var(--bg); }
+.stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: var(--bg); }
+
+/* header */
+.top { position: absolute; left: 72px; right: 64px; top: 40px; height: 56px; display: flex; align-items: center; gap: 22px; }
+.mark { width: 44px; height: 44px; border-radius: 11px; background: linear-gradient(150deg, #2973ff, #7333e6); position: relative; flex: none; }
+.mark i { position: absolute; height: 7px; border-radius: 3px; background: #fff; }
+.mark b { position: absolute; left: 21px; top: 9px; width: 3px; height: 26px; border-radius: 2px; background: #ffd140; }
+.top .name { font-weight: 600; font-size: 26px; letter-spacing: .02em; }
+.top .name span { color: var(--sub); font-weight: 400; margin-left: 10px; }
+.chaps { margin-left: auto; display: flex; gap: 8px; }
+.chap { font-size: 20px; padding: 7px 16px; border-radius: 99px; color: var(--muted); background: transparent; border: 1px solid var(--line); white-space: nowrap; }
+.chap.done { color: var(--sub); }
+.chap.cur { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* the Mac screen */
+.frame { position: absolute; left: 72px; top: 150px; width: 1238px; height: 774px; border-radius: 14px; overflow: hidden; background: #f5f5f7;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 30px 70px rgba(20, 30, 60, .18), 0 8px 18px rgba(20, 30, 60, .08); }
+.cam { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; }
+.cam img.shot { position: absolute; inset: 0; width: 1440px; height: 900px; display: none; }
+.cam img.shot.on { display: block; }
+.lights { position: absolute; left: 20px; top: 17px; display: flex; gap: 8px; z-index: 3; }
+.lights i { width: 13px; height: 13px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }
+.lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+.ring { position: absolute; z-index: 4; border-radius: 10px; box-shadow: 0 0 0 3px var(--accent), 0 0 0 9px rgba(10, 122, 255, .18); pointer-events: none; }
+.cursor { position: absolute; z-index: 6; width: 26px; height: 38px; margin: -3px 0 0 -6px; transform-origin: 6px 3px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.ripple { position: absolute; z-index: 5; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid var(--accent); }
+
+/* mock macOS screens for the install chapter */
+.mock { position: absolute; inset: 0; display: none; font-family: var(--mac); }
+.mock.on { display: block; }
+.desk { position: absolute; inset: 0; background: radial-gradient(1200px 800px at 20% 10%, #c9dcff, transparent 60%), radial-gradient(1000px 700px at 90% 90%, #e6d4ff, transparent 60%), linear-gradient(160deg, #dfe9ff, #efe6ff); }
+.menubar { position: absolute; left: 0; right: 0; top: 0; height: 26px; background: rgba(255,255,255,.55); backdrop-filter: blur(20px); display: flex; align-items: center; gap: 22px; padding: 0 18px; font-size: 13.5px; color: #1d1d1f; }
+.menubar b { font-weight: 600; } .menubar .clock { margin-left: auto; }
+.win { position: absolute; background: #fff; border-radius: 12px; box-shadow: 0 0 0 .5px rgba(0,0,0,.2), 0 24px 60px rgba(0,0,0,.25); overflow: hidden; }
+.win .tbar { height: 46px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #3a3a3c; border-bottom: 1px solid rgba(0,0,0,.08); background: #f6f6f6; position: relative; }
+.win .tbar .lights { left: 16px; top: 16px; }
+.appicon { width: 128px; height: 128px; border-radius: 29px; background: linear-gradient(150deg, #2973ff, #7333e6); position: relative; box-shadow: 0 8px 20px rgba(60, 40, 160, .3); }
+.appicon i { position: absolute; height: 18px; border-radius: 6px; background: rgba(255,255,255,.93); }
+.appicon b { position: absolute; left: 62px; top: 26px; width: 5px; height: 72px; border-radius: 3px; background: #ffd140; }
+.folder { width: 128px; height: 104px; position: relative; margin-top: 12px; }
+.folder::before { content: ""; position: absolute; left: 0; top: 0; width: 56px; height: 22px; border-radius: 8px 8px 0 0; background: #4aa3f5; }
+.folder::after { content: "A"; position: absolute; left: 0; right: 0; top: 14px; bottom: 0; border-radius: 6px 10px 10px 10px; background: linear-gradient(180deg, #6cb8ff, #3d95ec); color: rgba(255,255,255,.75); font: 700 44px/90px var(--mac); text-align: center; }
+.folder.hot::after { background: linear-gradient(180deg, #2f8cff, #1667d9); }
+.icolabel { font-size: 15px; text-align: center; margin-top: 10px; color: #1d1d1f; }
+.alert { position: absolute; width: 300px; padding: 22px 20px 18px; border-radius: 14px; background: rgba(246, 246, 248, .97); box-shadow: 0 0 0 .5px rgba(0,0,0,.2), 0 24px 60px rgba(0,0,0,.3); text-align: center; font-size: 13px; line-height: 1.45; color: #1d1d1f; }
+.alert .t { font-weight: 700; font-size: 14px; margin: 12px 0 8px; }
+.mbtn { display: block; width: 100%; padding: 6px 0; border-radius: 7px; font-size: 13.5px; margin-top: 8px; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.2); color: #1d1d1f; }
+.mbtn.def { background: #0a7aff; color: #fff; box-shadow: none; }
+.side { position: absolute; left: 0; top: 46px; bottom: 0; width: 230px; background: #ececee; padding: 14px 10px; display: grid; gap: 2px; align-content: start; font-size: 13.5px; }
+.side span { padding: 6px 10px; border-radius: 7px; display: flex; gap: 9px; align-items: center; }
+.side span i { width: 18px; height: 18px; border-radius: 5px; background: var(--c, #8e8e93); flex: none; }
+.side span.sel { background: #0a7aff; color: #fff; }
+.pane { position: absolute; left: 230px; right: 0; top: 46px; bottom: 0; padding: 22px 30px; font-size: 13.5px; color: #1d1d1f; }
+.pane h3 { margin: 0 0 16px; font-size: 20px; }
+.grp { background: #f6f6f7; border-radius: 10px; padding: 4px 16px; margin-bottom: 18px; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.08); }
+.grp > div { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid rgba(0,0,0,.06); gap: 16px; }
+.grp > div:last-child { border-bottom: 0; }
+.grp .sw { width: 32px; height: 19px; border-radius: 10px; background: #34c759; }
+.grp .sm { padding: 4px 12px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.2); white-space: nowrap; }
+.sect { font-weight: 600; margin: 4px 0 8px; color: #3a3a3c; }
+.req { position: absolute; left: 270px; top: 120px; width: 900px; padding: 40px 48px; border-radius: 22px; background: rgba(255,255,255,.92); box-shadow: 0 24px 60px rgba(40, 40, 90, .18); font-family: var(--sans); }
+.req h3 { margin: 0 0 22px; font-size: 32px; font-weight: 600; }
+.req ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.req li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; font-size: 22px; line-height: 1.45; }
+.req li i { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-style: normal; font-weight: 600; font-size: 17px; margin-top: 2px; }
+.req li small { display: block; color: var(--sub); font-size: 18px; }
+.req .foot { margin-top: 22px; font-size: 19px; color: var(--ok); }
+
+/* the explanation column */
+.explain { position: absolute; left: 1360px; right: 64px; top: 150px; height: 774px; display: flex; flex-direction: column; }
+.explain .count { font-family: var(--mono); font-size: 20px; color: var(--muted); letter-spacing: .06em; }
+.explain .eyebrow { margin-top: 10px; font-size: 22px; color: var(--accent); font-weight: 500; }
+.explain h2 { margin: 10px 0 0; font-size: 46px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+.explain .body { margin-top: 22px; font-size: 27px; line-height: 1.6; color: #2f3138; }
+.explain .body b { color: var(--ink); font-weight: 600; background: linear-gradient(transparent 62%, rgba(10, 122, 255, .16) 62%); }
+.explain .tip { margin-top: auto; padding: 18px 22px; border-radius: 14px; background: var(--tip); color: var(--tip-ink); font-size: 22px; line-height: 1.5; }
+.explain .tip::before { content: "เคล็ดลับ"; display: block; font-weight: 600; font-size: 18px; letter-spacing: .04em; margin-bottom: 4px; }
+
+/* title cards */
+.card { position: absolute; inset: 0; background: var(--bg); display: none; z-index: 20; }
+.card.on { display: block; }
+.card .in { position: absolute; left: 160px; right: 160px; top: 230px; }
+.card .kicker { font-family: var(--mono); font-size: 24px; letter-spacing: .14em; color: var(--accent); }
+.card h1 { margin: 18px 0 0; font-size: 92px; line-height: 1.2; font-weight: 600; letter-spacing: -.01em; }
+.card .lede { margin-top: 18px; font-size: 34px; color: var(--sub); line-height: 1.5; }
+.card .toc { margin-top: 64px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.card .toc div { background: var(--panel); border-radius: 18px; padding: 24px 28px; font-size: 28px; box-shadow: 0 0 0 1px var(--line); }
+.card .toc div span { display: block; font-family: var(--mono); font-size: 18px; color: var(--muted); margin-bottom: 6px; }
+.card .flow { margin-top: 56px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 25px; }
+.card .flow b { background: var(--panel); padding: 12px 18px; border-radius: 14px; box-shadow: 0 0 0 1px var(--line); font-weight: 500; }
+.card .flow i { color: var(--muted); font-style: normal; }
+.card .faq { margin-top: 48px; display: grid; gap: 14px; font-size: 26px; color: #2f3138; line-height: 1.5; }
+
+/* controls */
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn { font: 500 14px var(--sans); color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 13px; cursor: pointer; }
+.btn:focus-visible, .scrub:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.time { font: 400 13px var(--mono); color: var(--sub); font-variant-numeric: tabular-nums; }
+.scrub { position: relative; flex: 1 1 260px; min-width: 0; height: 26px; cursor: pointer; }
+.scrub .track { position: absolute; left: 0; right: 0; top: 12px; height: 3px; border-radius: 2px; background: #cfd3db; }
+.scrub .fill { position: absolute; left: 0; top: 12px; height: 3px; border-radius: 2px; background: var(--accent); }
+.scrub .tick { position: absolute; top: 8px; width: 2px; height: 11px; background: #9aa0aa; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: 500 13px var(--sans); color: var(--sub); background: #fff; border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; cursor: pointer; }
+.chips button.cur { background: var(--accent); color: #fff; border-color: var(--accent); }
+.hint { font-size: 12px; color: var(--sub); margin: 0; }
+body.rec .bar, body.rec .chips, body.rec .hint { display: none; }
+body.rec { padding: 0; } body.rec .wrap { max-width: none; } body.rec .viewport { border-radius: 0; }
+</style>
+
+<div class="wrap">
+  <div class="viewport" id="viewport">
+    <div class="stage" id="stage">
+      <div class="top">
+        <div class="mark"><i style="left:8px;top:13px;width:16px"></i><i style="left:27px;top:13px;width:10px"></i><i style="left:8px;top:24px;width:10px"></i><i style="left:20px;top:24px;width:12px"></i><b></b></div>
+        <div class="name">BOXBLACK<span>สอนติดตั้งและใช้งาน</span></div>
+        <div class="chaps" id="chaps"></div>
+      </div>
+
+      <div class="frame" id="frame">
+        <div class="cam" id="cam">
+          <div id="shots"></div>
+          <div class="lights" id="lights"><i></i><i></i><i></i></div>
+
+          <!-- requirements -->
+          <div class="mock" id="m-req"><div class="desk"></div>
+            <div class="req">
+              <h3>สิ่งที่ต้องมีก่อนติดตั้ง</h3>
+              <ul>
+                <li><i>1</i><span>Mac ชิป Apple (M1 ขึ้นไป) · macOS 12 ขึ้นไป</span></li>
+                <li><i>2</i><span>CapCut สำหรับ Mac<small>ทดสอบกับเวอร์ชัน 9.4</small></span></li>
+                <li><i>3</i><span>License key จากผู้ขาย และอินเทอร์เน็ต</span></li>
+                <li><i>4</i><span>ช่องทางใช้ Claude อย่างใดอย่างหนึ่ง<small>Anthropic API key ของคุณเอง หรือบัญชี Claude Pro, Max, Team, Enterprise (ผ่าน Claude Code ต้อง macOS 13 ขึ้นไป)</small></span></li>
+                <li><i>5</i><span>ช่องทางถอดเสียงอย่างใดอย่างหนึ่ง<small>ถอดบนเครื่อง (ฟรี) หรือ ElevenLabs API key ของคุณเอง</small></span></li>
+              </ul>
+              <div class="foot">✓ ffmpeg และ whisper-cli มากับแอปแล้ว ไม่ต้องติดตั้งโปรแกรมอื่นเพิ่ม</div>
+            </div>
+          </div>
+
+          <!-- the disk image -->
+          <div class="mock" id="m-dmg"><div class="desk"></div>
+            <div class="menubar"><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span class="clock">พ. 1 ต.ค. 10:24</span></div>
+            <div class="win" style="left:380px;top:200px;width:680px;height:420px">
+              <div class="tbar"><div class="lights"><i></i><i></i><i></i></div>BOXBLACK</div>
+              <div style="position:absolute;left:96px;top:120px;display:grid;justify-items:center" id="dmg-app" data-box="dmg_app">
+                <div class="appicon"><i style="left:19px;top:34px;width:52px"></i><i style="left:76px;top:34px;width:33px"></i><i style="left:19px;top:64px;width:31px"></i><i style="left:54px;top:64px;width:38px"></i><b></b></div>
+                <div class="icolabel">BOXBLACK</div>
+              </div>
+              <div style="position:absolute;left:280px;top:170px;font-size:56px;color:#b5b7bd">→</div>
+              <div style="position:absolute;left:452px;top:108px;display:grid;justify-items:center" data-box="dmg_apps">
+                <div class="folder" id="dmg-folder"></div>
+                <div class="icolabel">Applications</div>
+              </div>
+            </div>
+            <div style="position:absolute;display:none;opacity:.8" id="dmg-drag">
+              <div class="appicon"><i style="left:19px;top:34px;width:52px"></i><i style="left:76px;top:34px;width:33px"></i><i style="left:19px;top:64px;width:31px"></i><i style="left:54px;top:64px;width:38px"></i><b></b></div>
+            </div>
+          </div>
+
+          <!-- first open is blocked -->
+          <div class="mock" id="m-blocked"><div class="desk"></div>
+            <div class="menubar"><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span class="clock">พ. 1 ต.ค. 10:25</span></div>
+            <div class="alert" style="left:570px;top:250px">
+              <div class="appicon" style="width:64px;height:64px;border-radius:15px;margin:0 auto"><i style="left:10px;top:17px;width:26px;height:9px;border-radius:3px"></i><i style="left:38px;top:17px;width:16px;height:9px;border-radius:3px"></i><i style="left:10px;top:32px;width:15px;height:9px;border-radius:3px"></i><i style="left:27px;top:32px;width:19px;height:9px;border-radius:3px"></i><b style="left:31px;top:13px;width:3px;height:36px"></b></div>
+              <div class="t">“BOXBLACK” Not Opened</div>
+              <div>Apple could not verify “BOXBLACK” is free of malware that may harm your Mac or compromise your privacy.</div>
+              <span class="mbtn def" style="margin-top:16px" data-box="done">Done</span>
+              <span class="mbtn">Move to Trash</span>
+            </div>
+          </div>
+
+          <!-- System Settings -->
+          <div class="mock" id="m-privacy"><div class="desk"></div>
+            <div class="menubar"><b>System Settings</b><span>Edit</span><span>View</span><span>Window</span><span class="clock">พ. 1 ต.ค. 10:25</span></div>
+            <div class="win" style="left:240px;top:110px;width:960px;height:680px">
+              <div class="tbar" style="justify-content:flex-start;padding-left:250px"><div class="lights"><i></i><i></i><i></i></div>Privacy &amp; Security</div>
+              <div class="side">
+                <span><i style="--c:#0a7aff"></i>Wi‑Fi</span><span><i style="--c:#0a7aff"></i>Bluetooth</span><span><i style="--c:#0a7aff"></i>Network</span>
+                <span><i style="--c:#ff3b30"></i>Notifications</span><span><i style="--c:#ff2d55"></i>Sound</span><span><i style="--c:#5856d6"></i>Focus</span>
+                <span><i style="--c:#8e8e93"></i>General</span><span><i style="--c:#8e8e93"></i>Appearance</span><span><i style="--c:#0a7aff"></i>Accessibility</span>
+                <span class="sel"><i style="--c:#fff"></i>Privacy &amp; Security</span><span><i style="--c:#8e8e93"></i>Desktop &amp; Dock</span><span><i style="--c:#0a7aff"></i>Displays</span>
+              </div>
+              <div class="pane">
+                <div class="grp"><div><span>Location Services</span><span style="color:#8e8e93">On ›</span></div><div><span>Full Disk Access</span><span style="color:#8e8e93">›</span></div><div><span>Files &amp; Folders</span><span style="color:#8e8e93">›</span></div></div>
+                <div class="sect">Security</div>
+                <div class="grp">
+                  <div><span>Allow applications from</span><span style="color:#8e8e93">App Store &amp; Known Developers ⌄</span></div>
+                  <div id="openany-row"><span>“BOXBLACK” was blocked to protect your Mac.</span><span class="sm" id="openany" data-box="openany">Open Anyway</span></div>
+                </div>
+                <div class="grp"><div><span>FileVault</span><span style="color:#8e8e93">On</span></div><div><span>Lockdown Mode</span><span style="color:#8e8e93">Off</span></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- password -->
+          <div class="mock" id="m-password"><div class="desk"></div>
+            <div class="menubar"><b>System Settings</b><span>Edit</span><span>View</span><span>Window</span><span class="clock">พ. 1 ต.ค. 10:26</span></div>
+            <div class="win" style="left:240px;top:110px;width:960px;height:680px;filter:brightness(.92)"><div class="tbar"><div class="lights"><i></i><i></i><i></i></div>Privacy &amp; Security</div></div>
+            <div class="alert" style="left:560px;top:230px;width:320px">
+              <div style="font-size:40px">🔒</div>
+              <div class="t">Open “BOXBLACK”?</div>
+              <div>Enter your password to allow this.</div>
+              <div style="margin-top:14px;text-align:left;padding:6px 10px;border-radius:6px;background:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.25);color:#8e8e93" id="pw">ford</div>
+              <div style="margin-top:8px;text-align:left;padding:6px 10px;border-radius:6px;background:#fff;box-shadow:0 0 0 2px rgba(10,122,255,.6);letter-spacing:.2em" id="pw-dots">&nbsp;</div>
+              <span class="mbtn def" style="margin-top:14px" id="pw-open" data-box="pw_open">Open</span>
+              <span class="mbtn">Cancel</span>
+            </div>
+          </div>
+
+          <div class="ring" id="ring" hidden></div>
+          <div class="ripple" id="ripple" hidden></div>
+          <svg class="cursor" id="cursor" viewBox="0 0 26 38"><path d="M6 3 L6 29 L12.5 23 L17 33.5 L21 31.8 L16.6 21.6 L25 21.6 Z" fill="#000" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <div class="explain" id="explain"></div>
+
+      <div class="card" id="card-intro"><div class="in">
+        <div class="kicker">BOXBLACK · คู่มือฉบับวิดีโอ</div>
+        <h1>ติดตั้งและใช้งาน BOXBLACK</h1>
+        <div class="lede">ตั้งแต่ติดตั้งบน Mac จนได้คลิปที่ตัดต่อแล้วใน CapCut · ประมาณ 4 นาที</div>
+        <div class="toc">
+          <div><span>บทที่ 1</span>ติดตั้งแอป</div>
+          <div><span>บทที่ 2</span>ตั้งค่าครั้งแรก</div>
+          <div><span>บทที่ 3</span>วิเคราะห์และวางโครงเรื่อง</div>
+          <div><span>บทที่ 4</span>โพสต์โปรดักชัน</div>
+          <div><span>บทที่ 5</span>เขียนลง CapCut และกู้คืน</div>
+          <div><span>ท้ายคลิป</span>สรุปและแก้ปัญหา</div>
+        </div>
+      </div></div>
+
+      <div class="card" id="card-outro"><div class="in">
+        <div class="kicker">สรุป</div>
+        <h1 style="font-size:76px">ทุกครั้งที่ทำคลิป</h1>
+        <div class="flow"><b>ปิด CapCut</b><i>→</i><b>เลือกโปรเจค</b><i>→</i><b>วิเคราะห์</b><i>→</i><b>วางโครงเรื่อง</b><i>→</i><b>ยืนยัน</b><i>→</i><b>วางแผนโพสต์</b><i>→</i><b>เขียนลง CapCut</b></div>
+        <div class="faq">
+          <div><b>อัปเดตเวอร์ชันใหม่:</b> ลาก BOXBLACK จาก DMG ใหม่ไปวางทับของเดิมใน Applications การตั้งค่าและผลวิเคราะห์ยังอยู่ครบ</div>
+          <div><b>ขึ้นว่า Claude Code ยังไม่ได้ล็อกอิน:</b> ไปที่ ตั้งค่า → Claude แล้วกด ล็อกอินด้วยบัญชี Claude</div>
+          <div><b>ผลไม่ถูกใจ:</b> เปิดโปรเจคนั้น กด สำรอง บนแถบด้านบน แล้วกด กู้คืน</div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="btn" id="play" type="button">หยุด</button>
+    <button class="btn" id="restart" type="button">เริ่มใหม่</button>
+    <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="ตำแหน่งในวิดีโอ" aria-valuemin="0"><div class="track"></div><div class="fill" id="fill"></div></div>
+    <span class="time" id="time">0:00</span>
+    <button class="btn" id="sound" type="button" aria-pressed="false">เปิดเสียง</button>
+    <button class="btn" id="rec" type="button">เต็มจอ</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <p class="hint">Space เล่น/หยุด · ← → ข้าม 5 วินาที · กดชื่อบทเพื่อข้ามไปบทนั้น</p>
+</div>
+
+<script>
+(() => {
+/* ---------------- boxes measured from the app (1440×900 screen points) ---------------- */
+const B = {
+  act_input: [28,228,504,35], act_submit: [28,271,77,27], settings: [1366,9,58,30],
+  tab_general: [400,68,61,40], tab_asr: [465,68,88,40], tab_claude: [557,68,73,40], tab_license: [634,68,78,40],
+  pack_install: [969,298,56,26], tools: [415,369,610,20], pack: [415,291,610,40],
+  asr_local: [448,183,444,21], asr_dl: [907,236,118,26], asr_eleven: [448,289,577,21], asr_ready: [458,238,113,17],
+  cl_api: [448,183,400,21], cl_key: [442,261,483,30], cl_save: [933,261,92,30], cl_cc: [448,343,303,21],
+  cc_install: [875,434,150,30], cc_login: [851,438,174,30], cc_row: [448,249,303,21],
+  gate: [57,58,1343,36], card: [28,96,182,500], search: [1192,68,220,30],
+  prep_list: [28,167,1384,313], prep_check: [45,182,15,15], estimate: [28,869,453,19], start: [1309,853,103,30],
+  peek: [1365,207,30,26], next: [1313,858,99,30], peek_pop: [1055,239,340,205],
+  brief: [28,68,300,400], len: [57,180,67,19], type: [45,267,266,30], text: [45,333,266,75], submit: [45,420,140,30],
+  outline_head: [352,68,334,30], beats: [352,100,1060,740], play: [1258,316,31,26], updown: [1258,316,140,26], revise: [45,498,210,36], send: [45,542,92,30], confirm: [1293,858,119,30],
+  beat2: [12,217,243,67], beat5: [12,429,243,67], rows: [296,361,1116,240], pills: [306,412,105,22], rules: [296,140,1116,140], plan: [296,623,269,30],
+  ptab_cut: [296,105,84,40], ptab_emph: [384,105,84,40], ptab_gfx: [472,105,153,40], ptab_sound: [629,105,72,40], ptab_subs: [705,105,60,40],
+  menu: [1044,9,102,30], write: [1156,9,127,30], emph_point: [296,319,1116,112], level: [296,186,1116,40],
+  group: [296,622,1116,94], graphic: [296,799,1116,76], sound_row: [296,262,1116,44], subs: [296,380,1116,120],
+  ai_menu: [821,20,310,140], write_pop: [440,72,560,390], write_go: [898,419,82,30], toast: [536,843,369,40],
+  backup: [1276,9,80,30], restore: [1295,97,46,26], backup_pop: [1020,52,330,82],
+  /* mocks */
+  dmg_app: [476,328,128,150], dmg_apps: [832,308,128,150], done: [590,436,260,30], openany: [1068,566,100,26], pw: [580,438,280,30], pw_open: [580,474,280,30],
+};
+const C = (k) => { const b = B[k]; return [b[0] + b[2] / 2, b[1] + b[3] / 2]; };
+
+/* ---------------- the script ---------------- */
+// shots: [[at, id]] or [[at, 'seq:name:count:every']]; cur: [[at, boxKey|[x,y], click?]]; ring: [[from, to, boxKey]]; zoom: [[at, z, boxKey|[x,y]]]
+const CH = ['ติดตั้ง', 'ตั้งค่า', 'วิเคราะห์ & โครงเรื่อง', 'โพสต์โปรดักชัน', 'เขียนลง CapCut'];
+const S = [
+  { card: 'intro', dur: 7 },
+  { ch: 0, title: 'เตรียมให้พร้อม', mock: 'req', dur: 10, chrome: false,
+    body: 'เช็กเครื่องและบัญชีให้ครบก่อนติดตั้ง ที่เหลือตั้งค่าได้จากในแอปทั้งหมด',
+    tip: 'Claude ใช้ได้ทั้ง API key ของคุณเอง หรือบัญชี Claude ที่สมัครไว้แล้ว เลือกทางที่สะดวก' },
+  { ch: 0, title: 'ลากแอปลง Applications', mock: 'dmg', dur: 9, chrome: false,
+    body: 'เปิดไฟล์ <b>boxblack-…-arm64.dmg</b> แล้วลากไอคอน <b>BOXBLACK</b> ไปวางในโฟลเดอร์ <b>Applications</b>',
+    cur: [[0, [700, 720]], [2, 'dmg_app'], [5, 'dmg_apps']], drag: [2.4, 5], zoom: [[0, 1, [720, 450]]] },
+  { ch: 0, title: 'ครั้งแรก macOS จะไม่ให้เปิด', mock: 'blocked', dur: 8, chrome: false,
+    body: 'เพราะ BOXBLACK ยังไม่ได้ลงทะเบียนผู้พัฒนากับ Apple ข้อความนี้จึงขึ้นแค่ครั้งแรก กด <b>Done</b> ไปก่อน',
+    cur: [[0, [900, 700]], [4.5, 'done', true]], ring: [[1.5, 4.3, 'done']], zoom: [[0, 1, [720, 450]], [1.4, 1.6, [720, 380]]] },
+  { ch: 0, title: 'กด Open Anyway', mock: 'privacy', dur: 10, chrome: false,
+    body: 'ไปที่ <b>System Settings → Privacy &amp; Security</b> เลื่อนลงไปที่ส่วน Security จะเห็นว่า BOXBLACK ถูกบล็อก กด <b>Open Anyway</b>',
+    cur: [[0, [700, 300]], [6.5, 'openany', true]], ring: [[2.5, 6.3, 'openany']], zoom: [[0, 1, [720, 450]], [2, 1.7, 'openany']] },
+  { ch: 0, title: 'ใส่รหัสผ่านเครื่อง', mock: 'password', dur: 7, chrome: false,
+    body: 'ใส่รหัสผ่านของเครื่อง แล้วกด <b>Open</b> ทำแค่ครั้งเดียว ครั้งต่อไปเปิดจาก Applications ได้ตามปกติ',
+    cur: [[0, [900, 650]], [4.2, 'pw_open', true]], type: [1, 3], zoom: [[0, 1, [720, 450]], [0.8, 1.6, [720, 400]]] },
+
+  { ch: 1, title: 'เปิดใช้งานด้วย license key', dur: 11, shots: [[0, 'act'], [3, 'act_key'], [5.2, 'act_wait'], [6.8, 'act_done']],
+    body: 'เปิดแอปครั้งแรก ใส่ <b>license key</b> ที่ได้รับจากผู้ขาย แล้วกด <b>เปิดใช้งาน</b>',
+    tip: 'key หนึ่งใช้ได้ตามจำนวนเครื่องที่ซื้อ และต้องต่ออินเทอร์เน็ตอย่างน้อยทุก 3 วัน',
+    cur: [[0, [700, 600]], [2, 'act_input', true], [5, 'act_submit', true], [9, [900, 500]]], ring: [[1, 4.8, 'act_input']], zoom: [[0, 1.7, [400, 260]], [6.4, 1, [720, 450]]] },
+  { ch: 1, title: 'เครื่องมือและตัวเรนเดอร์กราฟิก', dur: 11, shots: [[0, 'act_done'], [1.8, 'set_general'], [6.3, 'seq:set_pack:6:0.32'], [8.3, 'set_pack_done']],
+    body: 'กด <b>ตั้งค่า</b> มุมขวาบน · ffmpeg และ whisper-cli มากับแอปแล้ว · กด <b>ติดตั้ง</b> ตัวเรนเดอร์กราฟิก (163 MB ครั้งเดียว) เพื่อใช้กราฟิกเคลื่อนไหว',
+    cur: [[0, [900, 500]], [1.5, 'settings', true], [6, 'pack_install', true]], ring: [[2.4, 4.6, 'tools'], [8.5, 10.8, 'pack']], zoom: [[0, 1, [720, 450]], [2.5, 1.6, [720, 330]]] },
+  { ch: 1, title: 'โหลดโมเดลถอดเสียง', dur: 10, shots: [[0, 'set_pack_done'], [1.3, 'set_asr'], [4.4, 'seq:set_model:8:0.33'], [7.2, 'set_model_done']],
+    body: 'แท็บ <b>ถอดเสียง</b> · เลือก <b>บนเครื่อง</b> (ฟรี เสียงไม่ออกจากเครื่อง) แล้วกด <b>ดาวน์โหลดโมเดล</b> ประมาณ 1.1 GB ครั้งเดียว',
+    tip: 'อยากได้เร็วและแม่นขึ้น เลือก ElevenLabs Scribe แล้วใส่ API key ของคุณเองได้',
+    cur: [[0, 'settings'], [1, 'tab_asr', true], [4, 'asr_dl', true]], ring: [[1.8, 3.8, 'asr_local'], [7.4, 9.8, 'asr_ready']], zoom: [[0, 1.6, [720, 330]]] },
+  { ch: 1, title: 'เชื่อม Claude ด้วย API key', dur: 10, shots: [[0, 'set_model_done'], [1.3, 'set_claude'], [3.6, 'set_claude_key'], [5.6, 'set_claude_saved']],
+    body: 'แท็บ <b>Claude</b> · ทางที่ 1: วาง <b>Anthropic API key</b> ของคุณ แล้วกด <b>บันทึก key</b> แอปเก็บแบบเข้ารหัสไว้ใน Keychain',
+    tip: 'ครั้งแรกที่บันทึก key macOS อาจถามเรื่อง Keychain ให้กด Always Allow',
+    cur: [[0, 'asr_dl'], [1, 'tab_claude', true], [3, 'cl_key', true], [5.3, 'cl_save', true]], ring: [[1.8, 2.9, 'cl_api'], [3.4, 5.1, 'cl_key']], zoom: [[0, 1.6, [720, 330]]] },
+  { ch: 1, title: 'หรือใช้บัญชี Claude', dur: 12, shots: [[0, 'set_claude_saved'], [1.5, 'set_cc'], [3.6, 'set_cc_installing'], [5.2, 'set_cc_installed'], [7.4, 'set_cc_login'], [9, 'set_cc_ready']],
+    body: 'ทางที่ 2 สำหรับบัญชี <b>Claude Pro, Max, Team, Enterprise</b>: เลือก Claude Code บนเครื่องนี้ → <b>ติดตั้ง Claude Code</b> → <b>ล็อกอินด้วยบัญชี Claude</b> แล้วกดอนุญาตในเบราว์เซอร์',
+    cur: [[0, 'cl_save'], [1.2, 'cl_cc', true], [3.3, 'cc_install', true], [7.1, 'cc_login', true]], ring: [[9.2, 11.6, 'cc_row']], zoom: [[0, 1.5, [720, 340]]] },
+
+  { ch: 2, title: 'ปิด CapCut ก่อนเริ่ม', dur: 8, shots: [[0, 'gate'], [5, 'gate_off']],
+    body: 'BOXBLACK แก้ timeline ได้เฉพาะตอนที่ CapCut ปิด เพื่อไม่ให้ CapCut บันทึกทับงาน · แถบนี้หายไปเองเมื่อปิด CapCut',
+    ring: [[0.8, 4.8, 'gate']], zoom: [[0, 1.5, [720, 300]], [5.2, 1, [720, 450]]] },
+  { ch: 2, title: 'เลือกโปรเจค CapCut', dur: 7, shots: [[0, 'projects']],
+    body: 'ทุกโปรเจคใน CapCut ขึ้นที่นี่ ล่าสุดอยู่บนสุด · กดโปรเจคที่นำเข้าวิดีโอไว้แล้ว',
+    tip: 'ครั้งแรกที่อ่านวิดีโอในโฟลเดอร์ Downloads, Desktop หรือ Documents ให้กด Allow',
+    cur: [[0, [900, 700]], [4.5, 'card', true]], ring: [[1.5, 4.3, 'card']] },
+  { ch: 2, title: 'เลือกวิดีโอแล้วเริ่มวิเคราะห์', dur: 9, shots: [[0, 'prepare']],
+    body: 'ติ๊กวิดีโอที่ให้ AI ใช้ · ด้านล่างบอกว่า Claude จะดูภาพกี่ภาพ ใช้ประมาณกี่ token · กด <b>เริ่มวิเคราะห์</b>',
+    cur: [[0, [700, 600]], [1.5, 'prep_check'], [7.5, 'start', true]], ring: [[0.6, 3, 'prep_list'], [3.6, 6.4, 'estimate']], zoom: [[0, 1, [720, 450]], [3.4, 1.8, [400, 860]], [6.6, 1, [720, 450]]] },
+  { ch: 2, title: 'ถอดเสียงและดูภาพ', dur: 12, shots: [[0, 'seq:analyse:20:0.38'], [7.8, 'analysed'], [9.4, 'peek']],
+    body: 'แอปถอดเสียงภาษาไทย แล้วให้ Claude ดูภาพทีละไฟล์ · เสร็จแล้วกด <b>ดู</b> เพื่อเช็กคำพูดและฉากที่ AI อ่านได้',
+    cur: [[0, 'start'], [9, 'peek', true]], ring: [[9.6, 11.8, 'peek_pop']], zoom: [[0, 1.15, [760, 330]], [9.2, 1.7, [1150, 330]]] },
+  { ch: 2, title: 'บอกโจทย์ของคลิป', dur: 11, shots: [[0, 'brief'], [6.2, 'brief_filled'], [9, 'planning']],
+    body: 'ไม่บังคับ แต่ช่วยให้ตรงใจ: <b>ความยาว</b> <b>ประเภทคลิป</b> และ <b>คำสั่งเพิ่มเติม</b> เช่น เปิดด้วยช็อตสินค้า · กด <b>ให้ AI วางโครงเรื่อง</b>',
+    cur: [[0, [700, 600]], [2, 'len', true], [3.6, 'type', true], [5.2, 'text', true], [8.6, 'submit', true]], ring: [[0.6, 1.8, 'brief']], zoom: [[0, 1.9, [260, 300]], [9.4, 1, [720, 450]]] },
+  { ch: 2, title: 'ตรวจโครงเรื่อง แล้วยืนยัน', dur: 13, shots: [[0, 'planning'], [1, 'outline'], [7, 'outline_revise'], [9.5, 'outline']],
+    body: 'AI แบ่งคลิปเป็นช่วงพร้อมภาพตัวอย่าง · กด ▶ ดู ↑↓ สลับ ✕ ลบ หรือ<b>พิมพ์สั่งแก้</b>ทางซ้าย · พอใจแล้วกด <b>ยืนยันโครงเรื่อง</b>',
+    cur: [[0, [720, 450]], [3.4, 'play'], [6, 'revise', true], [11.6, 'confirm', true]], ring: [[1.5, 3, 'beats'], [3.6, 5.6, 'updown'], [7.2, 9.2, 'revise']], zoom: [[0, 1, [720, 450]], [3.2, 1.8, [1100, 330]], [6, 1.8, [300, 520]], [9.6, 1, [720, 450]]] },
+
+  { ch: 3, title: 'ตัดหยาบ ตรวจได้ทุกคำ', dur: 11, shots: [[0, 'post'], [1.8, 'post_cut']],
+    body: 'แต่ละช่วงบอกว่าคำไหน<b>ใช้</b> คำไหน<b>ตัด</b> พร้อมเหตุผล เช่น เอ่อ ช่วงเงียบ เทคซ้ำ กดสลับได้ทีละท่อน · ปรับความกระชับได้ที่ <b>กติกาการตัด</b>',
+    cur: [[0, [720, 450]], [1.5, 'beat2', true]], ring: [[2.4, 5.6, 'rows'], [6.4, 10, 'rules']], zoom: [[0, 1, [720, 450]], [2.2, 1.45, [854, 420]], [6.2, 1.45, [854, 230]]] },
+  { ch: 3, title: 'ให้ AI วางแผนโพสต์โปรดักชัน', dur: 10, shots: [[0, 'post_cut'], [1.8, 'seq:post_plan:14:0.38'], [7.2, 'post_planned']],
+    body: 'กด <b>ตัดเสร็จแล้ว วางแผน post-production</b> · AI หาจุดเน้นก่อน แล้ววางข้อความเด่น ซูม สื่อแทรก กราฟิก เสียง และเกลาซับตามจุดเน้น',
+    cur: [[0, 'beat2'], [1.5, 'plan', true]], zoom: [[0, 1.4, [700, 520]], [2.4, 1.25, [800, 260]]] },
+  { ch: 3, title: 'จุดเน้น', dur: 9, shots: [[0, 'post_planned'], [1.6, 'tab_emph']],
+    body: 'คำหรือภาพที่สำคัญ พร้อมเหตุผลว่าทำไม · ปรับ <b>ความสำคัญ</b> <b>ชนิด</b> หรือเลือกคำเพิ่มเองได้ · <b>ระดับความจัด</b> เบา กลาง จัดเต็ม',
+    cur: [[0, 'plan'], [1, 'beat5', true], [1.5, 'ptab_emph', true]], ring: [[2.4, 5.2, 'emph_point'], [5.8, 8.6, 'level']], zoom: [[0, 1, [720, 450]], [2.2, 1.5, [854, 330]]] },
+  { ch: 3, title: 'ข้อความเด่นและกราฟิก', dur: 10, shots: [[0, 'tab_emph'], [1.2, 'tab_gfx']],
+    body: 'แก้คำในข้อความเด่นได้ · <b>กราฟิกเคลื่อนไหว</b>ที่ Claude ออกแบบให้ตามที่พูด กด <b>ทำใหม่</b> <b>ปิดอันนี้</b> หรือ <b>ลบ</b> ได้',
+    cur: [[0, 'ptab_emph'], [1, 'ptab_gfx', true]], ring: [[2, 5, 'group'], [5.6, 9.6, 'graphic']], zoom: [[0, 1, [720, 450]], [2, 1.3, [800, 680]]] },
+  { ch: 3, title: 'เสียงเอฟเฟคและซับ', dur: 10, shots: [[0, 'tab_gfx'], [1.2, 'tab_sound'], [5, 'tab_subs']],
+    body: 'แท็บ <b>เสียง</b> เลือกเสียงให้แต่ละจุด · แท็บ <b>ซับ</b> มีแบบสั้นสไตล์ TikTok และ AI เกลาคำที่ถอดผิด แก้ข้อความได้ก่อนเขียน',
+    cur: [[0, 'ptab_gfx'], [1, 'ptab_sound', true], [4.4, 'beat2', true], [4.8, 'ptab_subs', true]], ring: [[1.8, 4.2, 'sound_row'], [5.8, 9.6, 'subs']], zoom: [[0, 1, [720, 450]], [1.6, 1.3, [800, 400]]] },
+  { ch: 3, title: 'ไม่ถูกใจ ให้ AI คิดใหม่', dur: 7, shots: [[0, 'tab_subs'], [1.6, 'ai_menu']],
+    body: 'กด <b>ให้ AI คิด</b> แล้วเลือกคิดใหม่เฉพาะส่วน · ของที่คุณแก้เองจะอยู่เหมือนเดิม',
+    cur: [[0, 'ptab_subs'], [1.3, 'menu', true]], ring: [[2.2, 6.6, 'ai_menu']], zoom: [[0, 1, [720, 450]], [1.6, 1.8, [1000, 140]]] },
+
+  { ch: 4, title: 'เขียนลง CapCut', dur: 12, shots: [[0, 'post_planned'], [1.8, 'write_pop'], [6.6, 'writing'], [8.2, 'written']],
+    body: 'กด <b>เขียนลง CapCut</b> อ่านสรุปว่าจะเขียนอะไรบ้าง แล้วกด <b>เขียนเลย</b> · เสร็จแล้วเปิด CapCut ดูผลได้ทันที',
+    cur: [[0, [900, 400]], [1.5, 'write', true], [6.3, 'write_go', true]], ring: [[2.4, 6, 'write_pop'], [8.6, 11.6, 'toast']], zoom: [[0, 1.6, [1100, 120]], [1.9, 1.3, [720, 300]], [8.2, 1.5, [720, 760]]] },
+  { ch: 4, title: 'สำรองทุกครั้ง กู้คืนได้', dur: 9, shots: [[0, 'written'], [2, 'backups']],
+    body: 'ก่อนเขียนทุกครั้ง แอปสำรองโปรเจคไว้ · ผลไม่ถูกใจ กด <b>สำรอง</b> บนแถบด้านบน แล้วกด <b>กู้คืน</b>',
+    cur: [[0, [720, 600]], [1.7, 'backup', true], [5.5, 'restore']], ring: [[2.6, 8.6, 'backup_pop']], zoom: [[0, 1, [720, 450]], [1.4, 1.9, [1150, 120]]] },
+  { card: 'outro', dur: 10 },
+];
+
+/* ---------------- build ---------------- */
+let T = 0; for (const s of S) { s.start = T; T += s.dur; s.end = T; }
+const stage = document.getElementById('stage'), viewport = document.getElementById('viewport'), cam = document.getElementById('cam');
+const shotsEl = document.getElementById('shots'), ring = document.getElementById('ring'), cursor = document.getElementById('cursor'), ripple = document.getElementById('ripple');
+const explain = document.getElementById('explain'), lights = document.getElementById('lights');
+const imgs = {};
+const img = (id) => {
+  if (!imgs[id]) { const el = document.createElement('img'); el.className = 'shot'; el.alt = ''; el.decoding = 'sync'; el.src = 'shots/' + id + '.jpg'; shotsEl.appendChild(el); imgs[id] = el; }
+  return imgs[id];
+};
+for (const s of S) for (const [, id] of s.shots || []) {
+  if (id.startsWith('seq:')) { const [, n, c] = id.split(':'); for (let i = 0; i < +c; i++) img(n + '_' + i); } else img(id);
+}
+const chapsEl = document.getElementById('chaps');
+CH.forEach((c) => { const d = document.createElement('span'); d.className = 'chap'; d.textContent = c; chapsEl.appendChild(d); });
+const chipEls = [...chapsEl.children];
+
+const ease = (x) => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const pt = (v) => typeof v === 'string' ? C(v) : v;
+const MOVE = 0.75;
+function track(keys, t, get, blend) {
+  // keyframes are reached at their time; the move toward one starts MOVE seconds before it (or at the previous key)
+  let i = 0; while (i + 1 < keys.length && keys[i + 1][0] <= t) i++;
+  const a = keys[i], b = keys[i + 1];
+  if (!b) return get(a);
+  const start = Math.max(a[0], b[0] - MOVE);
+  if (t < start) return get(a);
+  return blend(get(a), get(b), ease((t - start) / (b[0] - start)));
+}
+const lerp = (a, b, k) => a + (b - a) * k;
+
+let cur = -1, curShot = null;
+function render(t) {
+  let i = S.findIndex((s) => t >= s.start && t < s.end); if (i < 0) i = S.length - 1;
+  const s = S[i], local = t - s.start;
+  if (i !== cur) {
+    cur = i;
+    document.getElementById('card-intro').classList.toggle('on', s.card === 'intro');
+    document.getElementById('card-outro').classList.toggle('on', s.card === 'outro');
+    document.querySelectorAll('.mock').forEach((m) => m.classList.toggle('on', m.id === 'm-' + s.mock));
+    lights.hidden = s.chrome === false;
+    const m = s.mock && document.getElementById('m-' + s.mock);
+    if (m) { const cr = cam.getBoundingClientRect(), k = cr.width / 1440; m.querySelectorAll('[data-box]').forEach((el) => { const r = el.getBoundingClientRect(); B[el.dataset.box] = [(r.left - cr.left) / k, (r.top - cr.top) / k, r.width / k, r.height / k].map(Math.round); }); }
+    chipEls.forEach((c, j) => { c.classList.toggle('cur', j === s.ch); c.classList.toggle('done', s.ch !== undefined && j < s.ch); });
+    const n = S.filter((x) => !x.card).indexOf(s) + 1, total = S.filter((x) => !x.card).length;
+    explain.innerHTML = s.card ? '' : `<div class="fadein"><div class="count">ขั้นที่ ${n} / ${total}</div><div class="eyebrow">${CH[s.ch]}</div><h2>${s.title}</h2><div class="body">${s.body}</div></div>${s.tip ? `<div class="tip fadein">${s.tip}</div>` : ''}`;
+    chipButtons.forEach((b, j) => b.classList.toggle('cur', j === s.ch));
+  }
+  { const k = Math.min(1, local / .5), e = 1 - Math.pow(1 - k, 3); explain.style.opacity = e; explain.style.transform = `translateY(${(1 - e) * 14}px)`; }
+  // the picture
+  let want = null;
+  for (const [at, id] of s.shots || []) if (local >= at) {
+    if (id.startsWith('seq:')) { const [, n, c, every] = id.split(':'); want = n + '_' + Math.min(+c - 1, Math.floor((local - at) / +every)); } else want = id;
+  }
+  if (want !== curShot) { if (curShot) imgs[curShot].classList.remove('on'); if (want) imgs[want].classList.add('on'); curShot = want; }
+  // camera
+  const zk = s.zoom || [[0, 1, [720, 450]]];
+  const [z, cx, cy] = track(zk, local, (k) => [k[1], ...pt(k[2])], (a, b, e) => a.map((v, j) => lerp(v, b[j], e)));
+  const sc = 0.86 * z, W = 1238, H = 774;
+  const tx = Math.min(0, Math.max(W - 1440 * sc, W / 2 - cx * sc)), ty = Math.min(0, Math.max(H - 900 * sc, H / 2 - cy * sc));
+  cam.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+  // cursor, clicks and drag
+  if (s.cur) {
+    cursor.style.display = 'block';
+    const [x, y] = track(s.cur, local, (k) => pt(k[1]), (a, b, e) => [lerp(a[0], b[0], e), lerp(a[1], b[1], e)]);
+    let press = 0, rip = null;
+    for (const k of s.cur) if (k[2]) { const d = local - k[0]; if (d >= -.08 && d < .12) press = 1; if (d >= 0 && d < .45) rip = d / .45; }
+    cursor.style.left = x + 'px'; cursor.style.top = y + 'px'; cursor.style.transform = `scale(${(press ? .85 : 1) / z})`;
+    if (rip !== null) { ripple.hidden = false; const c = pt(s.cur.find((k) => k[2] && local - k[0] >= 0 && local - k[0] < .45)[1]); ripple.style.left = c[0] + 'px'; ripple.style.top = c[1] + 'px'; ripple.style.transform = `scale(${(.5 + rip) / z})`; ripple.style.opacity = 1 - rip; }
+    else ripple.hidden = true;
+    if (s.drag) {
+      const drag = document.getElementById('dmg-drag'), on = local >= s.drag[0] && local < s.drag[1];
+      drag.style.display = on ? 'block' : 'none'; drag.style.left = (x - 64) + 'px'; drag.style.top = (y - 64) + 'px';
+      document.getElementById('dmg-folder').classList.toggle('hot', on && local > s.drag[1] - .6);
+    }
+  } else { cursor.style.display = 'none'; ripple.hidden = true; }
+  if (s.type) { const k = Math.max(0, Math.min(1, (local - s.type[0]) / (s.type[1] - s.type[0]))); document.getElementById('pw-dots').textContent = '•'.repeat(Math.round(k * 10)) || ' '; }
+  // highlight ring
+  const r = (s.ring || []).find((q) => local >= q[0] && local < q[1]);
+  if (r) {
+    const b = B[r[2]], a = Math.min(1, (local - r[0]) / .25, (r[1] - local) / .25);
+    ring.hidden = false; Object.assign(ring.style, { left: b[0] - 6 + 'px', top: b[1] - 6 + 'px', width: b[2] + 12 + 'px', height: b[3] + 12 + 'px', opacity: a });
+  } else ring.hidden = true;
+  fill.style.width = (t / T * 100) + '%';
+  timeEl.textContent = `${mmss(t)} / ${mmss(T)}`;
+}
+
+/* ---------------- playback ---------------- */
+const mmss = (v) => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}`;
+const fill = document.getElementById('fill'), timeEl = document.getElementById('time'), scrub = document.getElementById('scrub');
+const chips = document.getElementById('chips');
+const chipButtons = CH.map((c, j) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = c; b.onclick = () => seek(S.find((s) => s.ch === j).start + .01); chips.appendChild(b); return b; });
+S.slice(1).forEach((s) => { const k = document.createElement('span'); k.className = 'tick'; k.style.left = (s.start / T * 100) + '%'; scrub.appendChild(k); });
+const fit = () => { stage.style.transform = `scale(${viewport.clientWidth / 1920})`; };
+new ResizeObserver(fit).observe(viewport); fit();
+
+let t = 0, playing = true, last = null, soundOn = false;
+const audio = new Audio('tutorial-music.mp3'); audio.preload = 'auto';
+const playBtn = document.getElementById('play'), soundBtn = document.getElementById('sound');
+const syncAudio = () => { if (!soundOn) return; audio.currentTime = t; if (playing) audio.play().catch(() => {}); else audio.pause(); };
+function seek(v) { t = Math.min(Math.max(v, 0), T - .001); render(t); if (soundOn) audio.currentTime = t; }
+function setPlaying(p) { playing = p; playBtn.textContent = p ? 'หยุด' : 'เล่น'; last = null; syncAudio(); }
+function tick(now) {
+  if (playing) {
+    if (soundOn && !audio.paused) t = Math.min(audio.currentTime, T - .001); else if (last !== null) t += (now - last) / 1000;
+    if (t >= T - .002) { t = 0; syncAudio(); }
+    last = now; render(t);
+  }
+  requestAnimationFrame(tick);
+}
+playBtn.onclick = () => setPlaying(!playing);
+document.getElementById('restart').onclick = () => { seek(0); setPlaying(true); };
+soundBtn.onclick = () => { soundOn = !soundOn; soundBtn.textContent = soundOn ? 'ปิดเสียง' : 'เปิดเสียง'; soundBtn.setAttribute('aria-pressed', soundOn); if (soundOn) syncAudio(); else audio.pause(); };
+const fromEvent = (e) => { const r = scrub.getBoundingClientRect(); seek((e.clientX - r.left) / r.width * T); };
+scrub.addEventListener('pointerdown', (e) => { scrub.setPointerCapture(e.pointerId); fromEvent(e); });
+scrub.addEventListener('pointermove', (e) => { if (e.buttons) fromEvent(e); });
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
+  if (e.key === 'ArrowRight') seek(t + 5); if (e.key === 'ArrowLeft') seek(t - 5);
+});
+document.getElementById('rec').onclick = async () => { document.body.classList.add('rec'); try { await viewport.requestFullscreen(); } catch (_) { document.body.classList.remove('rec'); } };
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) document.body.classList.remove('rec'); });
+
+// offline rendering: seek, then wait for the picture on screen to be decoded
+window.__seek = async (v) => { playing = false; seek(v); const el = curShot && imgs[curShot]; if (el) { if (!el.complete) await new Promise((r) => el.addEventListener('load', r, { once: true })); await el.decode().catch(() => {}); } };
+window.__total = T;
+window.__clicks = S.flatMap((s) => (s.cur || []).filter((k) => k[2]).map((k) => +(s.start + k[0]).toFixed(3)));
+window.__cuts = S.map((s) => s.start);
+if (location.hash === '#render') { document.body.classList.add('rec'); playing = false; }
+render(0);
+requestAnimationFrame(tick);
+})();
+</script>
