@@ -7,11 +7,14 @@ import type { ProjectDetail } from "../shared/api.ts"
 import { SCRIBE_MODEL } from "./analysis.ts"
 import type { Prompts } from "./prompts.ts"
 import type { SettingsStore } from "./settings.ts"
+import { objectsFor, type ObjectsCache } from "./objects.ts"
 
 export interface FootageDeps {
   settings: SettingsStore
   transcripts: TranscriptCache
   insights: MediaCache<VideoInsight, VisionKey>
+  /** where things are in each scene, found by the objects pass; absent, every clip loads without them */
+  objects?: ObjectsCache
   whisperModelId: string
   /** Resolves a registered CapCut project; rejects anything else. */
   inspect(folder: string): Promise<ProjectDetail>
@@ -41,7 +44,7 @@ export async function footageKeys(deps: FootageDeps): Promise<{ transcript: Tran
 }
 
 /** What was seen, cached for a video, if it was seen with the speech as it reads now. */
-async function fittingInsight(deps: FootageDeps, path: string, key: VisionKey, transcript: Transcript | null): Promise<VideoInsight | null> {
+export async function fittingInsight(deps: FootageDeps, path: string, key: VisionKey, transcript: Transcript | null): Promise<VideoInsight | null> {
   return cachedInsight(deps.insights, path, key, transcript)
 }
 
@@ -89,7 +92,10 @@ export async function loadFootage(deps: FootageDeps, folder: string, videoIds: s
       const video = project.videos.find((v) => v.id === id && v.exists)
       if (!video) throw new Error(`video ${id} is not in this project`)
       const transcript = await deps.transcripts.get(video.path, transcriptKey)
-      return { id, name: video.name, path: video.path, durationUs: video.durationUs, transcript, insight: await fittingInsight(deps, video.path, insightKey, transcript) }
+      const insight = await fittingInsight(deps, video.path, insightKey, transcript)
+      // a video analysed before the objects pass, or whose pass failed, loads without them
+      const objects = insight ? await objectsFor(deps, video.path, insightKey, insight) : null
+      return { id, name: video.name, path: video.path, durationUs: video.durationUs, width: video.width, height: video.height, transcript, insight, objects }
     }),
   )
   if (clips.every((clip) => !clip.transcript && !clip.insight)) {

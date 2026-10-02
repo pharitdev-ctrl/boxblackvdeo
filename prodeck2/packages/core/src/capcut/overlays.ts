@@ -1,4 +1,6 @@
+import type { Pose } from "../flair/moves.ts"
 import { laneOf } from "./lanes.ts"
+import { poseKeyframes } from "./moves.ts"
 import { newId, segmentExtras, videoMaterial, videoSegment } from "./templates.ts"
 import { frameToUs } from "./time.ts"
 import type { BinVideo, DraftInfo, Segment, Track } from "./types.ts"
@@ -13,6 +15,8 @@ export interface OverlayPiece {
   type?: "photo" | "video"
   /** the size it is drawn at and where, in CapCut's units */
   place: { scale: number; x: number; y: number }
+  /** how the picture moves on top of `place`, from its first frame; it stays still without */
+  poses?: Pose[]
 }
 
 /**
@@ -53,8 +57,7 @@ export function addOverlayTracks(info: DraftInfo, pieces: OverlayPiece[], render
       source: { start: 0, duration },
       target: { start, duration },
     })
-    const onLane = (tracks[lane] ??= [])
-    onLane.push({
+    const placed: Segment = {
       ...segment,
       volume: 0,
       last_nonzero_volume: 1,
@@ -62,7 +65,11 @@ export function addOverlayTracks(info: DraftInfo, pieces: OverlayPiece[], render
       // a higher track draws over a lower one: each lane's track above the last, all under the text
       render_index: renderBase + trackIndex,
       track_render_index: trackIndex,
-    })
+    }
+    // a move goes on top of the framing, timed in the file like a main piece's
+    if (piece.poses?.length) placed.common_keyframes = poseKeyframes(placed, piece.poses, { scale: piece.place.scale, x: piece.place.x, y: piece.place.y, rot: 0 })
+    const onLane = (tracks[lane] ??= [])
+    onLane.push(placed)
   }
 
   const existing = (key: string) => (Array.isArray(out.materials[key]) ? (out.materials[key] as unknown[]) : [])

@@ -36,6 +36,8 @@ async function setup(extra: {
     modelInfo: async () => ({ model: WHISPER_MODELS[0]!, state: { status: "partial", bytes: 10 }, downloading: true }),
     claudeCliFound: () => true,
     start: record("start"),
+    locateObjects: record("locateObjects"),
+    withoutObjects: async (folder: string) => (folder === "/drafts/0917" ? ["b"] : []),
     cancel: () => calls.push(["cancel"]),
     state: () => null,
     analysed: async (folder: string) => (folder === "/drafts/0917" ? ["a", "b"] : []),
@@ -160,6 +162,14 @@ test("analysedVideos passes the question straight to the analysis service", asyn
   const { api } = await setup()
   expect(await api.analysedVideos("/drafts/0917")).toEqual(["a", "b"])
   expect(await api.analysedVideos("/drafts/0815")).toEqual([])
+})
+
+test("finding objects goes to the analysis service, and so does asking which videos have none", async () => {
+  const { api, calls } = await setup()
+  await api.locateObjects("/drafts/0917", ["b"])
+  expect(calls).toEqual([["locateObjects", "/drafts/0917", ["b"]]])
+  expect(await api.videosWithoutObjects("/drafts/0917")).toEqual(["b"])
+  expect(await api.videosWithoutObjects("/drafts/0815")).toEqual([])
 })
 
 test("knownRetakes passes the question straight to the analysis service", async () => {

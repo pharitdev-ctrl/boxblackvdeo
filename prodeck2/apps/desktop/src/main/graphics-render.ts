@@ -11,6 +11,7 @@ import { ProcessError, runProcess } from "@boxblack/core/media"
 import type { AppEvent, GraphicRenderState, GraphicsProblem } from "../shared/api.ts"
 import { PACK_HYPERFRAMES_VERSION } from "../shared/graphics-pack.ts"
 import type { GraphicsPackPaths } from "./graphics-pack.ts"
+import { EnvironmentError } from "./environment-error.ts"
 
 /** Everything a render depends on; the hash of what is drawn, with the contract in force now, names the file. */
 export interface RenderJob {
@@ -81,13 +82,8 @@ const HASH = /^[0-9a-f]{16}$/
 
 const isFile = (path: string) => stat(path).then((found) => found.isFile(), () => false)
 
-/**
- * A render stopped by the machine, not by the graphic: the renderer pack missing or damaged, or its
- * browser not starting; the app's ffmpeg or ffprobe missing, its motion host missing, a font that
- * cannot be copied; a work folder that cannot be prepared, a graphics folder the result cannot be
- * kept in. No graphic renders until that is put right, and none of them is to blame for it.
- */
-export class EnvironmentError extends Error {}
+// the machine's fault, shared with the sound renderer; still exported from here for what imports it from here
+export { EnvironmentError }
 
 /**
  * Why graphics cannot render, from what a render found wrong with the machine, which stops every
@@ -256,6 +252,18 @@ export function inspectionOf(printed: string): Inspection {
 }
 
 /**
+ * The name of a job's file. A graphic's file is of what its page is made from: the fragment, its box on the frame, its
+ * length, the times of its words now and the style it is drawn in, with the contract in force now (MOTION_VERSION,
+ * which stands for the page and the host too) and not the version stamped on the spec. Its reason, its idea, its words
+ * as they were when it was written, a failed writing or edit, the change that made it and the fragment kept for a step
+ * back are not drawn, so they make no other file.
+ */
+export function hashOf(job: RenderJob): string {
+  const parts = [job.spec.html, job.spec.box, job.spec.seconds, job.times ?? [], job.canvas, job.fps, job.font, job.palette, MOTION_VERSION]
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 16)
+}
+
+/**
  * Renders graphics one at a time in the background and keeps what it made by the hash of the job,
  * so the same graphic is never rendered twice and any change to it is a new file. Each is checked
  * as well: its fragment by the linter before it is rendered, then what HyperFrames printed and what
@@ -299,15 +307,6 @@ export function createGraphicsRenderer(deps: GraphicsRenderDeps) {
     } catch {
       return null
     }
-  }
-
-  function hashOf(job: RenderJob): string {
-    // a graphic's file is of what its page is made from: the fragment, its box on the frame, its length, the
-    // times of its words now and the style it is drawn in, with the contract in force now (MOTION_VERSION, which
-    // stands for the page and the host too) and not the version stamped on the spec. Its reason, its idea, its
-    // words as they were when it was written and a failed writing are not drawn
-    const parts = [job.spec.html, job.spec.box, job.spec.seconds, job.times ?? [], job.canvas, job.fps, job.font, job.palette, MOTION_VERSION]
-    return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 16)
   }
 
   async function runHyperframes(project: string, output: string, fps: number, signal: AbortSignal): Promise<string> {

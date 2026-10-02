@@ -66,6 +66,56 @@ function soundMaterial(id: string, cue: TimelineSoundCue) {
 
 const extra = (type: string, rest: Record<string, unknown>) => ({ id: newId(), type, ...rest })
 
+/** A sound placed on the timeline: where it starts, how long it plays there, and its lane. */
+export interface PlacedSound<T> {
+  sound: T
+  atUs: number
+  durationUs: number
+  /** each lane becomes an audio track of its own, lane 0 the first */
+  lane: number
+}
+
+/**
+ * Where each sound plays, in time order. Its start goes on a frame, like the text and the picture it
+ * is meant to land with, and a hair before the start (the first piece rounded up to its frame) is the
+ * start. It plays from the start of its file for its own length, but no longer than `maxUs` and never
+ * past the end of the timeline. A sound that starts while an earlier one is still playing takes the
+ * first lane free by its start, so both play whole where they were put; most clips need one lane.
+ * One with no room left, with no length, or that starts before the rough cut does, is left out. Pure.
+ */
+export function placeSounds<T extends { atUs: number; durationUs: number }>(info: DraftInfo, sounds: T[], maxUs = Infinity): PlacedSound<T>[] {
+  const placed: PlacedSound<T>[] = []
+  // the time each lane plays until; a lane is free from then on
+  const lanes: number[] = []
+  for (const sound of [...sounds].sort((a, b) => a.atUs - b.atUs)) {
+    const snapped = snapToFrame(sound.atUs, info.fps)
+    const atUs = Math.max(0, snapped)
+    const durationUs = Math.min(sound.durationUs, maxUs, info.duration - atUs)
+    // a length that is not a number would leave the draft with no duration at all
+    if (snapped < 0 || !(durationUs > 0)) continue
+    let lane = lanes.findIndex((endUs) => endUs <= atUs)
+    if (lane === -1) lane = lanes.push(0) - 1
+    lanes[lane] = atUs + durationUs
+    placed.push({ sound, atUs, durationUs, lane })
+  }
+  return placed
+}
+
+/** The draft's materials with each list's new entries added at its end, and a list it lacks begun. Pure. */
+export function withMaterials(materials: Record<string, unknown>, added: Record<string, unknown[]>): Record<string, unknown> {
+  const merged = { ...materials }
+  for (const [key, entries] of Object.entries(added)) {
+    const existing = Array.isArray(materials[key]) ? (materials[key] as unknown[]) : []
+    merged[key] = [...existing, ...entries]
+  }
+  return merged
+}
+
+/** A track of sounds laid on their own, as CapCut writes one for a sound effect or a local file. */
+export function audioTrack(id: string, segments: Segment[]): Track {
+  return { id, type: "audio", flag: 0, attribute: 0, name: "", is_default_name: true, segments }
+}
+
 /**
  * Adds the sound effects on new audio tracks. Pure. A cue plays from the start of its sound for
  * at most 1.5 s, never past the end of the timeline, and one that had to be cut short fades out.
@@ -82,20 +132,11 @@ export function addSoundTrack(info: DraftInfo, cues: TimelineSoundCue[]): Writte
   const mappings: unknown[] = []
   const separations: unknown[] = []
   const fades: unknown[] = []
-  // each lane becomes a track; a cue takes the first lane that is free by its start
-  const lanes: { endUs: number; segments: Segment[] }[] = []
+  // each lane's segments; lane n becomes the n-th new track
+  const lanes: Segment[][] = []
+  const placed = placeSounds(info, cues, MAX_CUE_US)
 
-  for (const cue of [...cues].sort((a, b) => a.atUs - b.atUs)) {
-    // on a frame, like the text and the picture it is meant to land with; a hair before the start
-    // (the first piece rounded up to its frame) is the start
-    const atUs = Math.max(0, snapToFrame(cue.atUs, info.fps))
-    const room = info.duration - atUs
-    const duration = Math.min(cue.durationUs, MAX_CUE_US, room)
-    if (snapToFrame(cue.atUs, info.fps) < 0 || duration <= 0) continue
-    let lane = lanes.findIndex((candidate) => candidate.endUs <= atUs)
-    if (lane === -1) lane = lanes.push({ endUs: 0, segments: [] }) - 1
-    lanes[lane]!.endUs = atUs + duration
-
+  for (const { sound: cue, atUs, durationUs: duration, lane } of placed) {
     const materialId = newId()
     audios.push(soundMaterial(materialId, cue))
     const speed = extra("speed", { mode: 0, speed: 1, curve_speed: null })
@@ -113,7 +154,8 @@ export function addSoundTrack(info: DraftInfo, cues: TimelineSoundCue[]): Writte
     separations.push(separation)
     fades.push(fade)
 
-    lanes[lane]!.segments.push({
+    const onLane = (lanes[lane] ??= [])
+    onLane.push({
       id: newId(),
       source_timerange: { start: 0, duration },
       target_timerange: { start: atUs, duration },
@@ -163,21 +205,18 @@ export function addSoundTrack(info: DraftInfo, cues: TimelineSoundCue[]): Writte
     })
   }
 
-  const counts = { kept: audios.length, dropped: cues.length - audios.length }
-  if (lanes.length === 0) return { info: out, ...counts }
+  const counts = { kept: placed.length, dropped: cues.length - placed.length }
+  if (placed.length === 0) return { info: out, ...counts }
 
-  const existing = (key: string) => (Array.isArray(out.materials[key]) ? (out.materials[key] as unknown[]) : [])
-  out.materials = {
-    ...out.materials,
-    audios: [...existing("audios"), ...audios],
-    speeds: [...existing("speeds"), ...speeds],
-    placeholder_infos: [...existing("placeholder_infos"), ...placeholders],
-    beats: [...existing("beats"), ...beats],
-    sound_channel_mappings: [...existing("sound_channel_mappings"), ...mappings],
-    vocal_separations: [...existing("vocal_separations"), ...separations],
-    audio_fades: [...existing("audio_fades"), ...fades],
-  }
-  const tracks: Track[] = lanes.map(({ segments }) => ({ id: newId(), type: "audio", flag: 0, attribute: 0, name: "", is_default_name: true, segments }))
-  out.tracks = [...out.tracks, ...tracks]
+  out.materials = withMaterials(out.materials, {
+    audios,
+    speeds,
+    placeholder_infos: placeholders,
+    beats,
+    sound_channel_mappings: mappings,
+    vocal_separations: separations,
+    audio_fades: fades,
+  })
+  out.tracks = [...out.tracks, ...lanes.map((segments) => audioTrack(newId(), segments))]
   return { info: out, ...counts }
 }

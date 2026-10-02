@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vitest"
 import { useLayoutEffect, useState } from "react"
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import { userEvent } from "@testing-library/user-event"
-import type { AppEvent, CueAnchor, HighlightPreview, PostRunView, PostWork, PostWorkState, ProjectDetail, RendererApi, SubtitleLine, WriteResult } from "../../../shared/api.ts"
+import type { AppEvent, CueAnchor, HighlightPreview, MoveAnchor, PostRunView, PostWork, PostWorkState, ProjectDetail, RendererApi, SubtitleLine, WriteResult } from "../../../shared/api.ts"
 import { DEFAULT_HIGHLIGHT_OPTIONS } from "@boxblack/core/highlights/styles"
 import { detail, fakeApi, highlightPreview, settingsView, storedOutline, subtitleLines } from "../../test/fake-api.ts"
 import { renderRoom } from "../../test/room.tsx"
@@ -174,7 +174,7 @@ test("what the room gives its page keeps its identity while nothing in it change
   expect(room()).toBe(before)
   act(() => room().setError("something"))
   expect(room()).not.toBe(before)
-  for (const action of ["decide", "changeRules", "changeSubtitles", "changeHighlights", "changeFlair", "changeHighlightText", "editSubtitle", "retry", "request", "planPost", "rethink", "redoGraphic", "editGraphic", "undoGraphic", "runWrite"] as const) {
+  for (const action of ["decide", "changeRules", "changeSubtitles", "changeHighlights", "changeFlair", "changeHighlightText", "editSubtitle", "retry", "request", "planPost", "rethink", "redoGraphic", "editGraphic", "undoGraphic", "redoSound", "editSound", "undoSound", "setSound", "removeOwnSound", "redoMove", "editMove", "undoMove", "setMove", "runWrite"] as const) {
     expect(room()[action]).toBe(before[action])
   }
 })
@@ -433,7 +433,7 @@ test("a write that ends is told by a toast: what was written, then what it left 
   const { api } = await renderFollowing()
   const result = {
     ...(await writeResult()),
-    dropped: { sounds: 1, zooms: 0, inserts: 2, graphics: 0 },
+    dropped: { sounds: 1, zooms: 0, inserts: 2, graphics: 0, moves: 0 },
     zoomsLost: 1,
     proLeftOut: { exits: 1, sounds: 2 },
   }
@@ -771,7 +771,7 @@ test("the works of the run going are known from its first event, or from the roo
   expect(room().runWorks).toEqual(["sounds"])
   act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
   await waitFor(() => expect(room().request()).not.toBeNull())
-  act(() => void room().rethink("graphics"))
+  act(() => void room().rethink("techniques"))
   expect(room().runWorks).toEqual([])
   act(() => {
     api.emit(postEvent("text", { state: "waiting" }))
@@ -838,10 +838,21 @@ test("thinking one work again asks for that work alone, and the points go throug
   await act(async () => {
     await room().rethink("sounds")
   })
+  // the text and the techniques are one work of the menu, and the graphics another
+  await act(async () => {
+    await room().rethink("techniques")
+  })
+  await act(async () => {
+    await room().rethink("graphics")
+  })
   await act(async () => {
     await room().rethink("emphasis")
   })
-  expect(calls(api, "rethinkPost")).toEqual([["rethinkPost", FOLDER, "sounds", room().request()]])
+  expect(calls(api, "rethinkPost")).toEqual([
+    ["rethinkPost", FOLDER, "sounds", room().request()],
+    ["rethinkPost", FOLDER, "techniques", room().request()],
+    ["rethinkPost", FOLDER, "graphics", room().request()],
+  ])
   expect(calls(api, "planEmphasis")).toEqual([["planEmphasis", FOLDER, settingsView().cut]])
   // once when the room opened, once after the points: planEmphasis answers counts, main knows how the run ended
   expect(calls(api, "postPlanState")).toHaveLength(2)
@@ -851,8 +862,8 @@ test("thinking one work again asks for that work alone, and the points go throug
 // where a graphic sits, which is how the main process finds it
 const GRAPHIC_AT: CueAnchor = { kind: "speech", videoId: "a", sourceUs: 2_500_000, beatId: "b1" }
 // the room's mark of that graphic being written again, from its idea or with a change the user asked for
-const REDOING = { anchor: GRAPHIC_AT, how: "redo" }
-const EDITING = { anchor: GRAPHIC_AT, how: "edit" }
+const REDOING = { anchor: GRAPHIC_AT, how: "redo", of: "graphic" }
+const EDITING = { anchor: GRAPHIC_AT, how: "edit", of: "graphic" }
 
 test("one graphic written again is asked for by its place, with the request a plan is asked with, and ends as main says", async () => {
   const ended: PostRunView = { running: false, states: { sounds: { state: "failed", error: "Claude is busy" }, graphics: { state: "done", count: 1, dropped: 0 } } }
@@ -1239,7 +1250,8 @@ test("an edit main refuses says why in Thai, takes its mark off the graphic, and
 
 test("a step back asks main by the graphic's place, then reads the graphics again quietly: it is no run, and marks no graphic as being written", async () => {
   let answer!: () => void
-  const { api, room } = renderProbe({ undoGraphic: () => new Promise<void>((resolve) => (answer = resolve)) })
+  const previews = heldReads()
+  const { api, room } = renderProbe({ previewHighlights: previews.read, undoGraphic: () => new Promise<void>((resolve) => (answer = resolve)) })
   await waitFor(() => expect(room().preview).not.toBeNull())
   await waitFor(() => expect(room().placing).toBe(false))
   const reads = calls(api, "previewHighlights").length
@@ -1252,13 +1264,17 @@ test("a step back asks main by the graphic's place, then reads the graphics agai
   expect(room().editing).toBe(true)
   expect([room().run.running, room().rewriting, room().writingGraphics]).toEqual([false, null, false])
   expect(calls(api, "previewHighlights")).toHaveLength(reads)
+  previews.holding = true
   await act(async () => {
     answer()
     await going
   })
   expect(room().editing).toBe(false)
   expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
-  // read for the graphics alone, which holds nothing up
+  // the read that follows is for the graphics alone: while it is out, nothing is being placed and nothing waits for it
+  expect(previews.held).toHaveLength(1)
+  expect(room().placing).toBe(false)
+  await previews.land()
   expect(room().placing).toBe(false)
   expect(room().error).toBeNull()
   expect(calls(api, "postPlanState")).toHaveLength(1)
@@ -1284,6 +1300,282 @@ test("a step back main refuses says why in Thai, and reads nothing again", async
     expect(room().error, message).toBe(said)
     expect(room().editing, message).toBe(false)
     expect(calls(api, "previewHighlights"), message).toHaveLength(reads)
+    cleanup()
+  }
+})
+
+/* composed sounds */
+
+// a sound tied to the graphic above has the graphic's place: the mark says which of the two is being written again
+const SOUND_AT = GRAPHIC_AT
+
+test("one composed sound written again, or changed, is asked for by its place with the request a plan is asked with, as a run of its own that ends as main says", async () => {
+  const ended: PostRunView = { running: false, states: { sounds: { state: "done", count: 1, dropped: 0 } } }
+  const { api, room } = renderProbe({ redoSound: async () => ended, editSound: async () => ended })
+  await waitFor(() => expect(room().request()).not.toBeNull())
+  await act(async () => {
+    await room().redoSound(SOUND_AT)
+  })
+  expect(calls(api, "redoSound")).toEqual([["redoSound", FOLDER, SOUND_AT, room().request()]])
+  expect(room().run).toEqual(ended)
+  await act(async () => {
+    await room().editSound(SOUND_AT, "เบาลง")
+  })
+  expect(calls(api, "editSound")).toEqual([["editSound", FOLDER, SOUND_AT, "เบาลง", room().request()]])
+  expect([calls(api, "redoGraphic"), calls(api, "editGraphic")]).toEqual([[], []])
+  expect(room().error).toBeNull()
+})
+
+test("the room knows which sound is being written again or changed, and that it is a sound, from the press until the read that follows the run's end has landed or failed; no graphic is being written meanwhile", async () => {
+  const ended: PostRunView = { running: false, states: { sounds: { state: "done", count: 1, dropped: 0 } } }
+  for (const how of ["redo", "edit"] as const) {
+    for (const lands of [true, false]) {
+      const previews = heldReads()
+      let finish!: () => void
+      const answer = () => new Promise<PostRunView>((resolve) => (finish = () => resolve(ended)))
+      const { api, room } = renderProbe({ previewHighlights: previews.read, redoSound: answer, editSound: answer })
+      await waitFor(() => expect(room().request()).not.toBeNull())
+      await waitFor(() => expect(room().preview).not.toBeNull())
+      let going!: Promise<void>
+      act(() => {
+        going = how === "redo" ? room().redoSound(SOUND_AT) : room().editSound(SOUND_AT, "สั้นลง")
+      })
+      const mark = { anchor: SOUND_AT, how, of: "sound" }
+      expect(room().rewriting).toEqual(mark)
+      // the sounds work counts as each composing ends, and each count is read again, quietly, as the graphics work's are
+      act(() => api.emit(postEvent("sounds", { state: "running" })))
+      const reads = calls(api, "previewHighlights").length
+      act(() => api.emit(postEvent("sounds", { state: "running", done: 0, total: 1 })))
+      expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+      await act(async () => {})
+      expect([room().rewriting, room().writingGraphics]).toEqual([mark, false])
+      previews.holding = true
+      act(() => api.emit(postEvent("sounds", { state: "done", count: 1, dropped: 0 })))
+      act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+      await act(async () => {
+        finish()
+        await going
+      })
+      expect(room().rewriting).toEqual(mark)
+      await (lands ? previews.land() : previews.fail())
+      expect(room().rewriting, `${how} ${lands ? "landed" : "failed"}`).toBeNull()
+      cleanup()
+    }
+  }
+})
+
+test("a sound main refuses to write again says why in Thai, and takes its mark off", async () => {
+  const { room } = renderProbe({
+    redoSound: async () => {
+      throw new Error("Error invoking remote method 'api:redoSound': Error: a plan for this project is already running")
+    },
+  })
+  await waitFor(() => expect(room().request()).not.toBeNull())
+  await act(async () => {
+    await room().redoSound(SOUND_AT)
+  })
+  expect(room().error).toBe(t("post.alreadyRunning"))
+  expect(room().rewriting).toBeNull()
+})
+
+test("a sound's step back, and switching it off, on or removing it, ask main by its place, then read the preview again quietly: no run, and no mark", async () => {
+  const steps: [string, (room: ClipRoomValue) => Promise<void>, unknown[]][] = [
+    ["undoSound", (room) => room.undoSound(SOUND_AT), ["undoSound", FOLDER, SOUND_AT]],
+    ["setSound", (room) => room.setSound(SOUND_AT, { off: true }), ["setSound", FOLDER, SOUND_AT, { off: true }]],
+    ["setSound", (room) => room.setSound(SOUND_AT, null), ["setSound", FOLDER, SOUND_AT, null]],
+    // one of the user's own CapCut sounds taken off changes the sounds alone too
+    ["setSoundCue", (room) => room.removeOwnSound(SOUND_AT), ["setSoundCue", FOLDER, SOUND_AT, null]],
+  ]
+  for (const [method, step, asked] of steps) {
+    let answer!: () => void
+    const previews = heldReads()
+    const { api, room } = renderProbe({ previewHighlights: previews.read, [method]: () => new Promise<void>((resolve) => (answer = resolve)) })
+    await waitFor(() => expect(room().preview).not.toBeNull())
+    await waitFor(() => expect(room().placing).toBe(false))
+    const reads = calls(api, "previewHighlights").length
+    let going!: Promise<void>
+    act(() => {
+      going = step(room())
+    })
+    expect(calls(api, method)).toEqual([asked])
+    // a change of the user's being saved: the page's controls wait for it
+    expect(room().editing).toBe(true)
+    expect([room().run.running, room().rewriting]).toEqual([false, null])
+    previews.holding = true
+    await act(async () => {
+      answer()
+      await going
+    })
+    expect(room().editing).toBe(false)
+    expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+    // quiet: nothing waits for that read
+    expect(room().placing).toBe(false)
+    await previews.land()
+    expect(room().error).toBeNull()
+    cleanup()
+  }
+})
+
+test("a sound rendered in the background is read as a graphic made is, quietly, and a burst of them at most once a while", async () => {
+  const { api, room } = renderProbe()
+  await waitFor(() => expect(room().preview).not.toBeNull())
+  await waitFor(() => expect(room().placing).toBe(false))
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] })
+  const reads = calls(api, "previewHighlights").length
+  act(() => api.emit({ type: "sounds-rendered" }))
+  expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+  expect(room().placing).toBe(false)
+  act(() => {
+    api.emit({ type: "sounds-rendered" })
+    api.emit({ type: "sounds-rendered" })
+  })
+  // the burst waits its turn, then is read once
+  expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+  act(() => vi.advanceTimersByTime(500))
+  expect(calls(api, "previewHighlights")).toHaveLength(reads + 2)
+})
+
+test("a sound's step back main refuses says why in Thai, and reads nothing again", async () => {
+  const { api, room } = renderProbe({
+    undoSound: async () => {
+      throw new Error("Error invoking remote method 'api:undoSound': Error: this sound has nothing to go back to")
+    },
+  })
+  await waitFor(() => expect(room().preview).not.toBeNull())
+  await waitFor(() => expect(room().placing).toBe(false))
+  const reads = calls(api, "previewHighlights").length
+  await act(async () => {
+    await room().undoSound(SOUND_AT)
+  })
+  expect(room().error).toBe("ไม่มีเสียงก่อนหน้าให้ย้อน")
+  expect(room().editing).toBe(false)
+  expect(calls(api, "previewHighlights")).toHaveLength(reads)
+})
+
+/* moves of the picture */
+
+// a move on the cutaway that comes up on the graphic's word: the same place, told apart by `insert`
+const MOVE_AT: MoveAnchor = { ...GRAPHIC_AT, insert: true }
+
+test("one move designed again, or changed, is asked for by its place and whether it is on a cutaway, with the request a plan is asked with, as a run of its own that ends as main says", async () => {
+  const ended: PostRunView = { running: false, states: { techniques: { state: "done", count: 1, dropped: 0 } } }
+  const { api, room } = renderProbe({ redoMove: async () => ended, editMove: async () => ended })
+  await waitFor(() => expect(room().request()).not.toBeNull())
+  await act(async () => {
+    await room().redoMove(MOVE_AT)
+  })
+  expect(calls(api, "redoMove")).toEqual([["redoMove", FOLDER, MOVE_AT, room().request()]])
+  expect(room().run).toEqual(ended)
+  await act(async () => {
+    await room().editMove(MOVE_AT, "ช้าลง")
+  })
+  expect(calls(api, "editMove")).toEqual([["editMove", FOLDER, MOVE_AT, "ช้าลง", room().request()]])
+  expect([calls(api, "redoGraphic"), calls(api, "editGraphic"), calls(api, "redoSound")]).toEqual([[], [], []])
+  expect(room().error).toBeNull()
+})
+
+test("the room knows which move is being designed again or changed, and that it is a move, from the press until the read that follows the run's end has landed or failed; no graphic is being written meanwhile", async () => {
+  const ended: PostRunView = { running: false, states: { techniques: { state: "done", count: 1, dropped: 0 } } }
+  for (const how of ["redo", "edit"] as const) {
+    for (const lands of [true, false]) {
+      const previews = heldReads()
+      let finish!: () => void
+      const answer = () => new Promise<PostRunView>((resolve) => (finish = () => resolve(ended)))
+      const { api, room } = renderProbe({ previewHighlights: previews.read, redoMove: answer, editMove: answer })
+      await waitFor(() => expect(room().request()).not.toBeNull())
+      await waitFor(() => expect(room().preview).not.toBeNull())
+      let going!: Promise<void>
+      act(() => {
+        going = how === "redo" ? room().redoMove(MOVE_AT) : room().editMove(MOVE_AT, "แรงขึ้น")
+      })
+      const mark = { anchor: MOVE_AT, how, of: "move" }
+      expect(room().rewriting).toEqual(mark)
+      act(() => api.emit(postEvent("techniques", { state: "running" })))
+      expect([room().rewriting, room().writingGraphics]).toEqual([mark, false])
+      previews.holding = true
+      act(() => api.emit(postEvent("techniques", { state: "done", count: 1, dropped: 0 })))
+      act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+      await act(async () => {
+        finish()
+        await going
+      })
+      expect(room().rewriting).toEqual(mark)
+      await (lands ? previews.land() : previews.fail())
+      expect(room().rewriting, `${how} ${lands ? "landed" : "failed"}`).toBeNull()
+      cleanup()
+    }
+  }
+})
+
+test("a move main refuses to design again says why in Thai, and takes its mark off", async () => {
+  const { room } = renderProbe({
+    redoMove: async () => {
+      throw new Error("Error invoking remote method 'api:redoMove': Error: a plan for this project is already running")
+    },
+  })
+  await waitFor(() => expect(room().request()).not.toBeNull())
+  await act(async () => {
+    await room().redoMove(MOVE_AT)
+  })
+  expect(room().error).toBe(t("post.alreadyRunning"))
+  expect(room().rewriting).toBeNull()
+})
+
+test("a move's step back, and switching it off, on or removing it, ask main by its place, then read the preview again quietly: no run, and no mark", async () => {
+  const steps: [string, (room: ClipRoomValue) => Promise<void>, unknown[]][] = [
+    ["undoMove", (room) => room.undoMove(MOVE_AT), ["undoMove", FOLDER, MOVE_AT]],
+    ["setMove", (room) => room.setMove(MOVE_AT, { off: true }), ["setMove", FOLDER, MOVE_AT, { off: true }]],
+    ["setMove", (room) => room.setMove(MOVE_AT, { off: false }), ["setMove", FOLDER, MOVE_AT, { off: false }]],
+    ["setMove", (room) => room.setMove(MOVE_AT, null), ["setMove", FOLDER, MOVE_AT, null]],
+  ]
+  for (const [method, step, asked] of steps) {
+    let answer!: () => void
+    const previews = heldReads()
+    const { api, room } = renderProbe({ previewHighlights: previews.read, [method]: () => new Promise<void>((resolve) => (answer = resolve)) })
+    await waitFor(() => expect(room().preview).not.toBeNull())
+    await waitFor(() => expect(room().placing).toBe(false))
+    const reads = calls(api, "previewHighlights").length
+    let going!: Promise<void>
+    act(() => {
+      going = step(room())
+    })
+    expect(calls(api, method)).toEqual([asked])
+    expect(room().editing).toBe(true)
+    expect([room().run.running, room().rewriting]).toEqual([false, null])
+    previews.holding = true
+    await act(async () => {
+      answer()
+      await going
+    })
+    expect(room().editing).toBe(false)
+    expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+    expect(room().placing).toBe(false)
+    await previews.land()
+    expect(room().error).toBeNull()
+    cleanup()
+  }
+})
+
+test("a move's step back or switch main refuses says why in Thai, and reads nothing again", async () => {
+  const refusals: [string, (room: ClipRoomValue) => Promise<void>, string, string][] = [
+    ["undoMove", (room) => room.undoMove(MOVE_AT), "this move has nothing to go back to", "ไม่มีท่าก่อนหน้าให้ย้อน"],
+    ["setMove", (room) => room.setMove(MOVE_AT, null), "there is no move at that place", t("moves.refused.noPlace")],
+  ]
+  for (const [method, step, message, thai] of refusals) {
+    const { api, room } = renderProbe({
+      [method]: async () => {
+        throw new Error(`Error invoking remote method 'api:${method}': Error: ${message}`)
+      },
+    })
+    await waitFor(() => expect(room().preview).not.toBeNull())
+    await waitFor(() => expect(room().placing).toBe(false))
+    const reads = calls(api, "previewHighlights").length
+    await act(async () => {
+      await step(room())
+    })
+    expect(room().error).toBe(thai)
+    expect(room().editing).toBe(false)
+    expect(calls(api, "previewHighlights")).toHaveLength(reads)
     cleanup()
   }
 })

@@ -1,13 +1,10 @@
 import { expect, test } from "vitest"
 import type { CutPlan } from "@boxblack/core/cut"
-import type { PlacedPoint } from "@boxblack/core/emphasis"
-import type { EmphasisType, Importance } from "@boxblack/core/emphasis/types"
 import type { FlairOptions } from "@boxblack/core/flair/catalogue"
-import type { CueAnchor, PlacedInsert, SoundCue } from "@boxblack/core/flair/plan"
-import { MOTION_VERSION, type GraphicSpec, type MotionSpec, type PlacedGraphic } from "@boxblack/core/graphics/plan"
+import type { CueAnchor, SoundCue } from "@boxblack/core/flair/plan"
 import type { TimedGroup } from "@boxblack/core/highlights"
 import { placeOf } from "./insert-media.ts"
-import { anchorKey, cuesInForce, samePlace, slotFinder, slotsFor, soundSlotsFor } from "./sound-cues.ts"
+import { anchorKey, cuesInForce, samePlace, slotFinder, slotsFor } from "./sound-cues.ts"
 
 const V = "v1"
 const piece = (startUs: number, endUs: number) => ({ startUs, endUs })
@@ -301,94 +298,6 @@ test("a moment of speech saved before it knew its beat is the same moment in eit
 })
 
 const speechAt = (sourceUs: number, beatId: string): CueAnchor => ({ kind: "speech", videoId: V, sourceUs, beatId })
-/** A point placed on the rough cut: its first kept moment at `sourceUs` of piece `cut`, where it plays at `atUs`. */
-const placedPoint = (id: string, importance: Importance, type: EmphasisType, cut: number, sourceUs: number, atUs: number, beatId = "b1"): PlacedPoint => ({
-  point: { id, anchor: { kind: "speech", videoId: V, from: 0, to: 1, beatId }, importance, type, reason: `เหตุผล ${id}`, source: "ai", edited: false },
-  videoId: V,
-  beatId,
-  cut,
-  sourceUs,
-  atUs,
-  endUs: atUs + 500_000,
-})
-const PICTURE = { binId: "m1", path: "/pics/1.jpg", name: "IMG_1.JPG", kind: "photo" as const, width: 1080, height: 1920, durationUs: 5_000_000 }
-const ROCKET: MotionSpec = { kind: "motion", version: MOTION_VERSION, box: { x0: 0.2, y0: 0.3, x1: 0.8, y1: 0.8 }, seconds: 2, why: "", idea: "จรวดพุ่งขึ้น", words: [], html: "<style></style>" }
-/**
- * The text g1 on point p1; p2 with nothing on it; a cutaway on p3; a punch on p4 at the second beat's
- * first moment; and the user's own graphic, on no point. Each point starts a little after what sits on
- * it, so a point that took a place of its own would show.
- */
-const soundSlots = (extra: { points?: PlacedPoint[]; inserts?: PlacedInsert[] } = {}) =>
-  soundSlotsFor({
-    plan,
-    groups: [{ ...groups[0]!, pointId: "p1" }],
-    points: [
-      placedPoint("p1", "key", "number", 0, 1_200_000, 1_200_000),
-      placedPoint("p2", "secondary", "emotion", 1, 11_000_000, 7_000_000),
-      placedPoint("p3", "extra", "product", 1, 12_100_000, 8_100_000),
-      placedPoint("p4", "key", "hook", 2, 14_150_000, 10_050_000, "b2"),
-      ...(extra.points ?? []),
-    ],
-    zooms: [{ atUs: 10_000_000, anchor: speechAt(14_100_000, "b2"), pointId: "p4" }],
-    inserts: [{ cue: { anchor: speechAt(12_000_000, "b1"), binId: "m1", edited: false, pointId: "p3" }, atUs: 8_000_000, media: PICTURE, durationUs: 2_000_000 }, ...(extra.inserts ?? [])],
-    graphics: [{ cue: { anchor: speechAt(15_000_000, "b2"), spec: ROCKET, edited: true, off: false }, atUs: 10_900_000, durationUs: 2_000_000 }],
-    beatNames,
-    at,
-  })
-
-test("Claude is offered each line of text, graphic, cutaway and punch, and each point nothing sits on, with its importance: no beat edge, no join", () => {
-  expect(soundSlots()).toEqual([
-    { anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 1_000_000, what: 'ข้อความเด่น "ขึ้นไป" บรรทัด 1', beatId: "b1", pointId: "p1", importance: "key", type: "number" },
-    { anchor: { kind: "highlight", groupId: "g1", line: 1 }, atUs: 2_000_000, what: 'ข้อความเด่น "อวกาศ" บรรทัด 2', beatId: "b1", pointId: "p1", importance: "key", type: "number" },
-    { anchor: speechAt(11_000_000, "b1"), atUs: 7_000_000, what: 'จุดเน้นในช่วง "นับถอยหลัง" — เหตุผล p2', beatId: "b1", pointId: "p2", importance: "secondary", type: "emotion" },
-    { anchor: speechAt(12_000_000, "b1"), atUs: 8_000_000, what: "ภาพตัดไปรูป IMG_1.JPG", beatId: "b1", pointId: "p3", importance: "extra", type: "product" },
-    // on the first moment of the second beat's piece
-    { anchor: speechAt(14_100_000, "b2"), atUs: 10_000_000, what: "ภาพซูมกระแทก", beatId: "b2", pointId: "p4", importance: "key", type: "hook" },
-    // the user's own graphic names no point
-    { anchor: speechAt(15_000_000, "b2"), atUs: 10_900_000, what: "กราฟิกขึ้น: จรวดพุ่งขึ้น", beatId: "b2", pointId: null, importance: null, type: null },
-  ])
-})
-
-test("a graphic's slot reads as its idea, so Claude knows what comes up there, written or not", () => {
-  const motion: MotionSpec = { kind: "motion", version: MOTION_VERSION, box: ROCKET.box, seconds: 3, why: "", idea: "จรวดพุ่งขึ้นพอดีคำว่า “อวกาศ”", words: [{ text: "อวกาศ", atS: 0.4 }], html: "<style></style>" }
-  const graphicAt = (spec: GraphicSpec, atUs: number, pointId?: string): PlacedGraphic => ({ cue: { anchor: speechAt(atUs + 4_100_000, "b2"), spec, edited: false, off: false, ...(pointId !== undefined ? { pointId } : {}) }, atUs, durationUs: 2_000_000 })
-  const list = soundSlotsFor({
-    plan,
-    groups: [],
-    points: [placedPoint("p4", "key", "hook", 2, 14_150_000, 10_050_000, "b2")],
-    zooms: [],
-    inserts: [],
-    // a written one on a point, and one not written yet on none
-    graphics: [graphicAt(motion, 10_900_000, "p4"), graphicAt({ ...motion, idea: "แถบเทียบสองแท่ง", html: null }, 12_000_000)],
-    beatNames,
-    at,
-  })
-  expect(list.map((slot) => [slot.atUs, slot.what, slot.pointId])).toEqual([
-    [10_900_000, "กราฟิกขึ้น: จรวดพุ่งขึ้นพอดีคำว่า “อวกาศ”", "p4"],
-    [12_000_000, "กราฟิกขึ้น: แถบเทียบสองแท่ง", null],
-  ])
-})
-
-test("two places at one moment are one slot, the one that says most winning: a line of text over a bare point, a graphic over a cutaway", () => {
-  const list = soundSlots({
-    points: [placedPoint("p5", "extra", "visual", 0, 2_000_000, 2_000_000)],
-    inserts: [{ cue: { anchor: speechAt(15_000_000, "b2"), binId: "m1", edited: true }, atUs: 10_900_000, media: PICTURE, durationUs: 2_000_000 }],
-  })
-  expect(list.map((slot) => slot.atUs)).toEqual([1_000_000, 2_000_000, 7_000_000, 8_000_000, 10_000_000, 10_900_000])
-  expect(list.find((slot) => slot.atUs === 2_000_000)).toMatchObject({ what: 'ข้อความเด่น "อวกาศ" บรรทัด 2', pointId: "p1" })
-  expect(list.find((slot) => slot.atUs === 10_900_000)).toMatchObject({ what: "กราฟิกขึ้น: จรวดพุ่งขึ้น" })
-})
-
-test("what sits on a point that is not placed here is no place for a sound: it plays at no level", () => {
-  // a cutaway and a line of text on a point whose words were cut, or that no longer exists
-  const list = soundSlots({ inserts: [{ cue: { anchor: speechAt(13_000_000, "b1"), binId: "m1", edited: false, pointId: "gone" }, atUs: 9_000_000, media: PICTURE, durationUs: 1_000_000 }] })
-  expect(list.map((slot) => slot.atUs)).toEqual([1_000_000, 2_000_000, 7_000_000, 8_000_000, 10_000_000, 10_900_000])
-  const onGone = soundSlotsFor({ plan, groups: [{ ...groups[0]!, pointId: "gone" }], points: [], zooms: [], inserts: [], graphics: [], beatNames, at })
-  expect(onGone).toEqual([])
-  // a group made for no point is still offered, with no point
-  expect(soundSlotsFor({ plan, groups: [groups[0]!], points: [], zooms: [], inserts: [], graphics: [], beatNames, at }).map((slot) => slot.pointId)).toEqual([null, null])
-})
-
 test("a sound on a moment of speech plays where that moment plays; one on a point the level holds back is neither played nor counted", () => {
   const place = placeOf({ slots: slots(), sentences: [], plan, at })
   const onPoint = (pointId: string, sourceUs: number): SoundCue => ({ anchor: speechAt(sourceUs, "b1"), effectId: "s1", edited: false, pointId })

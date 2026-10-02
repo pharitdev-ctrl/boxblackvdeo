@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vitest"
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { userEvent } from "@testing-library/user-event"
-import type { AppEvent, CueView, CutPlan, EmphasisPointView, GraphicView, InsertView, RendererApi, WriteResult, ZoomView } from "../../../shared/api.ts"
+import type { AppEvent, ComposedSoundView, CueView, CutPlan, EmphasisPointView, GraphicView, InsertView, MoveView, RendererApi, WriteResult, ZoomView } from "../../../shared/api.ts"
 import { MOTION_VERSION, type MotionSpec } from "@boxblack/core/graphics/plan"
 import { DEFAULT_HIGHLIGHT_OPTIONS } from "@boxblack/core/highlights/styles"
 import { cutPlan, detail, fakeApi, highlightGroups, highlightPreview, settingsView, subtitleLines } from "../../test/fake-api.ts"
@@ -175,13 +175,15 @@ test("a rough cut with nothing left cannot be written, and the reason says so", 
   expect(writeButton()).toHaveProperty("disabled", true)
 })
 
-test("a plan run going on holds the write until it is over, and the reason says why", async () => {
+test("a plan run going on holds the write until it is over; the AI menu says the run on the bar, so only the button's title gives the reason", async () => {
   const { api } = renderButton({ postPlanState: async () => ({ running: true, states: { sounds: { state: "running" } } }) })
   await waitFor(() => expect(calls(api, "previewHighlights").length).toBeGreaterThan(0))
   await act(async () => {})
   expect(writeButton()).toHaveProperty("disabled", true)
   // every other hold has passed, so the reason is the plan's
-  expect(await inBar().findByText(t("write.check.planning"))).toBeTruthy()
+  await waitFor(() => expect(writeButton().title).toBe(t("write.check.planning")))
+  expect(reason()).toBeNull()
+  expect(writeButton().getAttribute("aria-describedby")).toBeNull()
   act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
   await waitFor(() => expect(writeButton()).toHaveProperty("disabled", false))
   expect(reason()).toBeNull()
@@ -209,8 +211,8 @@ test("writing waits while the groups are being placed again, and the reason says
   })
   await screen.findByRole("heading", { name: /เปิดเรื่อง/ })
   await waitFor(() => expect(writeButton()).toHaveProperty("disabled", false))
-  // the highlight groups live in the graphics tab
-  await userEvent.click(screen.getAllByRole("tab").find((one) => one.getAttribute("data-tab") === "graphics")!)
+  // the highlight groups live in the techniques tab
+  await userEvent.click(screen.getAllByRole("tab").find((one) => one.getAttribute("data-tab") === "techniques")!)
   await userEvent.click((await screen.findAllByRole("button", { name: t("highlights.removeGroup") }))[0]!)
   await waitFor(() => expect(held).toBeGreaterThan(0))
   expect(writeButton()).toHaveProperty("disabled", true)
@@ -244,8 +246,8 @@ test("while a change to the text is being saved the write waits, and the reason 
   })
   await screen.findByRole("heading", { name: /เปิดเรื่อง/ })
   await waitFor(() => expect(writeButton()).toHaveProperty("disabled", false))
-  // the highlight groups live in the graphics tab
-  await userEvent.click(screen.getAllByRole("tab").find((one) => one.getAttribute("data-tab") === "graphics")!)
+  // the highlight groups live in the techniques tab
+  await userEvent.click(screen.getAllByRole("tab").find((one) => one.getAttribute("data-tab") === "techniques")!)
   await userEvent.click((await screen.findAllByRole("button", { name: t("highlights.removeGroup") }))[0]!)
   // nothing else is going on: the change being saved is what holds the write
   await waitFor(() => expect(writeButton()).toHaveProperty("disabled", true))
@@ -547,7 +549,9 @@ test("a kind that is switched off says so in the sheet instead of a count", asyn
       }),
   })
   const summary = within(await openSheet())
-  expect(summary.getByText(t("write.sounds", { count: 0 }))).toBeTruthy()
+  // with none of the user's own CapCut sounds left, only the composed line is there
+  expect(summary.queryByText(t("write.sounds", { count: 0 }))).toBeNull()
+  expect(summary.getByText(t("write.composed", { count: 0 }))).toBeTruthy()
   expect(summary.getByText(t("write.inserts", { count: 0 }))).toBeTruthy()
   for (const what of ["highlights.title", "subtitles.title", "flair.zoom", "flair.graphic"] as const) {
     expect(summary.getByText(t("write.off", { what: t(what) }))).toBeTruthy()
@@ -602,6 +606,105 @@ test("the sheet counts the sounds, zooms and cutaways that will play, each from 
   expect(summary.getByText(t("write.sounds", { count: 3 }))).toBeTruthy()
   expect(summary.getByText(t("write.zooms", { count: 2 }))).toBeTruthy()
   expect(summary.getByText(t("write.inserts", { count: 1 }))).toBeTruthy()
+})
+
+const moveAt = (sourceUs: number, off = false): MoveView => ({
+  anchor: { kind: "speech", videoId: "a", sourceUs, beatId: "b1" },
+  insert: false,
+  atUs: sourceUs,
+  durationUs: 1_000_000,
+  beatId: "b1",
+  about: "ซูมเข้าหน้าช้าๆ",
+  from: "light",
+  edited: off,
+  off,
+  instruction: null,
+  editFailed: null,
+  canUndo: false,
+})
+
+test("the sheet's zoom line counts the moves that play and the legacy zooms in force, and not a move switched off", async () => {
+  renderButton({ previewHighlights: async () => highlightPreview({ moves: [moveAt(1_000_000), moveAt(2_000_000), moveAt(3_000_000, true)], zooms: [zoomAt(4_000_000)] }) })
+  expect(within(await openSheet()).getByText(t("write.zooms", { count: 3 }))).toBeTruthy()
+})
+
+// a sound Claude composed, written and rendered, as the main process lists it
+const composedAt = (sourceUs: number, extra: Partial<ComposedSoundView> = {}): ComposedSoundView => ({
+  anchor: { kind: "speech", videoId: "a", sourceUs, beatId: "b1" },
+  atUs: sourceUs,
+  durationUs: 1_000_000,
+  beatId: "b1",
+  role: "เสียงวูบ",
+  from: "light",
+  loudness: "normal",
+  graphic: null,
+  written: true,
+  stale: null,
+  writeFailed: null,
+  instruction: null,
+  editFailed: null,
+  canUndo: false,
+  off: false,
+  render: "ready",
+  error: null,
+  ...extra,
+})
+
+test("the sheet counts the composed sounds a write lays, and says how many it leaves out and why, by kind", async () => {
+  const sounds = [
+    composedAt(1_000_000),
+    // a render still going is waited for, as a graphic's is
+    composedAt(1_500_000, { render: "pending" }),
+    composedAt(2_000_000, { written: false, render: "pending" }),
+    composedAt(2_500_000, { written: false, render: "pending" }),
+    composedAt(3_000_000, { stale: "cut", render: "pending" }),
+    composedAt(3_500_000, { stale: "picture", render: "pending" }),
+    composedAt(4_000_000, { written: false, writeFailed: "silent", render: "pending" }),
+    composedAt(4_500_000, { render: "failed", error: "the page closed" }),
+    // switched off, it is nothing to warn of
+    composedAt(5_000_000, { off: true, written: false, render: "pending" }),
+  ]
+  renderButton({ previewHighlights: async () => highlightPreview({ composed: sounds }) })
+  const dialog = within(await openSheet())
+  expect(dialog.getByText("เสียงที่แต่ง 2 เสียง")).toBeTruthy()
+  const leftOut = dialog.getByText("เว้นไว้ 6 เสียง (ยังไม่ได้แต่ง 2 · เก่า 2 · ไม่สำเร็จ 2)")
+  expect(leftOut.classList.contains("warn-text")).toBe(true)
+  cleanup()
+
+  // only the kinds there are are named; nothing left out says nothing
+  renderButton({ previewHighlights: async () => highlightPreview({ composed: [composedAt(1_000_000), composedAt(2_000_000, { stale: "cut" })] }) })
+  const some = within(await openSheet())
+  expect(some.getByText("เสียงที่แต่ง 1 เสียง")).toBeTruthy()
+  expect(some.getByText("เว้นไว้ 1 เสียง (เก่า 1)")).toBeTruthy()
+  cleanup()
+  renderButton({ previewHighlights: async () => highlightPreview({ composed: [composedAt(1_000_000)] }) })
+  const clean = await openSheet()
+  expect(within(clean).getByText("เสียงที่แต่ง 1 เสียง")).toBeTruthy()
+  expect(clean.textContent).not.toContain("เว้นไว้")
+  cleanup()
+
+  // a sound tied to a graphic whose render failed is left out with it, as stale; with the graphic laid it is laid too
+  const graphicHere = (render: GraphicView["render"]) => ({ ...GRAPHIC, anchor: composedAt(1_000_000).anchor, render, error: render === "failed" ? "Chrome crashed" : null })
+  const tied = composedAt(1_000_000, { graphic: { summary: "จรวด" } })
+  for (const [render, laid, said] of [
+    ["failed", 0, "เว้นไว้ 1 เสียง (เก่า 1)"],
+    ["rendering", 1, null],
+  ] as const) {
+    renderButton({ ...withGraphics([graphicHere(render)]), previewHighlights: async () => highlightPreview({ graphics: [graphicHere(render)], composed: [tied] }) })
+    const sheet = await openSheet()
+    expect(within(sheet).getByText(`เสียงที่แต่ง ${laid} เสียง`), render).toBeTruthy()
+    if (said) expect(within(sheet).getByText(said)).toBeTruthy()
+    else expect(sheet.textContent).not.toContain("เว้นไว้")
+    cleanup()
+  }
+
+  // with the sounds off neither is said
+  renderButton({
+    getSettings: async () => settingsView({ flair: { ...settingsView().flair, sound: false } }),
+    previewHighlights: async () => highlightPreview({ composed: [composedAt(1_000_000)] }),
+  })
+  const off = await openSheet()
+  expect(off.textContent).not.toContain("เสียงที่แต่ง")
 })
 
 const point = (id: string, shown: boolean): EmphasisPointView => ({
@@ -685,6 +788,9 @@ const GRAPHIC: GraphicView = {
   error: null,
   edited: false,
   off: false,
+  from: null,
+  replaces: false,
+  coversKeep: false,
 }
 const graphicAt = (sourceUs: number, extra: Partial<GraphicView>): GraphicView => ({ ...GRAPHIC, anchor: { kind: "speech", videoId: "a", sourceUs, beatId: "b1" }, ...extra })
 // as the main process lists the ones a write leaves out: nothing of them is rendered, so they wait

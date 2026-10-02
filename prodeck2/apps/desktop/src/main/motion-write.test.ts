@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest"
 import { lintFragment } from "@boxblack/core/graphics/motion/lint"
 import { editBrief, MOTION_CONTRACT, motionBrief, repairBrief } from "@boxblack/core/graphics/motion/write"
 import type { LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
+import { createCallLimit } from "./call-limit.ts"
 import { writeAll, writePiece, type PieceToWrite } from "./motion-write.ts"
 
 /** What one graphic is written for: its stage, its length, the words said while it plays, its idea and the clip's subject. */
@@ -59,6 +60,19 @@ test("a fragment that passes the linter and the render is the answer, after one 
   expect(claude.requests[0]).toMatchObject({ model: "claude-sonnet-5", system: MOTION_CONTRACT, signal: stop.signal })
   expect(briefOf(claude.requests[0]!)).toBe(motionBrief(PIECE))
   expect(render.mock.calls).toEqual([[GOOD]])
+})
+
+test("a free graphic's piece carries what it does with the text of its moment and where the subtitles start on its stage, which its brief says, and so does its repair", async () => {
+  const piece: PieceToWrite = { ...PIECE, text: { replaces: "อวกาศ" }, captionsFromPx: 200 }
+  const claude = fakeClaude([TIMER, GOOD])
+  expect(await writePiece(piece, { ...claude.deps, render: renderOf([]) })).toEqual({ html: GOOD })
+  const brief = motionBrief(piece)
+  expect(brief).toContain('- Highlight text: this graphic shows in place of the highlight text "อวกาศ"')
+  expect(brief).toContain("- Subtitles cover the stage from y = 200 px to its bottom")
+  expect(briefOf(claude.requests[0]!)).toBe(brief)
+  expect(briefOf(claude.requests[1]!)).toBe(repairBrief({ brief, html: TIMER, problems: lintFragment(TIMER) }))
+  // one beside the text of its moment is told not to repeat it
+  expect(motionBrief({ ...PIECE, text: { pairs: true } })).toContain("- Highlight text: the highlight text of this moment shows elsewhere on screen. Do not repeat its words.")
 })
 
 test("a fragment the linter refuses gets one repair, asked with the first brief, the problems and the fragment; what comes back is checked again and is the answer when it passes", async () => {
@@ -365,11 +379,11 @@ function heldWrites() {
   return { gates, started, state, write }
 }
 
-test("the pieces are written three at a time at the most, the next one started as one settles, and how many have settled is reported after each", async () => {
+test("the pieces are written as many at a time as the limit lets, three here, the next one started as one settles, and how many have settled is reported after each", async () => {
   const { gates, started, state, write } = heldWrites()
   const progress: [number, number][] = []
   let over = false
-  const all = writeAll([1, 2, 3, 4, 5, 6, 7], write, (done, total) => progress.push([done, total])).then(() => (over = true))
+  const all = writeAll([1, 2, 3, 4, 5, 6, 7], write, (done, total) => progress.push([done, total]), createCallLimit(3)).then(() => (over = true))
   await settled()
   expect(started).toEqual([1, 2, 3])
   expect(progress).toEqual([])
@@ -391,10 +405,10 @@ test("the pieces are written three at a time at the most, the next one started a
   expect(state.most).toBe(3)
 })
 
-test("with fewer than three pieces all are written at once, and with none nothing is written or reported", async () => {
+test("with fewer pieces than the limit all are written at once, and with none nothing is written or reported", async () => {
   const { gates, started, state, write } = heldWrites()
   const progress: [number, number][] = []
-  const two = writeAll([1, 2], write, (done, total) => progress.push([done, total]))
+  const two = writeAll([1, 2], write, (done, total) => progress.push([done, total]), createCallLimit(3))
   await settled()
   expect(started).toEqual([1, 2])
   gates.get(1)!.pass()
@@ -404,7 +418,7 @@ test("with fewer than three pieces all are written at once, and with none nothin
 
   const report = vi.fn()
   const never = vi.fn(async () => {})
-  await writeAll([], never, report)
+  await writeAll([], never, report, createCallLimit(3))
   expect(never).not.toHaveBeenCalled()
   expect(report).not.toHaveBeenCalled()
 })
@@ -413,7 +427,7 @@ test("a write that fails does not stop the others: every piece is still written 
   const { gates, started, write } = heldWrites()
   const progress: [number, number][] = []
   const outcome: { error?: unknown } = {}
-  const all = writeAll([1, 2, 3, 4, 5], write, (done, total) => progress.push([done, total])).catch((error: unknown) => (outcome.error = error))
+  const all = writeAll([1, 2, 3, 4, 5], write, (done, total) => progress.push([done, total]), createCallLimit(3)).catch((error: unknown) => (outcome.error = error))
   await settled()
   const broken = new Error("the outline could not be written")
   gates.get(1)!.fail(broken)
@@ -442,7 +456,7 @@ test("a reporter that throws does not end the pool early: every piece is still w
   const all = writeAll([1, 2, 3, 4, 5], write, (done, total) => {
     progress.push([done, total])
     if (done === 1) throw broken
-  }).catch((error: unknown) => (outcome.error = error))
+  }, createCallLimit(3)).catch((error: unknown) => (outcome.error = error))
   await settled()
   gates.get(1)!.pass()
   await settled()
@@ -457,4 +471,37 @@ test("a reporter that throws does not end the pool early: every piece is still w
   await all
   expect(outcome.error).toBe(broken)
   expect(progress).toEqual([[1, 5], [2, 5], [3, 5], [4, 5], [5, 5]])
+})
+
+test("two pools that share one limit of six never have more than six writes going between them, and each starts its pieces in the order given", async () => {
+  const { gates, started, state, write } = heldWrites()
+  const limit = createCallLimit(6)
+  const progress: Record<string, [number, number][]> = { graphics: [], sounds: [] }
+  // the graphics are 1 to 8, the sounds 101 to 108; the graphics asked first
+  const graphics = writeAll([1, 2, 3, 4, 5, 6, 7, 8], write, (done, total) => progress.graphics!.push([done, total]), limit)
+  const sounds = writeAll([101, 102, 103, 104, 105, 106, 107, 108], write, (done, total) => progress.sounds!.push([done, total]), limit)
+  /** Lets one piece's write end, once. */
+  const pass = (piece: number) => {
+    gates.get(piece)!.pass()
+    gates.delete(piece)
+  }
+  await settled()
+  expect(started).toEqual([1, 2, 3, 4, 5, 6])
+  // a slot let go goes to the piece that has waited longest, whichever pool it is in
+  pass(2)
+  await settled()
+  expect(started).toEqual([1, 2, 3, 4, 5, 6, 7])
+  for (const piece of [1, 3, 4]) pass(piece)
+  await settled()
+  expect(started).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 101, 102])
+  // the rest let go as they come, until both pools are over
+  for (let round = 0; round < 10 && gates.size > 0; round++) {
+    for (const piece of [...gates.keys()]) pass(piece)
+    await settled()
+  }
+  await Promise.all([graphics, sounds])
+  expect(started).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 101, 102, 103, 104, 105, 106, 107, 108])
+  expect(state.most).toBe(6)
+  expect(progress.graphics!.at(-1)).toEqual([8, 8])
+  expect(progress.sounds!.at(-1)).toEqual([8, 8])
 })

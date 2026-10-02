@@ -8,6 +8,7 @@ import type { GraphicCue } from "@boxblack/core/graphics/plan"
 import type { LlmContent, LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
 import type { Beat } from "@boxblack/core/planner"
 import type { Scene, VideoInsight } from "@boxblack/core/vision"
+import { SOUND_VERSION, type ComposedSound } from "@boxblack/core/sound/spec"
 import type { StoredOutline } from "../shared/api.ts"
 import { createEmphasisService, emphasisScenes, emphasisView, withoutPoint } from "./emphasis.ts"
 import { transcriptFingerprint } from "./footage.ts"
@@ -145,8 +146,9 @@ test("the emphasis tab shows the placed points with what plays on each, the sent
     { videoId: "p", beatId: "b2", startUs: 1_000_000, endUs: 2_000_000, atUs: 5_000_000, durationUs: 1_000_000, description: "แมวกระโดดขึ้นโต๊ะ", pointId: null },
     { videoId: "p", beatId: "b2", startUs: 2_000_000, endUs: 5_000_000, atUs: 6_000_000, durationUs: 2_000_000, description: "ปลาทอดในจาน", pointId: "pd" },
   ])
-  // "ทอด" is cut, so its point waits unseen; sounds were planned on version 4 of the points, graphics on 5
-  expect([view.hidden, view.version, view.changed]).toEqual([1, 5, { graphics: false, sounds: true }])
+  // "ทอด" is cut, so its point waits unseen; sounds were planned on version 4 of the points, graphics on 5, and the
+  // text and techniques, noted with the graphics before 0.7.0, on 5 too
+  expect([view.hidden, view.version, view.changed]).toEqual([1, 5, { techniques: false, graphics: false, sounds: true }])
 })
 
 const NOTHING_PLAYS = { text: [], zoom: [], insert: [], graphic: [], sound: [] }
@@ -159,37 +161,54 @@ test("at the loudest level every point shows; a work that never ran and placed n
     ["pc", true],
     ["pd", true],
   ])
-  expect(view.changed).toEqual({ graphics: false, sounds: false })
+  expect(view.changed).toEqual({ techniques: false, graphics: false, sounds: false })
   const changedOf = (outline: StoredOutline) => emphasisView({ stored: outline, plan: PLAN, clips: CLIPS, level: "medium", items: NOTHING_PLAYS }).changed
-  // a first run of work 2 whose graphics call failed leaves plannedOn.graphics null, but the zoom its
-  // techniques call stored sits on the points of that time: the graphics tab is behind, even after a restart
+  // a first run of work 2 whose graphics call failed leaves plannedOn null, but the zoom its techniques call
+  // stored sits on the points of that time: the text and techniques are behind, even after a restart; the graphics
+  // left nothing on the points, and are not
   const zoomOn = { anchor: { videoId: "v", sourceUs: 0, beatId: "b1" }, kind: "punch" as const, edited: false, pointId: "pa" }
   const failedFirst: StoredOutline = { ...stored, flair: { looks: {}, zooms: [zoomOn] } }
-  expect(changedOf(failedFirst)).toEqual({ graphics: true, sounds: false })
+  expect(changedOf(failedFirst)).toEqual({ techniques: true, graphics: false, sounds: false })
   // a sound work 4 stored on a point does the same for the sounds tab
   const soundOn = { anchor: { kind: "cut" as const, videoId: "v", sourceUs: 3_000_000, beatId: "b1" }, effectId: "s", edited: false, pointId: "pd" }
   const bothFailed: StoredOutline = { ...failedFirst, flair: { ...failedFirst.flair!, cues: [soundOn] } }
-  expect(changedOf(bothFailed)).toEqual({ graphics: true, sounds: true })
+  expect(changedOf(bothFailed)).toEqual({ techniques: true, graphics: false, sounds: true })
   // items bound to no point say nothing about the points
   const { pointId: _zoom, ...freeZoom } = zoomOn
   const { pointId: _sound, ...freeSound } = soundOn
-  expect(changedOf({ ...stored, flair: { looks: {}, zooms: [freeZoom], cues: [freeSound] } })).toEqual({ graphics: false, sounds: false })
-  // a work that planned on the version in force is not behind, whatever it placed; one on an older version is
-  const current = (graphics: number, sounds: number): StoredOutline => ({ ...bothFailed, emphasis: { ...OUTLINE.emphasis!, plannedOn: { graphics, sounds } } })
-  expect(changedOf(current(5, 5))).toEqual({ graphics: false, sounds: false })
-  expect(changedOf(current(5, 4))).toEqual({ graphics: false, sounds: true })
+  expect(changedOf({ ...stored, flair: { looks: {}, zooms: [freeZoom], cues: [freeSound] } })).toEqual({ techniques: false, graphics: false, sounds: false })
+  // a work that planned on the version in force is not behind, whatever it placed; one on an older version is. An
+  // outline from before 0.7.0 has the text and techniques go by the graphics' version
+  const current = (graphics: number, sounds: number, techniques?: number): StoredOutline => ({
+    ...bothFailed,
+    emphasis: { ...OUTLINE.emphasis!, plannedOn: { graphics, sounds, ...(techniques !== undefined ? { techniques } : {}) } },
+  })
+  expect(changedOf(current(5, 5))).toEqual({ techniques: false, graphics: false, sounds: false })
+  expect(changedOf(current(5, 4))).toEqual({ techniques: false, graphics: false, sounds: true })
+  expect(changedOf(current(4, 5))).toEqual({ techniques: true, graphics: true, sounds: false })
+  // since 0.7.0 each goes by its own
+  expect(changedOf(current(4, 5, 5))).toEqual({ techniques: false, graphics: true, sounds: false })
+  expect(changedOf(current(5, 5, 4))).toEqual({ techniques: true, graphics: false, sounds: false })
+  // a note of null is the text and techniques' own, behind with what they placed, not one to go by the graphics'
+  const nulled: StoredOutline = { ...bothFailed, emphasis: { ...OUTLINE.emphasis!, plannedOn: { techniques: null, graphics: 5, sounds: 5 } } }
+  expect(changedOf(nulled)).toEqual({ techniques: true, graphics: false, sounds: false })
   // an outline with no points yet
-  expect(emphasisView({ stored: { ...OUTLINE, emphasis: undefined }, plan: PLAN, clips: CLIPS, level: "medium", items: NOTHING_PLAYS })).toMatchObject({ points: [], hidden: 0, version: 0, changed: { graphics: false, sounds: false } })
+  expect(emphasisView({ stored: { ...OUTLINE, emphasis: undefined }, plan: PLAN, clips: CLIPS, level: "medium", items: NOTHING_PLAYS })).toMatchObject({
+    points: [],
+    hidden: 0,
+    version: 0,
+    changed: { techniques: false, graphics: false, sounds: false },
+  })
 })
 
 test("with no point on the rough cut no work is behind: thinking a work again could not catch it up, so the banner does not ask for it", () => {
   // the only point's words are cut, and the points changed since either work planned on them, which also left items on them
   const cueOn = { anchor: { kind: "cut" as const, videoId: "v", sourceUs: 3_000_000, beatId: "b1" }, effectId: "s", edited: false, pointId: "pb" }
   const cutAway: StoredOutline = { ...OUTLINE, emphasis: { ...OUTLINE.emphasis!, points: [PB], plannedOn: { graphics: 4, sounds: null } }, flair: { looks: {}, cues: [cueOn] } }
-  expect(emphasisView({ stored: cutAway, plan: PLAN, clips: CLIPS, level: "heavy", items: NOTHING_PLAYS })).toMatchObject({ points: [], hidden: 1, changed: { graphics: false, sounds: false } })
+  expect(emphasisView({ stored: cutAway, plan: PLAN, clips: CLIPS, level: "heavy", items: NOTHING_PLAYS })).toMatchObject({ points: [], hidden: 1, changed: { techniques: false, graphics: false, sounds: false } })
   // once a point is on the cut again, both are
   const back: StoredOutline = { ...cutAway, emphasis: { ...cutAway.emphasis!, points: [PB, PA] } }
-  expect(emphasisView({ stored: back, plan: PLAN, clips: CLIPS, level: "heavy", items: NOTHING_PLAYS }).changed).toEqual({ graphics: true, sounds: true })
+  expect(emphasisView({ stored: back, plan: PLAN, clips: CLIPS, level: "heavy", items: NOTHING_PLAYS }).changed).toEqual({ techniques: true, graphics: true, sounds: true })
 })
 
 const LOOK: GroupLook = { pattern: "stack", tone: "base", accent: null, exit: null, edited: false }
@@ -225,12 +244,12 @@ test("only Claude's own items on the points put a work behind: what the user mad
     { id: "g-user", source: "user" as const, edited: false, lines: [line], pointId: "pa" },
     { id: "g-changed", source: "ai" as const, edited: true, lines: [line], pointId: "pa" },
   ]
-  expect(changedOf(mine, groups)).toEqual({ graphics: false, sounds: false })
-  // each of Claude's own that is left does
-  expect(changedOf({ looks: {}, inserts: [{ anchor: at, binId: "m", edited: false, pointId: "pa" }] })).toEqual({ graphics: true, sounds: false })
-  expect(changedOf({ looks: {}, graphics: [{ ...graphicOn("pa"), edited: false }] })).toEqual({ graphics: true, sounds: false })
-  expect(changedOf({ looks: {} }, [{ ...groups[1]!, edited: false }])).toEqual({ graphics: true, sounds: false })
-  expect(changedOf({ looks: {}, cues: [{ anchor: at, effectId: "s", edited: false, pointId: "pa" }] })).toEqual({ graphics: false, sounds: true })
+  expect(changedOf(mine, groups)).toEqual({ techniques: false, graphics: false, sounds: false })
+  // each of Claude's own that is left does, for the work that put it there
+  expect(changedOf({ looks: {}, inserts: [{ anchor: at, binId: "m", edited: false, pointId: "pa" }] })).toEqual({ techniques: true, graphics: false, sounds: false })
+  expect(changedOf({ looks: {}, graphics: [{ ...graphicOn("pa"), edited: false }] })).toEqual({ techniques: false, graphics: true, sounds: false })
+  expect(changedOf({ looks: {} }, [{ ...groups[1]!, edited: false }])).toEqual({ techniques: true, graphics: false, sounds: false })
+  expect(changedOf({ looks: {}, cues: [{ anchor: at, effectId: "s", edited: false, pointId: "pa" }] })).toEqual({ techniques: false, graphics: false, sounds: true })
 })
 
 test("deleting a point takes Claude's items on it along, a group with its look and line sounds; the user's own and edited ones stay, bound to no point, an edited one on a line of a group that goes at the start of the group's beat", () => {
@@ -294,6 +313,37 @@ test("deleting a point takes Claude's items on it along, a group with its look a
     inserts: [{ anchor: atB1, binId: "n", edited: true }],
     graphics: [graphicOn(), { ...graphicOn(), anchor: atB1 }],
   })
+})
+
+test("deleting a point takes Claude's moves on it along; the user's own stays, bound to no point, and a move on another point is left alone", () => {
+  const move = (edited: boolean, pointId?: string) => ({
+    anchor: { kind: "speech" as const, videoId: "v", sourceUs: 1_000_000, beatId: "b1" },
+    from: "light" as const,
+    ...(pointId !== undefined ? { pointId } : {}),
+    about: "ดันเข้า",
+    poses: [{ s: 0, scale: 1.1, x: 0, y: 0, rot: 0, ease: "line" as const }],
+    edited,
+    off: edited,
+  })
+  const stored: StoredOutline = { ...OUTLINE, flair: { looks: {}, moves: [move(false, "pa"), move(true, "pa"), move(false, "pd")] } }
+  expect(withoutPoint(stored, "pa").flair!.moves).toEqual([move(true), move(false, "pd")])
+})
+
+test("a move of Claude's on a point says the text and techniques sit on the points; one the user switched, or on no point, says nothing", () => {
+  const move = (edited: boolean, pointId?: string) => ({
+    anchor: { kind: "speech" as const, videoId: "v", sourceUs: 1_000_000, beatId: "b1" },
+    from: "light" as const,
+    ...(pointId !== undefined ? { pointId } : {}),
+    about: "ดันเข้า",
+    poses: [{ s: 0, scale: 1.1, x: 0, y: 0, rot: 0, ease: "line" as const }],
+    edited,
+    off: false,
+  })
+  // points planned on by no work
+  const unplanned: StoredOutline = { ...OUTLINE, emphasis: { ...OUTLINE.emphasis!, plannedOn: { graphics: null, sounds: null } } }
+  const changedOf = (flair: StoredOutline["flair"]) => emphasisView({ stored: { ...unplanned, flair }, plan: PLAN, clips: CLIPS, level: "medium", items: NOTHING_PLAYS }).changed
+  expect(changedOf({ looks: {}, moves: [move(false, "pa")] })).toEqual({ techniques: true, graphics: false, sounds: false })
+  expect(changedOf({ looks: {}, moves: [move(true, "pa"), move(false)] })).toEqual({ techniques: false, graphics: false, sounds: false })
 })
 
 test("a Claude group on a deleted point whose look the user set by hand is theirs: it stays with its look, bound to no point", () => {
@@ -675,4 +725,56 @@ test("a plan run's stop goes with the points' call", async () => {
   const stop = new AbortController()
   await emphasis.plan(folder, DEFAULT_CUT_RULES, stop.signal)
   expect(requests[0]!.signal).toBe(stop.signal)
+})
+
+/** A sound Claude composed on a moment of the talk, for a point or for none. */
+const composedOn = (sourceUs: number, pointId?: string, extra: Partial<ComposedSound> = {}): ComposedSound => ({
+  anchor: { kind: "speech", videoId: "v", sourceUs, beatId: "b1" },
+  from: "medium",
+  role: "เสียงติ๊ง",
+  loudness: "normal",
+  seconds: 1,
+  words: [],
+  code: null,
+  version: SOUND_VERSION,
+  off: false,
+  ...(pointId !== undefined ? { pointId } : {}),
+  ...extra,
+})
+
+test("deleting a point takes the sounds Claude composed for it along, switched off or tied to a graphic of the user's; those of other points and of none stay", () => {
+  const graphic = graphicOn("pa")
+  const tied = composedOn(1_000_000, "pa", { graphic: graphic.anchor, graphicHtml: "0123456789abcdef" })
+  const stored: StoredOutline = { ...OUTLINE, flair: { looks: {}, graphics: [graphic], composed: [composedOn(1_000_000, "pa"), tied, composedOn(2_000_000, "pd"), composedOn(3_000_000), composedOn(4_000_000, "pa", { off: true })] } }
+  const left = withoutPoint(stored, "pa")
+  expect(left.flair!.composed).toEqual([composedOn(2_000_000, "pd"), composedOn(3_000_000)])
+  // the user's graphic stays, bound to no point; the sound composed for it was Claude's, and went with the point
+  expect(left.flair!.graphics).toEqual([graphicOn()])
+  // an outline with no composed sounds is given none
+  expect(withoutPoint({ ...OUTLINE, flair: { looks: {} } }, "pa").flair).toEqual({ looks: {} })
+})
+
+test("a sound Claude composed on a point puts the sounds behind the points, as a CapCut sound of Claude's did; one on no point, or a stored entry that is no sound, does not", () => {
+  const unplanned = { ...OUTLINE, emphasis: { ...OUTLINE.emphasis!, plannedOn: { graphics: null, sounds: null } } }
+  const changedOf = (composed: ComposedSound[], plannedOn: { graphics: number | null; sounds: number | null } = { graphics: null, sounds: null }) =>
+    emphasisView({ stored: { ...unplanned, emphasis: { ...unplanned.emphasis, plannedOn }, flair: { looks: {}, composed } }, plan: PLAN, clips: CLIPS, level: "medium", items: NOTHING_PLAYS }).changed
+  expect(changedOf([composedOn(1_000_000, "pa")])).toEqual({ techniques: false, graphics: false, sounds: true })
+  expect(changedOf([composedOn(1_000_000, "pa", { off: true })])).toEqual({ techniques: false, graphics: false, sounds: true })
+  expect(changedOf([composedOn(1_000_000)])).toEqual({ techniques: false, graphics: false, sounds: false })
+  expect(changedOf([null, { pointId: "pa" }] as unknown as ComposedSound[])).toEqual({ techniques: false, graphics: false, sounds: false })
+  // planned on the points as they are, the sounds are not behind; on an older version they are
+  expect(changedOf([composedOn(1_000_000, "pa")], { graphics: null, sounds: 5 })).toEqual({ techniques: false, graphics: false, sounds: false })
+  expect(changedOf([composedOn(1_000_000)], { graphics: null, sounds: 4 })).toEqual({ techniques: false, graphics: false, sounds: true })
+})
+
+test("deleting a point takes along the sounds tied to a graphic of Claude's that goes with it, whatever point the sound names; one tied to a graphic that stays, stays", () => {
+  const claudes = { ...graphicOn("pa"), edited: false }
+  const users = { ...graphicOn("pa"), anchor: { kind: "speech" as const, videoId: "v", sourceUs: 2_000_000, beatId: "b1" } }
+  const onClaudes = composedOn(1_000_000, "pd", { graphic: claudes.anchor, graphicHtml: "0123456789abcdef" })
+  const unbound = composedOn(1_000_000, undefined, { graphic: claudes.anchor, graphicHtml: "0123456789abcdef" })
+  const onUsers = composedOn(2_000_000, "pd", { graphic: users.anchor, graphicHtml: "0123456789abcdef" })
+  const stored: StoredOutline = { ...OUTLINE, flair: { looks: {}, graphics: [claudes, users], composed: [onClaudes, unbound, onUsers] } }
+  const left = withoutPoint(stored, "pa")
+  expect(left.flair!.graphics!.map((graphic) => graphic.anchor)).toEqual([users.anchor])
+  expect(left.flair!.composed).toEqual([onUsers])
 })

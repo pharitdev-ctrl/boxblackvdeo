@@ -7,7 +7,7 @@ import { findExecutable, inspectTools, measureLoudness, ProcessError, runProcess
 import { extractFrames, type VideoInsight, type VisionKey } from "@boxblack/core/vision"
 import { motionAssets, type MotionAssets } from "@boxblack/core/graphics/motion"
 import { styleFor } from "@boxblack/core/highlights/styles"
-import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, safeStorage, shell } from "electron"
+import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, safeStorage, session, shell } from "electron"
 import { API_METHODS, type AppEvent, type DesktopApi, type StoredOutline } from "../shared/api.ts"
 import { GRAPHICS_PACK } from "../shared/graphics-pack.ts"
 import { MEDIA_SCHEME, MEDIA_SCHEME_PRIVILEGES } from "../shared/media-url.ts"
@@ -29,6 +29,7 @@ import { outlineUpgrades } from "./post-cleanup.ts"
 import { ProgressStore, stagesOf } from "./progress.ts"
 import { SecretStore, SettingsStore } from "./settings.ts"
 import { createAnalysisService } from "./analysis.ts"
+import type { ObjectsCache } from "./objects.ts"
 import { createClaudeCode, parseAuthStatus, spawnGroup } from "./claude-code.ts"
 import { createClaudeCodeApi } from "./claude-code-api.ts"
 import { createFrameFiles, lookTimes } from "./frame-files.ts"
@@ -52,6 +53,10 @@ import { createEmphasisService } from "./emphasis.ts"
 import { styleInForce } from "./highlight-state.ts"
 import { createToolbox } from "./tools.ts"
 import { createUpdater } from "./updater.ts"
+import { sendTo } from "./main-window.ts"
+import { createSoundRenderer } from "./sound-render.ts"
+import { createSealedPage } from "./sound-window.ts"
+import { soundStatusOf } from "./composed-cues.ts"
 
 /** The license server fixed at build time; while developing, BOXBLACK_LICENSE_SERVER can point elsewhere. */
 const LICENSE_SERVER = (!app.isPackaged && process.env.BOXBLACK_LICENSE_SERVER) || __LICENSE_SERVER__
@@ -77,6 +82,12 @@ app.setName("BOXBLACK")
 // must happen before the app is ready
 protocol.registerSchemesAsPrivileged([{ scheme: MEDIA_SCHEME, privileges: MEDIA_SCHEME_PRIVILEGES }])
 
+/**
+ * The app's one window to the user. The hidden page sounds are rendered in is a window too, so the app's events and
+ * the dock's activate go by this one, not by the count of windows.
+ */
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): void {
   const window = new BrowserWindow({
     width: 1180,
@@ -96,6 +107,10 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   })
+  mainWindow = window
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null
+  })
   window.once("ready-to-show", () => window.show())
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
   window.webContents.on("will-navigate", (event) => event.preventDefault())
@@ -106,7 +121,7 @@ function createWindow(): void {
 }
 
 function send(event: AppEvent): void {
-  for (const window of BrowserWindow.getAllWindows()) window.webContents.send("app:event", event)
+  sendTo(mainWindow, event)
 }
 
 void app.whenReady().then(async () => {
@@ -129,8 +144,11 @@ void app.whenReady().then(async () => {
     inspect: (paths) => inspectTools(paths),
     bundledDirs,
     pinnedDirs: PINNED_WHISPER_DIRS,
-    // an ffmpeg or ffprobe found again may be what the graphics failed for: each gets another try
-    rescanned: () => graphicsRenderer.forgetFailures(),
+    // an ffmpeg or ffprobe found again may be what the graphics or the sounds failed for: each gets another try
+    rescanned: () => {
+      graphicsRenderer.forgetFailures()
+      soundRenderer.forgetFailures()
+    },
   })
   const tools = toolbox.paths
 
@@ -154,6 +172,8 @@ void app.whenReady().then(async () => {
   // not "cache": the file system is case-insensitive and Chromium owns (and clears) userData/Cache
   const transcripts = new TranscriptCache(join(userData, "transcripts"))
   const insights = new MediaCache<VideoInsight, VisionKey>(join(userData, "insights"))
+  // where things are in each scene of an insight, kept apart so the insights, their scenes and the outlines stay as they are
+  const objects: ObjectsCache = new MediaCache(join(userData, "insights-objects"))
   const secrets = new SecretStore(join(userData, "secrets.json"), safeStorage)
   // an outline from before M25 loses Claude's old effects once, the first time it is read (spec §7), and one from
   // before 0.5.0 the graphics of the old kit; a copy of it as it was is kept first, beside the outlines folder
@@ -190,6 +210,7 @@ void app.whenReady().then(async () => {
     secrets,
     transcripts,
     insights,
+    objects,
     progress,
     workDir: join(tmpdir(), "boxblack-work"),
     modelsDir: join(userData, "models"),
@@ -207,6 +228,7 @@ void app.whenReady().then(async () => {
     secrets,
     transcripts,
     insights,
+    objects,
     store: outlines,
     whisperModelId: WHISPER_MODELS[0]!.id,
     tools,
@@ -228,6 +250,8 @@ void app.whenReady().then(async () => {
   const graphicsPack = createGraphicsPack({ dir: join(userData, "hyperframes"), pack: GRAPHICS_PACK, fetch: bigDownloadFetch, send })
   // every rendered graphic lands here; the timeline write only prunes the media bin of files from this one folder
   const graphicsDir = join(homedir(), "Movies", "CapCut", "BOXBLACK", "graphics")
+  // every composed sound's levelled WAV lands here, named by what it is made from; the write prunes the media bin of this folder too
+  const soundsDir = join(homedir(), "Movies", "CapCut", "BOXBLACK", "sounds")
   const backupRoot = join(userData, "backups")
   // the app's shipped resources: next to the app when packaged, apps/desktop/resources in development
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(import.meta.dirname, "../../resources")
@@ -257,17 +281,18 @@ void app.whenReady().then(async () => {
   const graphicsReady = async () =>
     packChanging === 0 && graphicsRenderer.machineReady() && (await graphicsPack.paths()) !== null && tools.ffmpeg !== null && tools.ffprobe !== null
   const graphicFiles = {
-    info: () => graphicFilesInfo(graphicsDir),
+    info: () => graphicFilesInfo(graphicsDir, soundsDir),
     clean: () => {
       // what a render is making, or a write is about to lay down, is in no draft yet. A write that starts after the
       // clean did counts even once it is over: the drafts it wrote to may have been read before it wrote them
       const writes = timeline.writesStarted()
       return cleanGraphicFiles({
         dir: graphicsDir,
+        soundsDir,
         draftsRoot: findDraftsRoot(homedir()),
         backupRoot,
         trash: (path) => shell.trashItem(path),
-        busy: () => !graphicsRenderer.idle() || timeline.anyWriting() || timeline.writesStarted() !== writes,
+        busy: () => !graphicsRenderer.idle() || !soundRenderer.idle() || timeline.anyWriting() || timeline.writesStarted() !== writes,
       })
     },
   }
@@ -291,10 +316,16 @@ void app.whenReady().then(async () => {
     cancel: () => graphicsPack.cancel(),
     remove: () => changingPack(() => graphicsPack.remove()),
   }
+  // the sealed hidden page composed sounds are rendered in; its window is made on the first render. Both are made
+  // before the timeline and highlight services, which the renderer is handed to
+  const soundPage = createSealedPage({ BrowserWindow, session })
+  // each render that ends is told to the page, which reads its sounds again: a row would otherwise stay on กำลังเรนเดอร์…
+  const soundRenderer = createSoundRenderer({ dir: soundsDir, ffmpeg: () => tools.ffmpeg, page: soundPage, onSettled: () => send({ type: "sounds-rendered" }) })
   const timeline = createTimelineService({
     settings,
     transcripts,
     insights,
+    objects,
     whisperModelId: WHISPER_MODELS[0]!.id,
     inspect: (folder) => projects.inspectProject(folder),
     prompts,
@@ -322,12 +353,15 @@ void app.whenReady().then(async () => {
     graphicsReady,
     graphicJobs: (folder, rules, options) => highlights.graphicJobs(folder, rules, options),
     graphicsDir,
+    soundRenderer,
+    composedSounds: (folder, rules, options) => highlights.composedSounds(folder, rules, options),
+    soundsDir,
     send,
   })
   const highlights = createHighlightService({
     outlines,
     timeline,
-    footage: { settings, transcripts, insights, whisperModelId: WHISPER_MODELS[0]!.id, inspect: (folder) => projects.inspectProject(folder), prompts },
+    footage: { settings, transcripts, insights, objects, whisperModelId: WHISPER_MODELS[0]!.id, inspect: (folder) => projects.inspectProject(folder), prompts },
     llm: () => editingLlm("picking highlight text"),
     sounds,
     media,
@@ -343,12 +377,13 @@ void app.whenReady().then(async () => {
     graphics: graphicsRenderer,
     graphicsReady,
     styleOf,
+    soundStatus: soundStatusOf(soundRenderer),
+    soundRenderer,
   })
   const flair = createFlairService({
     outlines,
     timeline,
     sounds,
-    pro: async () => (await settings.read()).capcut.pro,
     media,
     descriptions: mediaLooks,
     frames: () => {
@@ -366,6 +401,8 @@ void app.whenReady().then(async () => {
     graphicJobs: (folder, rules, options) => highlights.graphicJobs(folder, rules, options),
     candidateJob: (folder, rules, graphic, spec) => highlights.candidateJob(folder, rules, graphic, spec),
     jobFor: (folder, cue) => highlights.jobFor(folder, cue),
+    composedSounds: (folder, rules, options) => highlights.composedSounds(folder, rules, options),
+    soundRenderer,
   })
   const emphasis = createEmphasisService({ outlines, timeline, llm: () => editingLlm("planning the emphasis points") })
   // the run behind the post page's one button: each work stored as it comes, the screen told how each stands;
@@ -441,6 +478,10 @@ void app.whenReady().then(async () => {
     graphicsRenderer.cancel()
     void claudeCode.cancel()
     aiCalls.cancel()
+    // the renders are cancelled before the page closes, so that the render the close ends is no sound's failure; a
+    // composing waiting on its check is ended by its run's stop, which relies on aiCalls.cancel() above running first
+    soundRenderer.cancel()
+    soundPage.close()
   })
 
   // the stored choice applies as soon as it has been read; the window is already painting by then
@@ -448,7 +489,7 @@ void app.whenReady().then(async () => {
 
   createWindow()
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (mainWindow === null || mainWindow.isDestroyed()) createWindow()
   })
 })
 

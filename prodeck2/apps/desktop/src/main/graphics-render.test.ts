@@ -13,7 +13,7 @@ import { HIGHLIGHT_STYLES } from "@boxblack/core/highlights/styles"
 import { ProcessError } from "@boxblack/core/media"
 import type { AppEvent } from "../shared/api.ts"
 import { GRAPHICS_PACK, PACK_HYPERFRAMES_VERSION } from "../shared/graphics-pack.ts"
-import { createGraphicsRenderer, EnvironmentError, inspectionOf, offlineChrome, quietHyperframesHome, renderBinDir, type Inspection, type RenderJob } from "./graphics-render.ts"
+import { createGraphicsRenderer, EnvironmentError, hashOf, inspectionOf, offlineChrome, quietHyperframesHome, renderBinDir, type Inspection, type RenderJob } from "./graphics-render.ts"
 
 // rename can only fail across volumes, which a test cannot set up: this makes a rendered file's fail on demand, and notes every rename.
 // Nor can a test fill a disk: `noRoomFor` makes the write of any file whose name ends with it fail as it does on a full one.
@@ -126,6 +126,19 @@ async function setup(over: { fail?: boolean; gate?: Promise<void>; holdFirst?: n
   })
   return { dir, events, runs, answers, inspected, inspectedUnder, renderer }
 }
+
+test("a job is named by what is drawn, by itself and as the renderer names it: what else its spec says, the fragment kept for a step back among it, makes no other file", async () => {
+  const { renderer } = await setup()
+  const drawn = motionJob()
+  expect(hashOf(drawn)).toBe(renderer.hashOf(drawn))
+  // its reason, its idea, its words as they were written, the contract stamped on it, a change asked, a failed edit and the fragment kept
+  const said = motionJob({ why: "อื่น", idea: "อื่น", words: [], version: "motion-2026-01-01", instruction: "ใหญ่ขึ้น", editFailed: "timed out", previous: { html: "<style></style>", seconds: 2, words: [], version: MOTION_VERSION } })
+  expect(hashOf(said)).toBe(hashOf(drawn))
+  // what is drawn does
+  expect(hashOf(motionJob({ html: `${FRAGMENT} ` }))).not.toBe(hashOf(drawn))
+  expect(hashOf(motionJob({ seconds: 2.5 }))).not.toBe(hashOf(drawn))
+  expect(hashOf(motionJob({}, { times: [0.25, 1.5] }))).not.toBe(hashOf(drawn))
+})
 
 test("the hash names the file; the same job is not rendered twice; another palette is another file", async () => {
   const { dir, renderer, runs } = await setup()

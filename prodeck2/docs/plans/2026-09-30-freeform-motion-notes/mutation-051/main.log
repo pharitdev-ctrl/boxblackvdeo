@@ -1,0 +1,41 @@
+caught     write.ts                 editBrief: white space not made single
+caught     motion-write.ts          writePiece: first brief ignored
+caught     motion-write.ts          writePiece: repair built from motionBrief
+caught     plan.ts                  isPrevious: words not checked
+caught     plan.ts                  isPrevious: any instruction
+caught     plan.ts                  instructionLength: not trimmed
+caught     highlight-api.ts         api: unit cap one higher
+caught     highlight-api.ts         api: 301 graphemes allowed
+caught     highlight-api.ts         api: empty allowed
+caught     highlight-api.ts         api: passed on untrimmed
+caught     license-api.ts           licence: editGraphic not licensed
+caught     graphics-cues.ts         view: canUndo by presence
+caught     graphics-cues.ts         view: instruction always null
+caught     graphics-cues.ts         view: editFailed always null
+caught     post-plan.ts             undo: not refused during a run
+caught     post-plan.ts             undo: mark not checked by runs
+caught     post-plan.ts             undo: refusal inside the try
+caught     post-plan.ts             undo: mark never released
+caught     flair.ts                 fragmentHeld: instruction dropped
+caught     flair.ts                 keptBefore: no fallback to kept
+caught     flair.ts                 afterWriting: instruction kept
+caught     flair.ts                 afterWriting: editFailed kept
+caught     flair.ts                 afterWriting: failed redo keeps nothing
+caught     flair.ts                 afterEdit: failure not said
+caught     flair.ts                 afterEdit: failure drops the fragment
+caught     flair.ts                 afterEdit: editFailed kept on success
+caught     flair.ts                 afterEdit: instruction not stored
+caught     flair.ts                 afterEdit: old length and words kept (stays stale)
+caught     flair.ts                 afterEdit: nothing kept for a step back
+caught     flair.ts                 steppedBack: current instruction stays
+caught     flair.ts                 steppedBack: current not kept
+caught     flair.ts                 steppedBack: length not restored
+caught     flair.ts                 steppedBack: version not restored
+caught     flair.ts                 steppedBack: failed kept
+caught     flair.ts                 edit: editBrief not used
+caught     flair.ts                 edit: instruction untrimmed
+caught     flair.ts                 edit: unwritten not refused
+caught     flair.ts                 edit: machine fault not forgotten
+caught     flair.ts                 undo: junk kept fragment used
+caught     flair.ts                 edit: progress not started
+40/40 caught

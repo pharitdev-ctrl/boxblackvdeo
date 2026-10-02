@@ -5,8 +5,11 @@
   "exports": {
     "./capcut": "./src/capcut/index.ts",
     "./capcut/sounds": "./src/capcut/sounds.ts",
+    "./capcut/composed-sounds": "./src/capcut/composed-sounds.ts",
     "./capcut/zoom": "./src/capcut/zoom.ts",
+    "./capcut/moves": "./src/capcut/moves.ts",
     "./capcut/inserts": "./src/capcut/inserts.ts",
+    "./capcut/framing": "./src/capcut/framing.ts",
     "./capcut/graphics": "./src/capcut/graphics.ts",
     "./capcut/bin": "./src/capcut/bin.ts",
     "./asr": "./src/asr/index.ts",
@@ -31,7 +34,7 @@
     "./flair/media": "./src/flair/media.ts",
     "./flair/look-at": "./src/flair/look-at.ts",
     "./flair/direct": "./src/flair/direct.ts",
-    "./flair/sound-plan": "./src/flair/sound-plan.ts",
+    "./flair/moves": "./src/flair/moves.ts",
     "./emphasis": "./src/emphasis/index.ts",
     "./emphasis/types": "./src/emphasis/types.ts",
     "./highlights": "./src/highlights/index.ts",
@@ -48,8 +51,14 @@
     "./graphics/motion/lint": "./src/graphics/motion/lint.ts",
     "./graphics/motion/points": "./src/graphics/motion/points.ts",
     "./graphics/motion/direct": "./src/graphics/motion/direct.ts",
+    "./graphics/motion/free": "./src/graphics/motion/free.ts",
     "./graphics/motion/write": "./src/graphics/motion/write.ts",
-    "./graphics/motion/fixtures": "./src/graphics/motion/fixtures/index.ts"
+    "./graphics/motion/fixtures": "./src/graphics/motion/fixtures/index.ts",
+    "./sound/spec": "./src/sound/spec.ts",
+    "./sound/lint": "./src/sound/lint.ts",
+    "./sound/write": "./src/sound/write.ts",
+    "./sound/harness": "./src/sound/harness.ts",
+    "./sound/plan": "./src/sound/plan.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

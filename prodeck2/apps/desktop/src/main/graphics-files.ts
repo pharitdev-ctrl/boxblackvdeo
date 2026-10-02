@@ -8,8 +8,15 @@ const codeOf = (error: unknown) => (error as NodeJS.ErrnoException).code
 
 /** The name the renderer gives every file it makes: its hash. Nothing else in the folder is ours to trash. */
 const GRAPHIC_FILE = /^[0-9a-f]{16}\.mov$/
-/** The same name anywhere in a draft's JSON: a path, a material's name, a nested draft's own materials. */
-const GRAPHIC_NAMED = /[0-9a-f]{16}\.mov/gi
+/**
+ * The same for a composed sound the sound renderer kept, in the sounds folder. Exactly this: a render's temporary
+ * `<hash>.raw.wav` ends in `.wav` too, and is no sound a draft can play.
+ */
+const SOUND_FILE = /^[0-9a-f]{16}\.wav$/
+/** The sound renderer's temporary files, which it removes itself unless the app stopped in the middle of a render. */
+const SOUND_TEMP = /^[0-9a-f]{16}\.(?:raw\.wav|wav\.tmp)$/
+/** Either name anywhere in a draft's JSON: a path, a material's name, a nested draft's own materials. */
+const GRAPHIC_NAMED = /[0-9a-f]{16}\.(?:mov|wav)/gi
 
 /**
  * How long a rendered file is left alone after it was made: a preview may have just shown it, or a
@@ -23,18 +30,25 @@ const SETTLING_MS = 10 * 60_000
  */
 const DRAFT_DEPTH = 4
 
-/** How much the graphics folder holds: the rendered graphics only, the files a clean could take away. */
-export async function graphicFilesInfo(dir: string): Promise<{ count: number; bytes: number }> {
+/**
+ * How much the graphics folder and the sounds folder hold: the rendered graphics and the composed sounds kept, the
+ * files a clean could take away.
+ */
+export async function graphicFilesInfo(dir: string, soundsDir?: string): Promise<{ count: number; bytes: number }> {
   let count = 0
   let bytes = 0
-  try {
-    for (const name of await readdir(dir)) {
-      if (!GRAPHIC_FILE.test(name)) continue
-      count++
-      bytes += (await stat(join(dir, name))).size
+  const folders: [string, RegExp][] = [[dir, GRAPHIC_FILE]]
+  if (soundsDir !== undefined) folders.push([soundsDir, SOUND_FILE])
+  for (const [folder, kept] of folders) {
+    try {
+      for (const name of await readdir(folder)) {
+        if (!kept.test(name)) continue
+        count++
+        bytes += (await stat(join(folder, name))).size
+      }
+    } catch {
+      // no folder yet
     }
-  } catch {
-    // no folder yet
   }
   return { count, bytes }
 }
@@ -142,6 +156,9 @@ function nameOf(where: "capcut" | "backup", root: string, unreadable: string): s
   return where === "capcut" ? rel : (rel.split("/")[0] ?? "")
 }
 
+/** The names in a folder; none when it is not there (nothing rendered into it yet) or cannot be listed. */
+const namesIn = (dir: string): Promise<string[]> => readdir(dir).catch(() => [])
+
 /** Whether a file was last changed long enough ago that nothing is still making it or about to use it; false when it is gone. */
 async function settled(path: string, now: number): Promise<boolean> {
   try {
@@ -152,8 +169,9 @@ async function settled(path: string, now: number): Promise<boolean> {
 }
 
 /**
- * Moves to the Trash the rendered files no draft refers to any more, with their poster and meta:
- * the drafts under CapCut's root (those in its recycle bin too, which it can restore) and the ones
+ * Moves to the Trash the rendered files no draft refers to any more: each graphic with its poster and meta, and each
+ * composed sound in `soundsDir` on its own, with the temporary files a render that never finished left there. It
+ * looks at the drafts under CapCut's root (those in its recycle bin too, which it can restore) and the ones
  * BOXBLACK backed up before writing to them (which it can put back). A draft that cannot be read
  * counts as referring to everything: nothing is trashed then, since a file it points at would
  * otherwise be lost, and `blockedBy` says which. Nothing goes while a render or a write is under
@@ -162,11 +180,13 @@ async function settled(path: string, now: number): Promise<boolean> {
  */
 export async function cleanGraphicFiles(deps: {
   dir: string
+  /** where the composed sounds are kept (~/Movies/CapCut/BOXBLACK/sounds); without it only the graphics are looked at */
+  soundsDir?: string
   draftsRoot: string | null
   /** BOXBLACK's draft backups (<userData>/backups); not there until it first writes a draft */
   backupRoot: string
   trash: (path: string) => Promise<void>
-  /** true while graphics render or a draft is written, or once a write started after the clean did; asked before anything goes */
+  /** true while graphics or sounds render or a draft is written, or once a write started after the clean did; asked before anything goes */
   busy: () => boolean
   /** the clock a file's age is told by; Date.now by default */
   now?: () => number
@@ -180,18 +200,15 @@ export async function cleanGraphicFiles(deps: {
     const unreadable = await collect(root, DRAFT_DEPTH, referenced)
     if (unreadable) return { trashed: 0, blockedBy: { kind: "unreadable", where, name: nameOf(where, root, unreadable) }, kept: null }
   }
-  let names: string[]
-  try {
-    names = await readdir(deps.dir)
-  } catch {
-    return { trashed: 0, blockedBy: null, kept: null }
-  }
   /** trashed, or not there any more */
   const gone = (path: string) => deps.trash(path).then(() => true, async () => !(await exists(path)))
   const now = (deps.now ?? Date.now)()
   let trashed = 0
   let recent = false
-  for (const name of names) {
+  // asked again before each file: a write that started meanwhile may be about to use this one, and the drafts were
+  // read before it wrote. A file that went before it started is one it finds not made, and renders again
+  const stopped = () => (trashed === 0 ? { trashed, blockedBy: { kind: "busy" as const }, kept: null } : { trashed, blockedBy: null, kept: "stopped" as const })
+  for (const name of await namesIn(deps.dir)) {
     if (!GRAPHIC_FILE.test(name) || referenced.has(name)) continue
     const hash = name.slice(0, -4)
     // with no meta yet a render may still be making it; one that is not settled either way stays
@@ -199,15 +216,26 @@ export async function cleanGraphicFiles(deps: {
       recent = true
       continue
     }
-    // asked again before each file: a write that started meanwhile may be about to use this one, and the
-    // drafts were read before it wrote. A file that went before it started is one it finds not made, and renders again
-    if (deps.busy()) return trashed === 0 ? { trashed, blockedBy: { kind: "busy" }, kept: null } : { trashed, blockedBy: null, kept: "stopped" }
+    if (deps.busy()) return stopped()
     // the meta first: while it is there the file reads as ready, so the file stays as long as it does. A file
     // whose render failed before its meta was written has none to go
     if (!(await gone(join(deps.dir, `${hash}.json`)))) continue
     if (!(await gone(join(deps.dir, name)))) continue
     await gone(join(deps.dir, `${hash}.png`))
     trashed++
+  }
+  // a composed sound is its file alone: whether it is there is all the renderer asks. A temporary file is in no draft
+  // whatever names it, and is left only while it may still be a render's (busy covers the sound renderer)
+  for (const name of deps.soundsDir === undefined ? [] : await namesIn(deps.soundsDir)) {
+    const temporary = SOUND_TEMP.test(name)
+    if (!temporary && (!SOUND_FILE.test(name) || referenced.has(name))) continue
+    const path = join(deps.soundsDir!, name)
+    if (!(await settled(path, now))) {
+      recent = true
+      continue
+    }
+    if (deps.busy()) return stopped()
+    if (await gone(path)) trashed++
   }
   return { trashed, blockedBy: null, kept: recent ? "recent" : null }
 }

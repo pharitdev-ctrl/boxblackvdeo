@@ -1,0 +1,170 @@
+[
+ {
+  "name": "hook",
+  "sourceS": 4.94,
+  "moment": 2.2,
+  "length": 3.2,
+  "scene": "The man looks into the camera and asks the hook question of the clip: how do astronauts get up into space? No graphic on screen; this is the question the whole clip answers.",
+  "words": [
+   {
+    "text": "นักบิน",
+    "atS": 0
+   },
+   {
+    "text": "อวกาศ",
+    "atS": 0.24
+   },
+   {
+    "text": "บิน",
+    "atS": 0.82
+   },
+   {
+    "text": "ขึ้น",
+    "atS": 1.04
+   },
+   {
+    "text": "ไป",
+    "atS": 1.16
+   },
+   {
+    "text": "ใน",
+    "atS": 1.22
+   },
+   {
+    "text": "อวกาศ",
+    "atS": 1.36
+   },
+   {
+    "text": "ได้",
+    "atS": 1.7
+   },
+   {
+    "text": "ยัง",
+    "atS": 1.84
+   },
+   {
+    "text": "ไง",
+    "atS": 1.92
+   }
+  ],
+  "idea": null,
+  "html": null,
+  "mov": null
+ },
+ {
+  "name": "rocket",
+  "sourceS": 11.58,
+  "moment": 2.115,
+  "length": 3.315,
+  "words": [
+   {
+    "text": "ต้อง",
+    "atS": 0
+   },
+   {
+    "text": "ไป",
+    "atS": 0.26
+   },
+   {
+    "text": "ด้วย",
+    "atS": 0.38
+   },
+   {
+    "text": "กับ",
+    "atS": 0.66
+   },
+   {
+    "text": "สวย",
+    "atS": 0.78
+   },
+   {
+    "text": "อวกาศ",
+    "atS": 0.94
+   },
+   {
+    "text": "เท่านั้น",
+    "atS": 1.5
+   }
+  ],
+  "scene": "He answers: only with a spaceship. A drawn rocket flies across the top of the frame and a label saying spaceship pops up beside it; an underline runs under it.",
+  "idea": "จรวดทรงเรียบวาดด้วยเส้น พุ่งจากซ้ายเข้ากลางกรอบ มีเส้นไอพ่นลากตามหลัง แล้วหยุดพอดีคำว่า \"สวยอวกาศ\" ป้าย \"ยานอวกาศ\" ตัวใหญ่เด้งขึ้นข้างจรวด และขีดเส้นใต้วิ่งตอนพูด \"เท่านั้น\"",
+  "html": "<style>\n.st{position:absolute;left:0;top:0;width:996px;height:290px;animation:out .35s 1.65s both}\n.st svg{position:absolute;left:0;top:0;overflow:hidden}\n.rk{animation:fly .6s calc(var(--w5) * 1s - .6s) both cubic-bezier(.2,.7,.25,1)}\n.fl{transform-box:fill-box;transform-origin:right center;animation:flick .12s 0s 12 both alternate}\n.tr{transform-box:fill-box;transform-origin:left center;animation:trail .6s calc(var(--w5) * 1s - .6s) both cubic-bezier(.2,.7,.25,1),trailOut .4s calc(var(--w6) * 1s) forwards}\n.pl{position:absolute;right:460px;top:58px;padding:14px 40px 30px;background:var(--bar);border:6px solid var(--ink);border-radius:26px;color:var(--text);font-size:84px;line-height:1.2;white-space:nowrap;transform-origin:right center;animation:pop .4s calc(var(--w6) * 1s - .28s) both cubic-bezier(.3,1.6,.5,1)}\n.ul{position:absolute;left:40px;right:40px;bottom:16px;height:12px;background:var(--accent);border:3px solid var(--ink);border-radius:8px;transform-origin:left center;animation:line .4s calc(var(--w7) * 1s - .2s) both ease-out}\n@keyframes fly{from{transform:translateX(-270px);opacity:0}25%{opacity:1}to{transform:translateX(0);opacity:1}}\n@keyframes flick{from{transform:scaleX(.7)}to{transform:scaleX(1.15)}}\n@keyframes trail{from{transform:scaleX(0)}to{transform:scaleX(1)}}\n@keyframes trailOut{from{opacity:1}to{opacity:0}}\n@keyframes pop{from{transform:scale(.3) translateY(40px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}\n@keyframes line{from{transform:scaleX(0)}to{transform:scaleX(1)}}\n@keyframes out{from{opacity:1}to{opacity:0}}\n</style>\n<div class=\"st\">\n<svg width=\"996\" height=\"290\" viewBox=\"0 0 996 290\">\n<g transform=\"translate(996 0) scale(-1 1)\">\n<g class=\"tr\">\n<line x1=\"50\" y1=\"128\" x2=\"200\" y2=\"128\" stroke=\"var(--ink)\" stroke-width=\"12\" stroke-linecap=\"round\"/>\n<line x1=\"30\" y1=\"145\" x2=\"200\" y2=\"145\" stroke=\"var(--ink)\" stroke-width=\"12\" stroke-linecap=\"round\"/>\n<line x1=\"50\" y1=\"162\" x2=\"200\" y2=\"162\" stroke=\"var(--ink)\" stroke-width=\"12\" stroke-linecap=\"round\"/>\n<line x1=\"50\" y1=\"128\" x2=\"200\" y2=\"128\" stroke=\"var(--accent)\" stroke-width=\"5\" stroke-linecap=\"round\"/>\n<line x1=\"30\" y1=\"145\" x2=\"200\" y2=\"145\" stroke=\"var(--accent)\" stroke-width=\"5\" stroke-linecap=\"round\"/>\n<line x1=\"50\" y1=\"162\" x2=\"200\" y2=\"162\" stroke=\"var(--accent)\" stroke-width=\"5\" stroke-linecap=\"round\"/>\n</g>\n<g transform=\"translate(330 145)\">\n<g class=\"rk\">\n<path class=\"fl\" d=\"M-90 -16 L-135 0 L-90 16 Z\" fill=\"var(--accent)\" stroke=\"var(--ink)\" stroke-width=\"5\" stroke-linejoin=\"round\"/>\n<path d=\"M-68 -28 L-100 -58 L-100 -28 Z\" fill=\"var(--alt)\" stroke=\"var(--ink)\" stroke-width=\"6\" stroke-linejoin=\"round\"/>\n<path d=\"M-68 28 L-100 58 L-100 28 Z\" fill=\"var(--alt)\" stroke=\"var(--ink)\" stroke-width=\"6\" stroke-linejoin=\"round\"/>\n<path d=\"M-95 -28 L20 -28 Q62 -28 85 0 Q62 28 20 28 L-95 28 Z\" fill=\"var(--paper)\" stroke=\"var(--ink)\" stroke-width=\"6\" stroke-linejoin=\"round\"/>\n<circle cx=\"8\" cy=\"0\" r=\"13\" fill=\"var(--accent)\" stroke=\"var(--ink)\" stroke-width=\"5\"/>\n<line x1=\"-60\" y1=\"-28\" x2=\"-60\" y2=\"28\" stroke=\"var(--ink)\" stroke-width=\"5\"/>\n</g>\n</g>\n</g>\n</svg>\n<div class=\"pl\">ยานอวกาศ<div class=\"ul\"></div></div>\n</div>",
+  "mov": "d56223f890b030ff.mov"
+ },
+ {
+  "name": "countdown",
+  "sourceS": 22.62,
+  "moment": 2.8,
+  "length": 4.0,
+  "words": [
+   {
+    "text": "สาม",
+    "atS": 0
+   },
+   {
+    "text": "สอง",
+    "atS": 1.26
+   },
+   {
+    "text": "หนึ่ง",
+    "atS": 2.22
+   }
+  ],
+  "scene": "He counts down three, two, one with his fingers, launching himself. A big number at the top changes 3, 2, 1 on each spoken number, with a ring that shrinks like time running out, and the word launch flashes at the end.",
+  "idea": "ตัวเลขใหญ่กลางกรอบเปลี่ยนจาก \"3\" เป็น \"2\" เป็น \"1\" ตัวละประมาณ 0.8 วินาทีตามเสียง \"สาม\" \"สอง\" \"หนึ่ง\" ทุกครั้งที่เปลี่ยน ตัวเลขจะกระแทกเข้ามาแล้วย่อลง และมีวงแหวนรอบตัวเลขที่ค่อย ๆ หดหายเหมือนเวลาที่เหลือ ตอนจบมีคำว่า \"ปล่อยตัว!\" วาบขึ้นแวบหนึ่ง",
+  "html": "<style>\n.st{position:absolute;left:0;top:0;width:996px;height:290px;overflow:hidden;animation:out .15s 2.52s forwards}\n.st svg{position:absolute;left:0;top:0}\n.num{position:absolute;left:348px;top:0;width:300px;height:290px;display:flex;align-items:center;justify-content:center;font-size:280px;line-height:1;color:var(--ink);opacity:0}\n.n3{animation:slam .8s calc(var(--w1) * 1s - .1s) both,gone .1s calc(var(--w2) * 1s - .1s) forwards}\n.n2{animation:slam .8s calc(var(--w2) * 1s - .15s) both,gone .1s calc(var(--w3) * 1s - .1s) forwards}\n.n1{animation:slam .8s calc(var(--w3) * 1s - .15s) both,gone .08s calc(var(--w3) * 1s + .1s) forwards}\n.disc{transform-box:fill-box;transform-origin:center;animation:thump .3s calc(var(--w2) * 1s - .15s) both}\n.disc2{transform-box:fill-box;transform-origin:center;animation:thump .3s calc(var(--w3) * 1s - .15s) both}\n.fl{position:absolute;left:278px;top:85px;width:440px;height:120px;display:flex;align-items:center;justify-content:center;background:var(--bar);color:var(--text);font-size:80px;border:6px solid var(--ink);border-radius:26px;box-sizing:border-box;opacity:0;animation:flash .3s calc(var(--w3) * 1s + .08s) both}\n@keyframes slam{0%{transform:scale(1.35);opacity:0}20%{transform:scale(.9);opacity:1}32%{transform:scale(1);opacity:1}100%{transform:scale(.94);opacity:1}}\n@keyframes gone{to{opacity:0;transform:scale(.6)}}\n@keyframes thump{0%{transform:scale(1)}40%{transform:scale(1.06)}100%{transform:scale(1)}}\n@keyframes flash{0%{transform:scale(.4) rotate(-6deg);opacity:0}55%{transform:scale(1.1) rotate(2deg);opacity:1}100%{transform:scale(1) rotate(-2deg);opacity:1}}\n@keyframes out{to{opacity:0}}\n</style>\n<div class=\"st\">\n<svg width=\"996\" height=\"290\" viewBox=\"0 0 996 290\">\n<g class=\"disc\"><g class=\"disc2\">\n<circle cx=\"498\" cy=\"145\" r=\"114\" fill=\"var(--paper)\" stroke=\"var(--ink)\" stroke-width=\"8\"/>\n</g></g>\n<circle cx=\"498\" cy=\"145\" r=\"126\" fill=\"none\" stroke=\"var(--ink)\" stroke-width=\"18\"/>\n<circle id=\"ring\" cx=\"498\" cy=\"145\" r=\"126\" fill=\"none\" stroke=\"var(--accent)\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-dasharray=\"791.7\" stroke-dashoffset=\"0\" transform=\"rotate(-90 498 145)\"/>\n</svg>\n<div class=\"num n3\">3</div>\n<div class=\"num n2\">2</div>\n<div class=\"num n1\">1</div>\n<div class=\"fl\">ปล่อยตัว!</div>\n</div>\n<script>\nconst ring = document.getElementById(\"ring\");\nconst C = 791.7;\nwindow.frame = (t) => {\n  const starts = [T[0], T[1], T[2]];\n  const ends = [T[1], T[2], T[2] + 0.3];\n  let i = 0;\n  if (t >= starts[2]) i = 2; else if (t >= starts[1]) i = 1;\n  let p = (t - starts[i]) / Math.max(0.05, ends[i] - starts[i]);\n  p = Math.min(1, Math.max(0, p));\n  ring.setAttribute(\"stroke-dashoffset\", String(C * p));\n  ring.style.opacity = p >= 1 ? \"0\" : \"1\";\n};\nwindow.frame(0);\n</script>",
+  "mov": "0ba43edbbaad5a1b.mov"
+ },
+ {
+  "name": "arrival",
+  "sourceS": 26.76,
+  "moment": 1.8,
+  "length": 3.0,
+  "words": [
+   {
+    "text": "ตอน",
+    "atS": 0
+   },
+   {
+    "text": "นี้",
+    "atS": 0.18
+   },
+   {
+    "text": "เรา",
+    "atS": 0.32
+   },
+   {
+    "text": "อยู่",
+    "atS": 0.42
+   },
+   {
+    "text": "ใน",
+    "atS": 0.58
+   },
+   {
+    "text": "อวกาศ",
+    "atS": 0.66
+   },
+   {
+    "text": "กัน",
+    "atS": 1.06
+   },
+   {
+    "text": "แล้ว",
+    "atS": 1.12
+   },
+   {
+    "text": "ครับ",
+    "atS": 1.28
+   },
+   {
+    "text": "ผม",
+    "atS": 1.48
+   }
+  ],
+  "scene": "The punchline: he smiles, now we are in space. Stars twinkle in, a small rocket curves into orbit round a planet, and a label saying we reached space pops up; right after this he says wow, amazing.",
+  "idea": "ดาวจุดเล็ก ๆ ค่อย ๆ กะพริบขึ้นเต็มกรอบ แล้วจรวดเล็กโค้งเข้าวงโคจรรอบดาวเคราะห์วงกลมทางขวา ข้อความ \"ถึงอวกาศแล้ว!\" เด้งขึ้นพอดีคำว่า \"อวกาศกันแล้ว\"",
+  "html": "<style>\n.st{position:absolute;left:0;top:0;width:996px;height:290px;overflow:hidden;animation:out .35s 1.35s both}\n.st svg{position:absolute;left:0;top:0}\n.pl{transform-box:fill-box;transform-origin:center;animation:grow .5s calc(var(--w2) * 1s - .1s) both cubic-bezier(.3,1.6,.5,1)}\n.plate{position:absolute;left:50px;top:92px;padding:12px 34px 18px;background:var(--bar);border:5px solid var(--ink);border-radius:26px;transform-origin:30% 60%;animation:pop .45s calc(var(--w6) * 1s - .3s) both cubic-bezier(.3,1.7,.5,1)}\n.tx{color:var(--text);font-size:64px;line-height:1.15;white-space:nowrap}\n.dot{position:absolute;left:-18px;top:-18px;width:30px;height:30px;border-radius:50%;background:var(--accent);border:4px solid var(--ink);animation:pop .4s calc(var(--w7) * 1s - .2s) both cubic-bezier(.3,1.7,.5,1)}\n@keyframes grow{from{transform:scale(0)}to{transform:scale(1)}}\n@keyframes pop{0%{transform:scale(0) rotate(-8deg);opacity:0}60%{opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}\n@keyframes out{from{opacity:1}to{opacity:0}}\n</style>\n<div class=\"st\">\n<svg width=\"996\" height=\"290\" viewBox=\"0 0 996 290\">\n<g id=\"stars\"></g>\n<path id=\"orb\" d=\"M 530 272 C 640 262, 760 200, 850 195 A 115 50 0 1 0 849 195\" fill=\"none\" stroke=\"none\"/>\n<g transform=\"translate(850 145)\"><g class=\"pl\">\n<circle r=\"62\" fill=\"var(--accent)\" stroke=\"var(--ink)\" stroke-width=\"6\"/>\n<circle cx=\"-20\" cy=\"-18\" r=\"13\" fill=\"color-mix(in srgb, var(--accent) 60%, var(--ink))\"/>\n<circle cx=\"22\" cy=\"20\" r=\"9\" fill=\"color-mix(in srgb, var(--accent) 60%, var(--ink))\"/>\n<path d=\"M -95 12 Q 0 45 95 -12\" fill=\"none\" stroke=\"var(--ink)\" stroke-width=\"12\" stroke-linecap=\"round\"/>\n<path d=\"M -95 12 Q 0 45 95 -12\" fill=\"none\" stroke=\"var(--alt)\" stroke-width=\"5\" stroke-linecap=\"round\"/>\n</g></g>\n<g id=\"rk\" opacity=\"0\">\n<path d=\"M -26 0 L -40 -6 L -36 0 L -40 6 Z\" fill=\"var(--accent)\" stroke=\"var(--ink)\" stroke-width=\"3\" stroke-linejoin=\"round\"/>\n<path d=\"M -14 -8 L -26 -18 L -22 -4 Z M -14 8 L -26 18 L -22 4 Z\" fill=\"var(--alt)\" stroke=\"var(--ink)\" stroke-width=\"3\" stroke-linejoin=\"round\"/>\n<path d=\"M -24 -9 L 6 -9 Q 24 0 6 9 L -24 9 Z\" fill=\"var(--paper)\" stroke=\"var(--ink)\" stroke-width=\"4\" stroke-linejoin=\"round\"/>\n<circle cx=\"2\" cy=\"0\" r=\"4\" fill=\"var(--alt)\" stroke=\"var(--ink)\" stroke-width=\"2.5\"/>\n</g>\n</svg>\n<div class=\"plate\"><div class=\"dot\"></div><span class=\"tx\">ถึงอวกาศแล้ว!</span></div>\n</div>\n<script>\nconst NS = \"http://www.w3.org/2000/svg\";\nconst sg = document.getElementById(\"stars\");\nfor (let i = 0; i < 30; i++) {\n  const x = 20 + ((i * 0.618034 * 996) % 956);\n  const y = 16 + ((i * 0.41421 * 290 + i * 37) % 258);\n  const r = 2.5 + (i % 3) * 1.5;\n  const c = document.createElementNS(NS, \"circle\");\n  c.setAttribute(\"cx\", x.toFixed(1));\n  c.setAttribute(\"cy\", y.toFixed(1));\n  c.setAttribute(\"r\", r);\n  c.setAttribute(\"fill\", i % 5 === 0 ? \"var(--alt)\" : \"var(--paper)\");\n  c.setAttribute(\"stroke\", \"var(--ink)\");\n  c.setAttribute(\"stroke-width\", \"2\");\n  sg.appendChild(c);\n  c.animate([{opacity:0},{opacity:1,offset:0.4},{opacity:0.35,offset:0.7},{opacity:1}],\n    {duration: 1000, delay: (i * 97) % 600, fill: \"both\", easing: \"ease-out\"});\n}\nconst orb = document.getElementById(\"orb\");\nconst rk = document.getElementById(\"rk\");\nconst L = orb.getTotalLength();\nconst t0 = T[2] - 0.05;\nconst t1 = T[8] + 0.05;\nwindow.frame = (t) => {\n  let p = (t - t0) / (t1 - t0);\n  if (p <= 0) { rk.setAttribute(\"opacity\", \"0\"); return; }\n  p = Math.min(p, 1);\n  const e = 1 - Math.pow(1 - p, 2);\n  const d = e * (L - 2);\n  const a = orb.getPointAtLength(d);\n  const b = orb.getPointAtLength(Math.min(d + 2, L));\n  const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;\n  rk.setAttribute(\"opacity\", Math.min(1, p * 6).toFixed(2));\n  rk.setAttribute(\"transform\", \"translate(\" + a.x.toFixed(1) + \" \" + a.y.toFixed(1) + \") rotate(\" + ang.toFixed(1) + \")\");\n};\n</script>",
+  "mov": "40b7573af041c46e.mov"
+ }
+]

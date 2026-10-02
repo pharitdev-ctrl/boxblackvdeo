@@ -46,7 +46,7 @@ export function RulesSettings({ rules, presets, onRules, disabled }: { rules: Cu
   )
 }
 
-/** Where the highlight text sits and in which style and colours, at the head of its part of the graphics tab. */
+/** Where the highlight text sits and in which style and colours, at the head of its part of the techniques tab. */
 export function HighlightSettings({ highlights, onHighlights, style, onStyle, notices, disabled }: {
   highlights: HighlightOptions
   onHighlights: (options: HighlightOptions) => void

@@ -4,7 +4,7 @@ import { Progress } from "../ui/Progress.tsx"
 import { failureText } from "./postTabs.ts"
 
 /** What one work's state says, line by line; a `warn` line asks the user to look. */
-function linesOf(work: PostWork, state: PostWorkState): { text: string; warn: boolean }[] {
+function linesOf(work: PostWork, state: PostWorkState, afterGraphic: boolean): { text: string; warn: boolean }[] {
   const name = t(`post.work.${work}` as MessageKey)
   switch (state.state) {
     case "waiting":
@@ -12,8 +12,13 @@ function linesOf(work: PostWork, state: PostWorkState): { text: string; warn: bo
     case "running":
       // the graphics work counts the graphics whose writing has ended, once it is writing them: before that it plans, with nothing to count
       if (work === "graphics" && state.done !== undefined && state.total !== undefined) return [{ text: t("post.run.writingGraphics", { done: state.done, total: state.total }), warn: false }]
+      // the sounds work counts the sounds whose composing has ended, once it is composing them
+      if (work === "sounds" && state.done !== undefined && state.total !== undefined) return [{ text: t("plan.composing", { done: state.done, total: state.total }), warn: false }]
       return [{ text: t("post.run.running", { work: name }), warn: false }]
     case "done":
+      // a graphic written again runs the sounds work after it, which composes nothing when no sound follows that graphic:
+      // that is nothing to tell. A run asked for the sounds says it composed none
+      if (work === "sounds" && afterGraphic && state.count + state.dropped === 0) return []
       return [
         { text: t("post.run.done", { work: name, count: state.count }), warn: false },
         ...(state.dropped > 0 ? [{ text: t("post.run.dropped", { work: name, count: state.dropped }), warn: true }] : []),
@@ -42,12 +47,15 @@ export function PlanStrip({ run, current }: { run: PostRunView; current: readonl
   if (works.length === 0) return null
   const counted = current === null ? works : works.filter((work) => current.includes(work))
   const over = counted.filter((work) => !["waiting", "running"].includes(run.states[work]!.state)).length
+  // the run is a graphic's redo or edit, whose works are the graphics' and then the sounds' alone; a whole plan, a run
+  // asked for the sounds, or one whose works are not known says what its sounds work did, none included
+  const afterGraphic = current !== null && current.length === 2 && current.includes("graphics") && current.includes("sounds")
   return (
     <div className="plan-strip" aria-live="polite">
       {run.running && <Progress value={counted.length > 0 ? over / counted.length : null} label={t("post.planRunning")} />}
       <ul className="plan-lines">
         {works.flatMap((work) =>
-          linesOf(work, run.states[work]!).map((line, index) => (
+          linesOf(work, run.states[work]!, afterGraphic).map((line, index) => (
             <li key={`${work}-${index}`} className={line.warn ? "warn-text" : undefined}>
               {line.text}
             </li>

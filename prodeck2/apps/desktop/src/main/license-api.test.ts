@@ -3,9 +3,12 @@ import type { DesktopApi } from "../shared/api.ts"
 import { createLicenseApi, gateApi, LICENSED_METHODS, noLicenseApi } from "./license-api.ts"
 import { LicenseRequiredError, type LicenseService } from "./license.ts"
 
-test("the work that needs a license: analysing, planning, cutting, subtitling, highlight text, writing and editing graphics, and writing the draft", () => {
+test("the work that needs a license: analysing, planning, cutting, subtitling, highlight text, writing and editing graphics, moves and sounds, and writing the draft", () => {
   expect([...LICENSED_METHODS].sort()).toEqual([
     "editGraphic",
+    "editMove",
+    "editSound",
+    "locateObjects",
     "planEmphasis",
     "planOutline",
     "planPost",
@@ -13,6 +16,8 @@ test("the work that needs a license: analysing, planning, cutting, subtitling, h
     "previewHighlights",
     "previewSubtitles",
     "redoGraphic",
+    "redoMove",
+    "redoSound",
     "regenerateOutline",
     "rethinkPost",
     "reviseOutline",

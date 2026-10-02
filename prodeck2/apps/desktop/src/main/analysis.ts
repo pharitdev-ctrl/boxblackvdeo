@@ -19,6 +19,7 @@ import {
   describeVideos,
   extractFrames,
   measureSignals,
+  VISION_PROMPT,
   visionSampling,
   type RetakeLoad,
   type VideoInsight,
@@ -27,9 +28,10 @@ import {
 } from "@boxblack/core/vision"
 import type { AnalysisState, AppEvent, ProjectDetail, Readiness, ReadinessProblem } from "../shared/api.ts"
 import { analysedVideos, knownRetakes } from "./footage.ts"
+import { locateVideos, videosWithoutObjects, type ObjectsCache } from "./objects.ts"
 import type { ProgressStore } from "./progress.ts"
 import type { Prompts } from "./prompts.ts"
-import type { SecretStore, SettingsStore } from "./settings.ts"
+import type { AppSettings, SecretStore, SettingsStore } from "./settings.ts"
 
 export interface EngineFactories {
   scribe(apiKey: string, language: SpokenLanguage): AsrEngine
@@ -47,6 +49,8 @@ export interface AnalysisDeps {
   secrets: SecretStore
   transcripts: TranscriptCache
   insights: MediaCache<VideoInsight, VisionKey>
+  /** where things are in each scene of an insight, found by the objects pass after the pictures are described */
+  objects: ObjectsCache
   /** what each project has had analysed, so the project list can say how far it got */
   progress: ProgressStore
   /** extracted audio and frames live here while a video is being analysed */
@@ -72,6 +76,8 @@ export interface AnalysisDeps {
 }
 
 export const SCRIBE_MODEL = "scribe_v2"
+/** What finding objects needs of the machine: ffmpeg for the frames and a way to reach Claude, not the transcriber. */
+const OBJECTS_NEEDS: ReadinessProblem[] = ["ffmpeg-missing", "ffmpeg-incomplete", "anthropic-key-missing", "claude-cli-missing", "claude-cli-login"]
 /** A 1 GB download produces thousands of chunks; the UI needs a few updates a second. */
 const PROGRESS_EVERY_MS = 200
 
@@ -114,6 +120,10 @@ export function createAnalysisService(deps: AnalysisDeps) {
 
   let starting = false
   let job: (AnalysisState & { controller: AbortController }) | null = null
+  // a run that only finds objects holds the same one-run lock, but is kept apart from `job`: the prepare
+  // screen rebuilds its rows from the last analysis, and a run with no transcription would empty them
+  let objectsRun: AbortController | null = null
+  const busy = () => starting || job?.running === true || objectsRun !== null
   let download: AbortController | null = null
 
   async function readiness(): Promise<Readiness> {
@@ -140,8 +150,45 @@ export function createAnalysisService(deps: AnalysisDeps) {
     return { problems }
   }
 
+  async function transportFor(llm: AppSettings["llm"]): Promise<LlmTransport> {
+    const effort = effortFor(llm.model, llm.effort)
+    return llm.transport === "anthropic-api" ? transports.anthropic((await deps.secrets.get("anthropic"))!, effort) : transports.cli(tools.claude!, effort)
+  }
+
+  /** The chosen videos of a registered project; any that is not there refuses the whole request. */
+  async function chosenVideos(folder: string, videoIds: string[]) {
+    const project = await deps.inspect(folder)
+    const byId = new Map(project.videos.map((video) => [video.id, video]))
+    return videoIds.map((id) => {
+      const video = byId.get(id)
+      if (!video?.exists) throw new Error(`video ${id} is not in this project`)
+      return video
+    })
+  }
+
+  /** Finds the objects of the videos one at a time, telling the screens how each stands. */
+  const findObjects = (
+    folder: string,
+    videos: { id: string; path: string; durationUs: number }[],
+    transport: LlmTransport,
+    llmModel: string,
+    signal: AbortSignal,
+    described?: Parameters<typeof locateVideos>[0]["described"],
+  ) =>
+    locateVideos({
+      footage: { ...deps, whisperModelId: model.id },
+      videos,
+      described,
+      transport,
+      model: llmModel,
+      extractFrames: visionTools.extractFrames,
+      workDir: deps.workDir,
+      signal,
+      onEvent: (videoId, status) => deps.send({ type: "objects", folder, videoId, status }),
+    })
+
   async function start(folder: string, videoIds: string[]): Promise<void> {
-    if (starting || job?.running) throw new Error("an analysis is already running")
+    if (busy()) throw new Error("an analysis is already running")
     starting = true
     // on record from the first moment, so a cancel while the machine is still being checked
     // lands on this run and not on nothing
@@ -161,21 +208,14 @@ export function createAnalysisService(deps: AnalysisDeps) {
       if (ready.problems.length > 0) throw new Error(`analysis is not ready: ${ready.problems.join(", ")}`)
       if (cancelledMeanwhile()) return
 
-      const project = await deps.inspect(folder)
-      const byId = new Map(project.videos.map((video) => [video.id, video]))
-      const videos = videoIds.map((id) => {
-        const video = byId.get(id)
-        if (!video?.exists) throw new Error(`video ${id} is not in this project`)
-        return video
-      })
+      const videos = await chosenVideos(folder, videoIds)
 
       const { asr, llm, vision } = await deps.settings.read()
       const engine =
         asr.engine === "scribe"
           ? engines.scribe((await deps.secrets.get("elevenlabs"))!, asr.language)
           : engines.whisper(tools.whisper!, join(deps.modelsDir, model.file), model, asr.language)
-      const transport =
-        llm.transport === "anthropic-api" ? transports.anthropic((await deps.secrets.get("anthropic"))!, effortFor(llm.model, llm.effort)) : transports.cli(tools.claude!, effortFor(llm.model, llm.effort))
+      const transport = await transportFor(llm)
 
       if (cancelledMeanwhile()) return
 
@@ -200,6 +240,9 @@ export function createAnalysisService(deps: AnalysisDeps) {
           current.vision[video.id] = status
           deps.send({ type: "vision", folder, videoId: video.id, status })
         }
+        // what the pictures are described with, handed on to the objects pass, which a settings change meanwhile must not mislead
+        const sampling = visionSampling(vision.frameEveryS)
+        const prompt = (await deps.prompts?.())?.vision ?? VISION_PROMPT
         const insights = await describeVideos({
           videos: videos.flatMap((video) => {
             const transcript = transcripts.get(video.id)
@@ -212,8 +255,8 @@ export function createAnalysisService(deps: AnalysisDeps) {
           tools: visionTools,
           cache: deps.insights,
           workDir: deps.workDir,
-          ...visionSampling(vision.frameEveryS),
-          prompt: (await deps.prompts?.())?.vision,
+          ...sampling,
+          prompt,
           signal: controller.signal,
           onEvent: ({ videoId, status }) => {
             current.vision[videoId] = status
@@ -221,16 +264,25 @@ export function createAnalysisService(deps: AnalysisDeps) {
           },
         })
         // what was read in full, both its speech and its pictures
-        return videoIds.filter((id) => transcripts.has(id) && insights.has(id))
+        const read = videoIds.filter((id) => transcripts.has(id) && insights.has(id))
+        // only the project list reads this, so a disk that will not take it must not lose the run;
+        // a video that failed is not analysed, and a run that read nothing leaves the project as it was.
+        // It is noted before the objects pass, which a cancel may stop with every video read already
+        if (read.length > 0) await deps.progress.put({ folder, analysedAt: Date.now(), videoIds: read }).catch(() => {})
+
+        // the pictures are described, and so analysed, by now: where things are in them is found after,
+        // and a pass that fails is told on its video and leaves the run done
+        const insightKey = { model: llm.model, promptVersion: prompt.version, intervalUs: sampling.intervalUs, maxFrames: sampling.maxFrames }
+        const described = { insightKey, sampling, insights }
+        await findObjects(folder, videos.filter((video) => read.includes(video.id)), transport, llm.model, controller.signal, described).catch((error: unknown) => {
+          if (controller.signal.aborted) throw error
+        })
       }
 
       void run().then(
-        async (read) => {
+        () => {
           current.running = false
           current.outcome = "done"
-          // only the project list reads this, so a disk that will not take it must not lose the run;
-          // a video that failed is not analysed, and a run that read nothing leaves the project as it was
-          if (read.length > 0) await deps.progress.put({ folder, analysedAt: Date.now(), videoIds: read }).catch(() => {})
           deps.send({ type: "analysis-finished", folder, outcome: "done" })
         },
         (error: unknown) => {
@@ -257,17 +309,62 @@ export function createAnalysisService(deps: AnalysisDeps) {
     }
   }
 
+  /**
+   * Finds the objects of videos analysed already, for those analysed before the objects pass existed
+   * or whose pass failed. It holds the one-run lock, so an analysis cannot start meanwhile, and it ends
+   * like an analysis does, with analysis-finished.
+   */
+  async function locateObjects(folder: string, videoIds: string[]): Promise<void> {
+    if (busy()) throw new Error("an analysis is already running")
+    const controller = new AbortController()
+    objectsRun = controller
+    let transport: LlmTransport
+    let llmModel: string
+    let videos: Awaited<ReturnType<typeof chosenVideos>>
+    try {
+      if (videoIds.length === 0) throw new Error("no video is chosen")
+      videos = await chosenVideos(folder, videoIds)
+      const problems = (await readiness()).problems.filter((problem) => OBJECTS_NEEDS.includes(problem))
+      if (problems.length > 0) throw new Error(`analysis is not ready: ${problems.join(", ")}`)
+      const { llm } = await deps.settings.read()
+      transport = await transportFor(llm)
+      llmModel = llm.model
+    } catch (error) {
+      objectsRun = null
+      throw error
+    }
+    // the lock is let go before the end is told, so a screen told may start the next run at once
+    void findObjects(folder, videos, transport, llmModel, controller.signal).then(
+      () => {
+        objectsRun = null
+        deps.send({ type: "analysis-finished", folder, outcome: "done" })
+      },
+      (error: unknown) => {
+        objectsRun = null
+        if (controller.signal.aborted) deps.send({ type: "analysis-finished", folder, outcome: "cancelled" })
+        else deps.send({ type: "analysis-finished", folder, outcome: "failed", error: String(error) })
+      },
+    )
+  }
+
   return {
     readiness,
     start,
+    locateObjects,
 
     cancel(): void {
       job?.controller.abort()
+      objectsRun?.abort()
     },
 
     /** The project's videos whose analysis is cached already, so the user can go straight on. */
     async analysed(folder: string): Promise<string[]> {
       return analysedVideos({ ...deps, whisperModelId: model.id }, folder)
+    },
+
+    /** The project's analysed videos whose objects were never found, which the screen offers to find. */
+    async withoutObjects(folder: string): Promise<string[]> {
+      return videosWithoutObjects({ ...deps, whisperModelId: model.id }, folder)
     },
 
     /** What comparing the lines said twice will take, for the project's videos whose speech is read already. */

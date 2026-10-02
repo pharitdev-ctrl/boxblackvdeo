@@ -1,0 +1,26 @@
+{
+ "ai_group_type": "",
+ "create_time": 1790000000,
+ "duration": 4000000,
+ "enter_from": 0,
+ "extra_info": "0123456789abcdef.wav",
+ "file_Path": "/Users/someone/Movies/CapCut/BOXBLACK/sounds/0123456789abcdef.wav",
+ "height": 0,
+ "id": "bbbbbbbb-0000-4000-8000-000000000001",
+ "import_time": 1790000000,
+ "import_time_ms": 1790000000000000,
+ "item_source": 1,
+ "material_color_tag": "",
+ "md5": "",
+ "metetype": "music",
+ "roughcut_time_range": {
+  "duration": 4000000,
+  "start": 0
+ },
+ "sub_time_range": {
+  "duration": -1,
+  "start": -1
+ },
+ "type": 0,
+ "width": 0
+}

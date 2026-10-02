@@ -1,0 +1,54 @@
+{
+ "speeds": {
+  "id": "AAAAAAAA-0000-4000-8000-000000000010",
+  "type": "speed",
+  "mode": 0,
+  "speed": 1.0,
+  "curve_speed": null
+ },
+ "placeholder_infos": {
+  "id": "AAAAAAAA-0000-4000-8000-000000000011",
+  "type": "placeholder_info",
+  "meta_type": "none",
+  "res_path": "",
+  "res_text": "",
+  "error_path": "",
+  "error_text": ""
+ },
+ "beats": {
+  "id": "AAAAAAAA-0000-4000-8000-000000000012",
+  "type": "beats",
+  "enable_ai_beats": false,
+  "gear": 404,
+  "gear_count": 0,
+  "mode": 404,
+  "user_beats": [],
+  "user_delete_ai_beats": null,
+  "ai_beats": {
+   "melody_url": "",
+   "melody_path": "",
+   "beats_url": "",
+   "beats_path": "",
+   "melody_percents": [
+    0.0
+   ],
+   "beat_speed_infos": []
+  }
+ },
+ "sound_channel_mappings": {
+  "id": "AAAAAAAA-0000-4000-8000-000000000013",
+  "type": "",
+  "audio_channel_mapping": 0,
+  "is_config_open": false
+ },
+ "vocal_separations": {
+  "id": "AAAAAAAA-0000-4000-8000-000000000014",
+  "type": "vocal_separation",
+  "choice": 0,
+  "removed_sounds": [],
+  "time_range": null,
+  "production_path": "",
+  "final_algorithm": "",
+  "enter_from": ""
+ }
+}

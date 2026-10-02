@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 import { userEvent } from "@testing-library/user-event"
 import type {
   AppEvent,
+  ComposedSoundView,
   EmphasisPointView,
   EmphasisSceneView,
   EmphasisSentenceView,
@@ -12,12 +13,14 @@ import type {
   HighlightGroupView,
   HighlightPreview,
   InsertView,
+  MoveView,
   PostRequest,
   PostRunView,
   PostWork,
   PostWorkState,
   RendererApi,
   WriteResult,
+  ZoomView,
 } from "../../../shared/api.ts"
 import { mediaUrl } from "../../../shared/media-url.ts"
 import { cutPlan, detail, emphasisView, fakeApi, highlightGroups, highlightPreview, settingsView, subtitleLines } from "../../test/fake-api.ts"
@@ -61,17 +64,26 @@ async function openSettings(id: PostTab) {
   return panel()
 }
 const wholeClipPick = () => screen.getByRole("button", { name: new RegExp(`^${t("post.wholeClip")}`) })
-const planButton = () => screen.getByRole("button", { name: new RegExp(t("post.plan")) })
+/** The AI menu's first item, which runs the whole plan; the menu must be open. */
+const planItem = () => within(screen.getByRole("group", { name: t("post.ai") })).getByRole("button", { name: `✦ ${t("post.planAll")}` })
+/** Opens the AI menu and runs the whole plan from it, once it can run. */
+async function planAll() {
+  await openAi()
+  await waitFor(() => expect(planItem()).toHaveProperty("disabled", false))
+  await userEvent.click(planItem())
+}
+/** Why the item cannot run, as it is read with it. */
+const reasonOf = (button: HTMLElement) => document.getElementById(button.getAttribute("aria-describedby") ?? "")?.textContent ?? null
 
 /* the page */
 
-test("the post page has five tabs in the order of the work, and the rough cut open first", async () => {
+test("the post page has six tabs in the order of the work, and the rough cut open first", async () => {
   renderScreen()
   await ready()
   expect(screen.getAllByRole("tab").map((one) => one.getAttribute("data-tab"))).toEqual([...POST_TABS])
   expect(screen.getAllByRole("tab").map((one) => one.childNodes[0]!.textContent)).toEqual(POST_TABS.map((id) => t(`post.tab.${id}` as MessageKey)))
-  // exactly these five, in these words: colour is not the app's work (M26 cancelled, 0.4.1)
-  expect(screen.getAllByRole("tab").map((one) => one.childNodes[0]!.textContent)).toEqual(["ตัดหยาบ", "จุดเน้น", "กราฟิกและเทคนิค", "เสียง", "ซับ"])
+  // exactly these six, in these words: colour is not the app's work (M26 cancelled, 0.4.1), and the graphics have a tab of their own (0.7.0)
+  expect(screen.getAllByRole("tab").map((one) => one.childNodes[0]!.textContent)).toEqual(["ตัดหยาบ", "จุดเน้น", "ข้อความและเทคนิค", "กราฟิก", "เสียง", "ซับ"])
   expect(tab("cut").getAttribute("aria-selected")).toBe("true")
 })
 
@@ -79,7 +91,8 @@ test("each beat is listed with what it carries for the open tab, and the first i
   const preview = highlightPreview({
     groups: highlightGroups(),
     sounds: [{ effectId: "s1", name: "ปัง" }],
-    cues: [{ anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 100_000, what: 'ข้อความเด่น "เอาล่ะ"', beatId: "b1", effectId: "s1", soundName: "ปัง", edited: false }],
+    // the user's own CapCut sound, which the sound tab lists, and so counts
+    cues: [{ anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 100_000, what: 'ข้อความเด่น "เอาล่ะ"', beatId: "b1", effectId: "s1", soundName: "ปัง", edited: true }],
     emphasis: emphasisOf(),
   })
   renderScreen({
@@ -96,7 +109,7 @@ test("each beat is listed with what it carries for the open tab, and the first i
   expect(screen.getByText(t("edit.summaryTarget", { total: "0:12", target: "0:30", pieces: 5 }))).toBeTruthy()
   // the rough cut has no marks of its own
   expect(within(beatPick("เปิดเรื่อง")).queryByText(/Aa|🔊|★|CC/)).toBeNull()
-  await openTab("graphics")
+  await openTab("techniques")
   // the fake's groups sit in the first and the last beat
   await waitFor(() => expect(within(beatPick("เปิดเรื่อง")).getByText("Aa 1")).toBeTruthy())
   expect(within(beatPick("ปิดท้าย")).getByText("Aa 1")).toBeTruthy()
@@ -117,11 +130,11 @@ test("a beat's marks are read out in words, and the open tab's body is its panel
   renderScreen({ ...withText, previewHighlights: async () => highlightPreview({ groups: highlightGroups(), emphasis: emphasisOf() }) })
   await ready()
   expect(screen.getByRole("tabpanel", { name: t("post.tab.cut") })).toBeTruthy()
-  await openTab("graphics")
+  await openTab("techniques")
   await waitFor(() => expect(within(beatPick("เปิดเรื่อง")).getByText("Aa 1")).toBeTruthy())
   expect(within(beatPick("เปิดเรื่อง")).getByText("Aa 1").getAttribute("aria-hidden")).toBe("true")
   expect(screen.getAllByRole("button", { name: new RegExp(t("post.mark.text", { count: 1 })) })).toContain(beatPick("เปิดเรื่อง"))
-  expect(screen.getByRole("tabpanel", { name: new RegExp(t("post.tab.graphics")) })).toBe(panel())
+  expect(screen.getByRole("tabpanel", { name: new RegExp(t("post.tab.techniques")) })).toBe(panel())
   await openTab("emphasis")
   expect(screen.getAllByRole("button", { name: new RegExp(t("post.mark.emphasis", { count: 1 })) })).toContain(beatPick("เปิดเรื่อง"))
 })
@@ -129,7 +142,7 @@ test("a beat's marks are read out in words, and the open tab's body is its panel
 test("choosing another beat shows that beat, and only what belongs to it", async () => {
   renderScreen(withText)
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   // the opening's group, not the ending's
   expect(screen.getByText(t("highlights.group", { start: "0:00.1", end: "0:02.1" }))).toBeTruthy()
   expect(screen.queryByText(t("highlights.group", { start: "0:08.6", end: "0:10.0" }))).toBeNull()
@@ -143,7 +156,7 @@ test("choosing another beat shows that beat, and only what belongs to it", async
 test("the whole clip is a choice above the beats, and shows what every beat carries", async () => {
   renderScreen(withText)
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findByText(t("highlights.group", { start: "0:00.1", end: "0:02.1" }))
   await userEvent.click(wholeClipPick())
   expect(screen.getByRole("heading", { name: t("post.wholeClip") })).toBeTruthy()
@@ -311,7 +324,7 @@ const withText = {
 test("with highlight text on, the beat's groups are shown with their lines", async () => {
   renderScreen(withText)
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   expect(screen.getByText(t("highlights.group", { start: "0:00.1", end: "0:02.1" }))).toBeTruthy()
   expect((screen.getByRole("textbox", { name: t("highlights.lineLabel", { number: 1, time: "0:00.1" }) }) as HTMLInputElement).value).toBe("เอาล่ะ")
   expect(screen.getByText(t("highlights.dodge.above"))).toBeTruthy()
@@ -320,7 +333,7 @@ test("with highlight text on, the beat's groups are shown with their lines", asy
 test("a beat with no highlight text says how to add some", async () => {
   renderScreen({ ...withText, previewHighlights: async () => highlightPreview() })
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   expect(screen.getByText(t("edit.textEmpty"))).toBeTruthy()
   expect(screen.getByText(t("edit.textEmptyHint"))).toBeTruthy()
 })
@@ -329,7 +342,7 @@ test("a group a graphic takes the place of says so on its row, where the placeme
   const [opening, ending] = highlightGroups()
   const { api } = renderScreen({ ...withText, previewHighlights: async () => highlightPreview({ groups: [{ ...opening!, replaced: true }, ending!], styleByAi: "headline", style: "headline" }) })
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   const row = screen.getByText(t("highlights.group", { start: "0:00.1", end: "0:02.1" })).closest("li")!
   expect(t("highlights.replaced")).toBe("มีกราฟิกแทน ไม่ขึ้นในคลิป")
   const note = within(row).getByText(t("highlights.replaced"))
@@ -360,7 +373,7 @@ test("a group a graphic takes the place of says so on its row, where the placeme
 test("a line is saved when the user leaves it; a cleared line and a group can be removed", async () => {
   const { api } = renderScreen(withText)
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   const line = screen.getByRole("textbox", { name: t("highlights.lineLabel", { number: 1, time: "0:00.1" }) })
   await userEvent.clear(line)
   await userEvent.type(line, "เอาล่ะนะ")
@@ -404,7 +417,7 @@ test("lines removed one after another are the lines clicked: the next waits for 
     },
   })
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   const removeOf = (text: string) => within(screen.getByDisplayValue(text).closest("li")!).getByRole("button", { name: t("highlights.removeLine") })
   holding = true
   await userEvent.click(removeOf("หนึ่ง"))
@@ -427,7 +440,7 @@ test("lines removed one after another are the lines clicked: the next waits for 
 test("a line left unchanged is not saved again", async () => {
   const { api } = renderScreen(withText)
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await userEvent.click(screen.getByRole("textbox", { name: t("highlights.lineLabel", { number: 1, time: "0:00.1" }) }))
   await userEvent.tab()
   expect(calls(api, "editHighlightLine")).toEqual([])
@@ -436,7 +449,7 @@ test("a line left unchanged is not saved again", async () => {
 test("choosing a style or a position saves it", async () => {
   const { api } = renderScreen(withText)
   await ready()
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   await userEvent.selectOptions(await within(settings).findByRole("combobox", { name: t("highlights.style") }), "cute-pink")
   expect(api.calls).toContainEqual(["setHighlightStyle", FOLDER, "cute-pink"])
   await userEvent.click(within(settings).getByRole("radio", { name: t("highlights.position.bottom") }))
@@ -446,7 +459,7 @@ test("choosing a style or a position saves it", async () => {
 test("the highlight settings show the four colours of the style in force", async () => {
   renderScreen(withText)
   await ready()
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   // headline: white text, gold accent, teal second colour, near-black bar
   expect(await within(settings).findByRole("img", { name: `${t("highlights.swatch.text")} #ffffff` })).toBeTruthy()
   expect(within(settings).getByRole("img", { name: `${t("highlights.swatch.accent")} #f2c14e` })).toBeTruthy()
@@ -458,7 +471,7 @@ test("the highlight settings show the four colours of the style in force", async
 test("the user's own colours are picked with the highlight settings and saved with them", async () => {
   const { api } = renderScreen({ ...withText, previewHighlights: async () => highlightPreview({ groups: highlightGroups(), style: "custom", styleByAi: "headline" }) })
   await ready()
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   expect(((await within(settings).findByRole("combobox", { name: t("highlights.style") })) as HTMLSelectElement).value).toBe("custom")
   const accent = within(settings).getByLabelText(t("highlights.swatch.accent")) as HTMLInputElement
   expect(accent.type).toBe("color")
@@ -475,14 +488,14 @@ test("the user's own colours are picked with the highlight settings and saved wi
 test("the style Claude chose is marked as its choice", async () => {
   renderScreen(withText)
   await ready()
-  await openSettings("graphics")
+  await openSettings("techniques")
   expect(await screen.findByRole("option", { name: t("highlights.styleByAi", { name: "พาดหัวคลาสสิก" }) })).toBeTruthy()
 })
 
 test("a changed outline, hidden groups and missing pictures are pointed out with the highlight settings", async () => {
   renderScreen({ ...withText, previewHighlights: async () => highlightPreview({ groups: highlightGroups(), outlineChanged: true, hidden: 2, needsPictures: true }) })
   await ready()
-  await openSettings("graphics")
+  await openSettings("techniques")
   expect(await screen.findByText(t("highlights.outlineChanged"))).toBeTruthy()
   expect(screen.getByText(t("highlights.hidden", { count: 2 }))).toBeTruthy()
   expect(screen.getByText(t("highlights.needsPictures"))).toBeTruthy()
@@ -492,14 +505,14 @@ test("the highlight settings also count the points the cut hides, since Claude's
   // Claude's groups whose point is not placed are counted with the points, not with the groups
   renderScreen({ ...withText, previewHighlights: async () => highlightPreview({ groups: highlightGroups(), hidden: 1, emphasis: emphasisView({ hidden: 3 }) }) })
   await ready()
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   expect(await within(settings).findByText(t("emphasis.hidden", { count: 3 }))).toBeTruthy()
   expect(within(settings).getByText(t("highlights.hidden", { count: 1 }))).toBeTruthy()
   cleanup()
 
   renderScreen(withText)
   await ready()
-  const none = await openSettings("graphics")
+  const none = await openSettings("techniques")
   await within(none).findByRole("combobox", { name: t("highlights.style") })
   expect(within(none).queryByText(t("emphasis.hidden", { count: 0 }))).toBeNull()
 })
@@ -510,6 +523,8 @@ const openAi = async () => {
   await userEvent.click(screen.getByRole("button", { name: new RegExp(t("post.ai")) }))
   return screen.getByRole("group", { name: t("post.ai") })
 }
+/** The AI menu, opened if it is shut: the level is set at its head, and choosing one leaves it open. */
+const levelMenu = async () => screen.queryByRole("group", { name: t("post.ai") }) ?? (await openAi())
 
 test("a run going can be stopped from the AI menu, and a stop is not an error", async () => {
   let stop!: () => void
@@ -518,8 +533,7 @@ test("a run going can be stopped from the AI menu, and a stop is not an error", 
     cancelAi: async () => stop(),
   })
   await ready()
-  await waitFor(() => expect(planButton()).toHaveProperty("disabled", false))
-  await userEvent.click(planButton())
+  await planAll()
   await userEvent.click(await screen.findByRole("button", { name: t("edit.ai.stop") }))
   expect(calls(api, "cancelAi")).toHaveLength(1)
   await waitFor(() => expect(screen.queryByRole("button", { name: t("edit.ai.stop") })).toBeNull())
@@ -532,24 +546,90 @@ test("a work that took Claude far too long says so in plain words", async () => 
   expect(await screen.findByText(t("post.run.failed", { work: t("post.work.emphasis"), message: t("edit.ai.timedOut") }))).toBeTruthy()
 })
 
-test("the plan button ends the cut tab and runs the whole plan with the settings on screen, even before the groups are placed for them", async () => {
+test("ทำทั้งหมด heads the AI menu in bold, over a line and then the works one by one, and there is no plan button of its own on the bar or in the cut tab", async () => {
+  renderScreen(withPoints())
+  await ready()
+  expect(t("post.planAll")).toBe("ทำทั้งหมด")
+  expect(within(bar()).queryByRole("button", { name: `✦ ${t("post.planAll")}` })).toBeNull()
+  expect(screen.queryByText(t("post.planHint"))).toBeNull()
+  const menu = await openAi()
+  const rows = [...menu.querySelectorAll(".ai-items > li")]
+  expect(rows.map((row) => (row.getAttribute("role") === "separator" ? "—" : row.querySelector("button")!.textContent))).toEqual([
+    `✦ ${t("post.planAll")}`,
+    "—",
+    t("post.ai.rethink.emphasis"),
+    t("post.ai.rethink.techniques"),
+    t("post.ai.rethink.graphics"),
+    t("post.ai.rethink.sounds"),
+    t("post.ai.rethink.subtitles"),
+  ])
+  expect(planItem().classList.contains("lead")).toBe(true)
+  // its hint says what the whole plan does
+  expect(planItem().title).toBe(t("post.planHint"))
+})
+
+test("ทำทั้งหมด runs the whole plan with the settings on screen from any tab, even before the groups are placed for them", async () => {
   const { api } = renderScreen({
     ...withText,
     // placing for the new position never lands while the test runs
     previewHighlights: (_folder, _rules, options) => new Promise((resolve) => (options.position === "bottom" ? undefined : setTimeout(() => resolve(PREVIEW()), 0))),
   })
   await ready()
-  expect(screen.getByText(t("post.planHint"))).toBeTruthy()
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   await userEvent.click(await within(settings).findByRole("radio", { name: t("highlights.position.bottom") }))
-  await openTab("cut")
-  await waitFor(() => expect(planButton()).toHaveProperty("disabled", false))
-  await userEvent.click(planButton())
+  await planAll()
   await waitFor(() => expect(calls(api, "planPost")).toHaveLength(1))
   const [, folder, request] = calls(api, "planPost")[0] as [string, string, PostRequest]
   expect(folder).toBe(FOLDER)
   expect(request.rules).toEqual(settingsView().cut)
   expect(request.view).toMatchObject({ position: "bottom", highlightsOn: true })
+})
+
+test("ทำทั้งหมด waits, and says why, before the preview is ready and while a run goes; it does not wait for points, since it places them", async () => {
+  let finish!: (view: PostRunView) => void
+  renderScreen({
+    planPost: () => new Promise((resolve) => (finish = resolve)),
+    // the preview never lands, so there is nothing yet to plan on
+    previewHighlights: () => new Promise(() => undefined),
+  })
+  await ready()
+  await openAi()
+  expect(planItem()).toHaveProperty("disabled", true)
+  expect(reasonOf(planItem())).toBe(t("edit.busy"))
+  cleanup()
+
+  const ran = renderScreen({ ...withPoints({ points: [] }), planPost: () => new Promise((resolve) => (finish = resolve)) })
+  await ready()
+  await openAi()
+  // no points yet: the works that stand on them wait, the whole plan does not
+  await waitFor(() => expect(planItem()).toHaveProperty("disabled", false))
+  expect(planItem().getAttribute("aria-describedby")).toBeNull()
+  await userEvent.click(planItem())
+  await waitFor(() => expect(calls(ran.api, "planPost")).toHaveLength(1))
+  // the menu's button names the run and the stop comes right after it, in the same row, as for any run
+  const stop = await within(bar()).findByRole("button", { name: t("edit.ai.stop") })
+  const running = within(bar()).getByRole("button", { name: `✦ ${t("post.planRunning")}` })
+  expect(stop.parentElement).toBe(running.parentElement)
+  expect(running.nextElementSibling).toBe(stop)
+  expect(running.parentElement!.classList.contains("ai-menu")).toBe(true)
+  // the run is said once on the bar: the write's reason beside it does not say it again
+  expect(within(bar()).getAllByText(/AI กำลังวางแผน/)).toHaveLength(1)
+  expect(bar().querySelector(".write-reason")).toBeNull()
+  await userEvent.click(running)
+  // every item waits for the same run, so the menu says why once, at its head, and each item is read with that
+  const menu = screen.getByRole("group", { name: t("post.ai") })
+  expect(within(menu).getAllByText(t("post.planRunning"))).toHaveLength(1)
+  expect(menu.querySelector(".ai-note")!.textContent).toBe(t("post.planRunning"))
+  expect(menu.querySelectorAll(".ai-items .hint")).toHaveLength(0)
+  for (const item of within(menu).getAllByRole("button")) {
+    expect(item).toHaveProperty("disabled", true)
+    expect(reasonOf(item)).toBe(t("post.planRunning"))
+  }
+  // the level is a setting, not a run: it can still be changed while one goes, above the note that holds the items
+  for (const level of within(menu).getAllByRole("radio")) expect(level).toHaveProperty("disabled", false)
+  expect(menu.firstElementChild!.contains(within(menu).getByRole("radiogroup", { name: t("flair.level") }))).toBe(true)
+  await act(async () => finish({ running: false, states: {} }))
+  await waitFor(() => expect(planItem()).toHaveProperty("disabled", false))
 })
 
 test("a plan run shows on the tabs: a spinner on those working, a warning on one that failed, and counts once they are done", async () => {
@@ -561,8 +641,11 @@ test("a plan run shows on the tabs: a spinner on those working, a warning on one
     api.emit(planEvent("sounds", { state: "failed", error: "Claude is busy" }))
     api.emit(planEvent("subtitles", { state: "failed", error: "cancelled" }))
   })
-  await waitFor(() => expect(within(tab("graphics")).getByRole("img", { name: t("post.tabBusy") })).toBeTruthy())
-  expect(tab("graphics").querySelector(".tab-count")).toBeNull()
+  await waitFor(() => expect(within(tab("techniques")).getByRole("img", { name: t("post.tabBusy") })).toBeTruthy())
+  expect(tab("techniques").querySelector(".tab-count")).toBeNull()
+  // the text is not the graphics' work: their tab neither spins nor loses its count
+  expect(within(tab("graphics")).queryByRole("img")).toBeNull()
+  expect(tab("graphics").querySelector(".tab-count")).not.toBeNull()
   // the strip under the tabs names the work running, over a bar of how many of the run's works are over: three of four
   expect(screen.getByText(t("post.run.running", { work: t("post.work.text") }))).toBeTruthy()
   expect(screen.getByRole("progressbar", { name: t("post.planRunning") }).getAttribute("aria-valuenow")).toBe("75")
@@ -571,8 +654,12 @@ test("a plan run shows on the tabs: a spinner on those working, a warning on one
   expect(within(tab("subtitles")).queryByRole("img")).toBeNull()
   await waitFor(() => expect(tab("emphasis").querySelector(".tab-count")!.textContent).toBe("1"))
   act(() => api.emit(planEvent("text", { state: "done", count: 1, dropped: 0 })))
-  await waitFor(() => expect(within(tab("graphics")).queryByRole("img", { name: t("post.tabBusy") })).toBeNull())
-  expect(tab("graphics").querySelector(".tab-count")).not.toBeNull()
+  await waitFor(() => expect(within(tab("techniques")).queryByRole("img", { name: t("post.tabBusy") })).toBeNull())
+  expect(tab("techniques").querySelector(".tab-count")).not.toBeNull()
+  // the graphics work spins the graphics tab alone
+  act(() => api.emit(planEvent("graphics", { state: "running" })))
+  await waitFor(() => expect(within(tab("graphics")).getByRole("img", { name: t("post.tabBusy") })).toBeTruthy())
+  expect(within(tab("techniques")).queryByRole("img")).toBeNull()
 })
 
 test("the strip under the tabs says how each work went: counts, what could not be used, a skip, a failure, and a stop in plain words", async () => {
@@ -618,9 +705,9 @@ test("while the graphics are being written the strip counts them; before the cou
   act(() => api.emit(planEvent("graphics", { state: "running", done: 2, total: 5 })))
   expect(screen.getByText("กำลังเขียนกราฟิก 2 จาก 5")).toBeTruthy()
   expect(screen.queryByText("กำลังเขียนกราฟิก 0 จาก 5")).toBeNull()
-  // only the graphics are counted: another work is said to run, whatever its state carries
-  act(() => api.emit(planEvent("sounds", { state: "running", done: 1, total: 2 })))
-  expect(screen.getByText(running("sounds"))).toBeTruthy()
+  // the graphics and the sounds are counted (the sounds' count is said in the sound tab's tests): another work is said to run, whatever its state carries
+  act(() => api.emit(planEvent("techniques", { state: "running", done: 1, total: 2 })))
+  expect(screen.getByText(running("techniques"))).toBeTruthy()
   // the count is of graphics written, not of the run's works: the bar still counts the works that are over
   expect(screen.getByRole("progressbar", { name: t("post.planRunning") }).getAttribute("aria-valuenow")).toBe("0")
   act(() => api.emit(planEvent("graphics", { state: "done", count: 4, dropped: 1 })))
@@ -729,6 +816,7 @@ test("when the points fail, the works that stand on them are skipped and the str
   expect(screen.getByText(t("post.run.done", { work: work("subtitles"), count: 2 }))).toBeTruthy()
   // a skip is not a failure of its own: only the points' tab is flagged
   expect(within(tab("emphasis")).getByRole("img", { name: t("post.tabFailed") })).toBeTruthy()
+  expect(within(tab("techniques")).queryByRole("img")).toBeNull()
   expect(within(tab("graphics")).queryByRole("img")).toBeNull()
   expect(within(tab("sound")).queryByRole("img")).toBeNull()
 })
@@ -740,14 +828,17 @@ test("the AI menu thinks one work again: the points through planEmphasis, the ot
   await screen.findByText("เอาล่ะครับ")
   const menu = await openAi()
   expect(within(menu).getAllByRole("button").map((button) => button.textContent)).toEqual([
+    `✦ ${t("post.planAll")}`,
     t("post.ai.rethink.emphasis"),
+    t("post.ai.rethink.techniques"),
     t("post.ai.rethink.graphics"),
     t("post.ai.rethink.sounds"),
     t("post.ai.rethink.subtitles"),
   ])
+  expect(within(menu).getAllByRole("button").map((button) => button.textContent)).toEqual(["✦ ทำทั้งหมด", "คิดใหม่: จุดเน้น", "คิดใหม่: ข้อความและเทคนิค", "คิดใหม่: กราฟิก", "คิดใหม่: เสียง", "คิดใหม่: ซับ"])
   await userEvent.click(within(menu).getByRole("button", { name: t("post.ai.rethink.emphasis") }))
   await waitFor(() => expect(calls(api, "planEmphasis")).toEqual([["planEmphasis", FOLDER, settingsView().cut]]))
-  for (const work of ["graphics", "sounds", "subtitles"] as const) {
+  for (const work of ["techniques", "graphics", "sounds", "subtitles"] as const) {
     // while one runs the menu's button names the run instead
     await waitFor(() => expect(screen.getByRole("button", { name: new RegExp(t("post.ai")) })).toBeTruthy())
     const again = await openAi()
@@ -757,6 +848,7 @@ test("the AI menu thinks one work again: the points through planEmphasis, the ot
   }
   await waitFor(() =>
     expect(calls(api, "rethinkPost").map((call) => call.slice(0, 3))).toEqual([
+      ["rethinkPost", FOLDER, "techniques"],
       ["rethinkPost", FOLDER, "graphics"],
       ["rethinkPost", FOLDER, "sounds"],
       ["rethinkPost", FOLDER, "subtitles"],
@@ -771,13 +863,40 @@ test("the works that stand on points wait for them, and say so", async () => {
   await screen.findByText(t("emphasis.empty"))
   const menu = await openAi()
   expect(within(menu).getByRole("button", { name: t("post.ai.rethink.emphasis") })).toHaveProperty("disabled", false)
+  expect(within(menu).getByRole("button", { name: t("post.ai.rethink.techniques") })).toHaveProperty("disabled", true)
   expect(within(menu).getByRole("button", { name: t("post.ai.rethink.graphics") })).toHaveProperty("disabled", true)
   expect(within(menu).getByRole("button", { name: t("post.ai.rethink.sounds") })).toHaveProperty("disabled", true)
-  expect(within(menu).getAllByText(t("post.ai.planFirst"))).toHaveLength(2)
-  // each reason is read with the item it holds back
-  const reason = within(menu).getByRole("button", { name: t("post.ai.rethink.graphics") }).getAttribute("aria-describedby")
-  expect(document.getElementById(reason!)?.textContent).toBe(t("post.ai.planFirst"))
+  // the three share one reason, so it is said once, at the foot of the menu after the list, and not at its head
+  expect(within(menu).getAllByText(t("post.ai.planFirstHere"))).toHaveLength(1)
+  const foot = menu.querySelector<HTMLElement>(".ai-foot")!
+  expect(foot.textContent).toBe(t("post.ai.planFirstHere"))
+  expect(foot.previousElementSibling!.classList.contains("ai-items")).toBe(true)
+  expect(menu.querySelector(".ai-note:not(.ai-foot)")).toBeNull()
+  expect(menu.querySelectorAll(".ai-items .hint")).toHaveLength(0)
+  // inside the AI menu it names the item to press, not the menu itself
+  expect(t("post.ai.planFirstHere")).toBe("ต้องกด ✦ ทำทั้งหมด ก่อน")
+  // each item it holds back is read with that one note
+  for (const work of ["techniques", "graphics", "sounds"] as const) {
+    expect(within(menu).getByRole("button", { name: t(`post.ai.rethink.${work}` as MessageKey) }).getAttribute("aria-describedby")).toBe(foot.id)
+  }
+  expect(within(menu).getByRole("button", { name: t("post.ai.rethink.emphasis") }).getAttribute("aria-describedby")).toBeNull()
   expect(within(menu).getByRole("button", { name: t("post.ai.rethink.subtitles") })).toHaveProperty("disabled", false)
+})
+
+test("a reason only one item has stays under that item, while the reason the others share is said once at the foot", async () => {
+  const plan = cutPlan()
+  renderScreen({ ...withPoints({ points: [] }), previewCut: async () => ({ ...plan, cuts: [] }) })
+  await ready()
+  const menu = await openAi()
+  await waitFor(() => expect(planItem()).toHaveProperty("disabled", true))
+  expect(reasonOf(planItem())).toBe(t("timeline.empty"))
+  const lone = document.getElementById(planItem().getAttribute("aria-describedby")!)!
+  expect(lone.closest("li")).toBe(planItem().closest("li"))
+  expect(lone.classList.contains("ai-reason")).toBe(true)
+  const foot = menu.querySelector<HTMLElement>(".ai-foot")!
+  expect(foot.textContent).toBe(t("post.ai.planFirstHere"))
+  expect(within(menu).getByRole("button", { name: t("post.ai.rethink.graphics") }).getAttribute("aria-describedby")).toBe(foot.id)
+  expect(menu.querySelector(".ai-note:not(.ai-foot)")).toBeNull()
 })
 
 test("the preview is read with the text on, and a new level reads the subtitle lines again once it is saved: they hide the words of the text that level shows", async () => {
@@ -793,8 +912,8 @@ test("the preview is read with the text on, and a new level reads the subtitle l
   await ready()
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(1))
   expect(calls(api, "previewHighlights")[0]![3]).toMatchObject({ highlightsOn: true })
-  const settings = await openSettings("emphasis")
-  await userEvent.click(await within(settings).findByRole("radio", { name: t("flair.level.heavy") }))
+  const menu = await levelMenu()
+  await userEvent.click(await within(menu).findByRole("radio", { name: t("flair.level.heavy") }))
   expect(api.calls).toContainEqual(["updateSettings", { flair: { ...FLAIR_ON, level: "heavy" } }])
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(2))
   expect(calls(api, "previewSubtitles")[1]).toEqual(["previewSubtitles", FOLDER, settingsView().cut, "line", true])
@@ -824,8 +943,8 @@ test("a new level holds the write until the subtitle lines it hides are read aga
   })
   await ready()
   const level = async (name: string) => {
-    const settings = await openSettings("emphasis")
-    await userEvent.click(await within(settings).findByRole("radio", { name }))
+    const menu = await levelMenu()
+    await userEvent.click(await within(menu).findByRole("radio", { name }))
   }
   // the write button is on the bar of this same page: the write waits there, and its reason says why
   await waitFor(() => expect(barWrite()).toHaveProperty("disabled", false))
@@ -847,8 +966,8 @@ test("a new level holds the write until the subtitle lines it hides are read aga
   await act(async () => saves.at(-1)!.reject(new Error("the settings could not be saved")))
   expect(await screen.findByText(t("error.generic", { message: "the settings could not be saved" }))).toBeTruthy()
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(3))
-  const settings = await openSettings("emphasis")
-  expect(((await within(settings).findByRole("radio", { name: t("flair.level.heavy") })) as HTMLInputElement).checked).toBe(true)
+  const menu = await levelMenu()
+  expect(((await within(menu).findByRole("radio", { name: t("flair.level.heavy") })) as HTMLInputElement).checked).toBe(true)
   await waitFor(() => expect(barWrite()).toHaveProperty("disabled", false))
   expect(calls(api, "previewSubtitles").at(-1)).toEqual(["previewSubtitles", FOLDER, settingsView().cut, "line", true])
 })
@@ -924,15 +1043,15 @@ function withHeldSaves() {
 }
 
 test.each([
-  ["the graphics switch", (settings: HTMLElement) => within(settings).findByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) }), { flair: { graphic: false } }],
-  ["the text looks' switch", (settings: HTMLElement) => within(settings).findByRole("switch", { name: new RegExp(`^${t("flair.text")}`) }), { flair: { text: false } }],
-  ["the text's position", (settings: HTMLElement) => within(settings).findByRole("radio", { name: t("highlights.position.bottom") }), { position: "bottom" }],
-] as const)("with the lines under the text hidden, a change of %s reads no subtitle lines until its save has landed, holds the write meanwhile, and then reads them once", async (_what, control, asked) => {
+  ["the graphics switch", "graphics", (settings: HTMLElement) => within(settings).findByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) }), { flair: { graphic: false } }],
+  ["the text looks' switch", "techniques", (settings: HTMLElement) => within(settings).findByRole("switch", { name: new RegExp(`^${t("flair.text")}`) }), { flair: { text: false } }],
+  ["the text's position", "techniques", (settings: HTMLElement) => within(settings).findByRole("radio", { name: t("highlights.position.bottom") }), { position: "bottom" }],
+] as const)("with the lines under the text hidden, a change of %s reads no subtitle lines until its save has landed, holds the write meanwhile, and then reads them once", async (_what, where, control, asked) => {
   const { api, saves, landSave, previewLanded } = withHeldSaves()
   await ready()
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(2))
   await waitFor(() => expect(barWrite()).toHaveProperty("disabled", false))
-  const settings = await openSettings("graphics")
+  const settings = await openSettings(where)
   await userEvent.click(await control(settings))
   expect(saves).toHaveLength(1)
   // the preview for what is on screen has landed, with another set of replaced groups or the same, while the save is still out
@@ -951,7 +1070,7 @@ test("with the lines under the text hidden, a position whose save fails goes bac
   const { api, failSave, previewLanded } = withHeldSaves()
   await ready()
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(2))
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   await userEvent.click(await within(settings).findByRole("radio", { name: t("highlights.position.bottom") }))
   await previewLanded({ position: "bottom" })
   expect(calls(api, "previewSubtitles")).toHaveLength(2)
@@ -997,9 +1116,10 @@ test("with the lines under the text hidden, a save of the flair that lands does 
   const { api, saves } = withHeldSaves()
   await ready()
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(2))
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   await userEvent.click(await within(settings).findByRole("radio", { name: t("highlights.position.bottom") }))
-  await userEvent.click(await within(settings).findByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) }))
+  const graphics = await openSettings("graphics")
+  await userEvent.click(await within(graphics).findByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) }))
   expect(saves).toHaveLength(2)
   // the flair's save lands; the position's is still out
   await act(async () => saves[1]!.resolve())
@@ -1043,8 +1163,8 @@ test("a new level leaves the subtitle lines alone while they hide nothing under 
   })
   await ready()
   await waitFor(() => expect(calls(api, "previewSubtitles")).toHaveLength(1))
-  const settings = await openSettings("emphasis")
-  await userEvent.click(await within(settings).findByRole("radio", { name: t("flair.level.heavy") }))
+  const menu = await levelMenu()
+  await userEvent.click(await within(menu).findByRole("radio", { name: t("flair.level.heavy") }))
   await waitFor(() => expect(calls(api, "previewHighlights")).toHaveLength(2))
   // nothing the lines leave out depends on the level: the write does not wait for them
   await waitFor(() => expect(barWrite()).toHaveProperty("disabled", false))
@@ -1062,7 +1182,6 @@ const flairPreview = (extra: Partial<HighlightPreview> = {}) =>
       { effectId: "s2", name: "ฟิ้ว" },
     ],
     slots: [{ anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 100_000, what: 'ข้อความเด่น "เอาล่ะ"', beatId: "b1" }],
-    pieces: [{ anchor: { videoId: "a", sourceUs: 1_750_000 }, atUs: 0, durationUs: 1_550_000, what: "ช่วงเปิด", beatId: "b1" }],
     media: [{ binId: "m1", name: "IMG_1.JPG", kind: "photo", what: "เล็บสีชมพู" }],
     ...extra,
   })
@@ -1465,7 +1584,7 @@ test("words picked in one beat, and a move begun there, are let go when another 
   expect(screen.queryByText(t("emphasis.moveHint"))).toBeNull()
 })
 
-test("a point the level holds back says so, and the level is set in the emphasis tab", async () => {
+test("a point the level holds back says so, and the level is set in the AI menu, not in the emphasis tab", async () => {
   const { api } = renderScreen(withPoints())
   await ready()
   await userEvent.click(beatPick("ภาพประกอบ"))
@@ -1474,9 +1593,33 @@ test("a point the level holds back says so, and the level is set in the emphasis
   const row = pointRow("หน้าร้านตอนกลางคืน")
   expect(within(row).getByText(t("emphasis.source.user"))).toBeTruthy()
   expect(within(row).getByText(new RegExp(t("emphasis.edited")))).toBeTruthy()
-  expect(screen.getByText(t("flair.level.mediumHint"))).toBeTruthy()
-  await userEvent.click(screen.getByRole("radio", { name: t("flair.level.heavy") }))
+  expect(screen.queryByRole("radiogroup", { name: t("flair.level") })).toBeNull()
+  expect(screen.queryByText(t("flair.level.mediumHint"))).toBeNull()
+  const menu = await openAi()
+  await userEvent.click(within(menu).getByRole("radio", { name: t("flair.level.heavy") }))
   expect(api.calls).toContainEqual(["updateSettings", { flair: { ...settingsView().flair, level: "heavy" } }])
+})
+
+test("the level heads the open AI menu with the one in force chosen; choosing another saves it, keeps the menu open and runs nothing", async () => {
+  const { api } = renderScreen(withPoints())
+  await ready()
+  const menu = await openAi()
+  // at the head, over the items and set apart from them by a line
+  const head = menu.firstElementChild!
+  expect(within(head as HTMLElement).getByRole("radiogroup", { name: t("flair.level") })).toBeTruthy()
+  expect(head.nextElementSibling!.getAttribute("role")).toBe("separator")
+  expect(within(menu).getByText(t("flair.level.mediumHint"))).toBeTruthy()
+  expect((within(menu).getByRole("radio", { name: t("flair.level.medium") }) as HTMLInputElement).checked).toBe(true)
+  expect(within(menu).getByRole("radio", { name: t("flair.level.heavy") })).toHaveProperty("disabled", false)
+  // the button on the bar says what it always said
+  expect(screen.getByRole("button", { name: `✦ ${t("post.ai")} ▾` })).toBeTruthy()
+
+  await userEvent.click(within(menu).getByRole("radio", { name: t("flair.level.heavy") }))
+  expect(api.calls).toContainEqual(["updateSettings", { flair: { ...settingsView().flair, level: "heavy" } }])
+  const still = screen.getByRole("group", { name: t("post.ai") })
+  expect((within(still).getByRole("radio", { name: t("flair.level.heavy") }) as HTMLInputElement).checked).toBe(true)
+  expect(within(still).getByText(t("flair.level.heavyHint"))).toBeTruthy()
+  expect(api.calls.filter(([name]) => name === "planPost" || name === "rethinkPost")).toHaveLength(0)
 })
 
 test("points the cut hides, and what the run on screen could not use of the points, are counted", async () => {
@@ -1613,9 +1756,9 @@ test("a picture that replaced Claude's on a point stays on the point's row, and 
     ["p1", "m2"],
     ["p1", "m1"],
   ])
-  // one cutaway on the point, which the graphics tab lists as the point's
+  // one cutaway on the point, which the techniques tab lists as the point's
   expect(within(pointRow("เอาล่ะครับ")).getByText(t("emphasis.items", { text: 1, zoom: 0, insert: 1, graphic: 1, sound: 1 }))).toBeTruthy()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findByText(t("edit.flairInserts"))
   expect(screen.getAllByRole("button", { name: new RegExp(t("inserts.removeLabel", { picture: ".+" })) })).toHaveLength(1)
   expect(screen.getByText(t("emphasis.from", { text: "เอาล่ะครับ" }))).toBeTruthy()
@@ -1637,18 +1780,30 @@ test("with no pictures in the project, or cutaways off, a point offers none", as
   expect(screen.queryByRole("button", { name: pick })).toBeNull()
 })
 
-test("the graphics and sound tabs say when the points changed since they were planned, and think again from there", async () => {
-  const { api } = renderScreen({ ...withFlair(), previewHighlights: async () => flairPreview({ emphasis: emphasisOf({ changed: { graphics: true, sounds: false } }) }) })
+test("the techniques, graphics and sound tabs say when the points changed since they were planned, and think again from there", async () => {
+  const { api } = renderScreen({ ...withFlair(), previewHighlights: async () => flairPreview({ emphasis: emphasisOf({ changed: { techniques: false, graphics: true, sounds: false } }) }) })
   await ready()
   await openTab("graphics")
   expect(await screen.findByText(t("emphasis.changed"))).toBeTruthy()
   await userEvent.click(screen.getByRole("button", { name: t("emphasis.changedAction") }))
   await waitFor(() => expect(calls(api, "rethinkPost").map((call) => call.slice(0, 3))).toEqual([["rethinkPost", FOLDER, "graphics"]]))
+  await openTab("techniques")
+  expect(screen.queryByText(t("emphasis.changed"))).toBeNull()
   await openTab("sound")
   expect(screen.queryByText(t("emphasis.changed"))).toBeNull()
   cleanup()
 
-  const { api: sounds } = renderScreen({ ...withFlair(), previewHighlights: async () => flairPreview({ emphasis: emphasisOf({ changed: { graphics: false, sounds: true } }) }) })
+  const { api: techniques } = renderScreen({ ...withFlair(), previewHighlights: async () => flairPreview({ emphasis: emphasisOf({ changed: { techniques: true, graphics: false, sounds: false } }) }) })
+  await ready()
+  await openTab("graphics")
+  await screen.findByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) })
+  expect(screen.queryByText(t("emphasis.changed"))).toBeNull()
+  await openTab("techniques")
+  await userEvent.click(await screen.findByRole("button", { name: t("emphasis.changedAction") }))
+  await waitFor(() => expect(calls(techniques, "rethinkPost").map((call) => call.slice(0, 3))).toEqual([["rethinkPost", FOLDER, "techniques"]]))
+  cleanup()
+
+  const { api: sounds } = renderScreen({ ...withFlair(), previewHighlights: async () => flairPreview({ emphasis: emphasisOf({ changed: { techniques: false, graphics: false, sounds: true } }) }) })
   await ready()
   await openTab("sound")
   await userEvent.click(await screen.findByRole("button", { name: t("emphasis.changedAction") }))
@@ -1657,7 +1812,7 @@ test("the graphics and sound tabs say when the points changed since they were pl
 
 test("the banners are read again once a run is over, sounds switched off included, and hidden while it runs", async () => {
   // main notes the points as planned on only after a work's "done", and a work switched off sends none
-  let changed = { graphics: true, sounds: true }
+  let changed = { techniques: false, graphics: true, sounds: true }
   const { api } = renderScreen({
     ...withFlair(),
     getSettings: async () => settingsView({ highlights: { enabled: true, position: "auto" as const, hideSubtitles: true, custom: DEFAULT_HIGHLIGHT_OPTIONS.custom }, flair: { ...FLAIR_ON, sound: false } }),
@@ -1680,7 +1835,7 @@ test("the banners are read again once a run is over, sounds switched off include
     api.emit(planEvent("sounds", { state: "skipped", reason: "off" }))
   })
   await waitFor(() => expect(calls(api, "previewHighlights").length).toBeGreaterThan(before))
-  changed = { graphics: false, sounds: false }
+  changed = { techniques: false, graphics: false, sounds: false }
   const reads = calls(api, "previewHighlights").length
   act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
   await waitFor(() => expect(calls(api, "previewHighlights")).toHaveLength(reads + 1))
@@ -1693,12 +1848,12 @@ test("the banners are read again once a run is over, sounds switched off include
   act(() => api.emit(planEvent("text", { state: "running" })))
   act(() => api.emit(planEvent("text", { state: "done", count: 1, dropped: 0 })))
   await act(async () => {})
-  changed = { graphics: false, sounds: true }
+  changed = { techniques: false, graphics: false, sounds: true }
   act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
   expect(await screen.findByText(t("emphasis.changed"))).toBeTruthy()
 })
 
-test("each item in the graphics and sound tabs says which point it was made for", async () => {
+test("each item in the techniques, graphics and sound tabs says which point it was made for", async () => {
   const from = t("emphasis.from", { text: "เอาล่ะครับ" })
   const [g1, g2] = highlightGroups()
   renderScreen({
@@ -1708,33 +1863,30 @@ test("each item in the graphics and sound tabs says which point it was made for"
         emphasis: emphasisOf(),
         groups: [{ ...g1!, pointId: "p1" }, g2!],
         graphics: [{ ...MOTION, pointId: "p1" }],
-        cues: [{ anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 100_000, what: 'ข้อความเด่น "เอาล่ะ"', beatId: "b1", effectId: "s1", soundName: "ปัง", edited: false, pointId: "p1" }],
+        composed: [{ ...SOUND, pointId: "p1" }],
       }),
   })
   await ready()
+  await openTab("techniques")
+  // the group; there is no move or zoom to name one
+  expect(await screen.findAllByText(from)).toHaveLength(1)
+  // cut short when the row is narrow, whole when pointed at
+  expect(screen.getByText(from).getAttribute("title")).toBe(from)
+  // a graphic planned before 0.7.0 names its point as before
   await openTab("graphics")
   await screen.findByText(MOTION.summary)
-  // the group and the graphic; the zoomable piece has no zoom, so it names nothing
-  expect(screen.getAllByText(from)).toHaveLength(2)
-  // cut short when the row is narrow, whole when pointed at
-  expect(screen.getAllByText(from).map((label) => label.getAttribute("title"))).toEqual([from, from])
+  expect(screen.getByText(from).getAttribute("title")).toBe(from)
   await openTab("sound")
   expect(await screen.findByText(from)).toBeTruthy()
 })
 
-test("a sound goes on a place in the sound tab and a zoom on a piece in the graphics tab, and a choice of my own is saved", async () => {
-  const { api } = renderScreen(withFlair())
+test("the techniques tab has no zoom to pick per piece any more: the moves are listed by time instead", async () => {
+  renderScreen(withFlair())
   await ready()
-  await openTab("sound")
-  expect(await screen.findByText(t("edit.flairPoints"))).toBeTruthy()
-  expect(screen.getByText('ข้อความเด่น "เอาล่ะ"')).toBeTruthy()
-  // a place offers a sound and nothing else
-  expect(screen.getAllByRole("combobox")).toHaveLength(1)
-  await userEvent.selectOptions(screen.getByRole("combobox", { name: t("flair.sound.label", { what: 'ข้อความเด่น "เอาล่ะ"' }) }), "s2")
-  expect(api.calls).toContainEqual(["setSoundCue", FOLDER, { kind: "highlight", groupId: "g1", line: 0 }, "s2"])
-  await openTab("graphics")
-  await userEvent.selectOptions(await screen.findByRole("combobox", { name: t("flair.zoom.label", { what: "ช่วงเปิด" }) }), "punch")
-  expect(api.calls).toContainEqual(["setZoom", FOLDER, { videoId: "a", sourceUs: 1_750_000 }, "punch"])
+  await openTab("techniques")
+  expect(await screen.findByText(t("edit.flairMoves"))).toBeTruthy()
+  expect(screen.queryByRole("combobox", { name: /การซูมของ/ })).toBeNull()
+  expect(screen.queryByRole("option", { name: t("flair.zoom.punch") })).toBeNull()
 })
 
 test("the sound tab says how many sounds are not playing, and why", async () => {
@@ -1756,15 +1908,15 @@ test("the sound tab says sounds that need CapCut Pro are left out, and not that 
 
 test("at the lightest level everything switched on shows: sounds, zooms and cutaways, and every pattern and exit for a group's look", async () => {
   renderScreen({
-    ...withFlair(),
+    ...withFlair({ composed: [SOUND] }),
     getSettings: async () =>
       settingsView({ highlights: { enabled: true, position: "auto" as const, hideSubtitles: true, custom: DEFAULT_HIGHLIGHT_OPTIONS.custom }, flair: { ...FLAIR_ON, level: "light" as const } }),
   })
   await ready()
   await openTab("sound")
-  expect(await screen.findByRole("combobox", { name: t("flair.sound.label", { what: 'ข้อความเด่น "เอาล่ะ"' }) })).toBeTruthy()
-  await openTab("graphics")
-  expect(screen.getByRole("combobox", { name: t("flair.zoom.label", { what: "ช่วงเปิด" }) })).toBeTruthy()
+  expect(await screen.findByText(SOUND.role)).toBeTruthy()
+  await openTab("techniques")
+  expect(screen.getByText(t("edit.flairMoves"))).toBeTruthy()
   expect(screen.getByText(t("inserts.pickHint"))).toBeTruthy()
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   const look = screen.getByRole("group", { name: t("edit.look") })
@@ -1776,7 +1928,7 @@ test("the sound tab says nothing about unused sounds when every one plays", asyn
   renderScreen(withFlair())
   await ready()
   await openTab("sound")
-  await screen.findByText(t("edit.flairPoints"))
+  await screen.findByText(t("sounds.composed"))
   expect(screen.queryByText(t("flair.unplaced", { count: 0 }))).toBeNull()
   expect(screen.queryByText(t("flair.missing", { count: 0 }))).toBeNull()
   expect(screen.queryByText(t("flair.lost", { count: 0 }))).toBeNull()
@@ -1797,10 +1949,10 @@ const ON_ROW: InsertView = {
   edited: true,
 }
 
-test("a cutaway is listed in the graphics tab, and taken off there by its own anchor", async () => {
+test("a cutaway is listed in the techniques tab, and taken off there by its own anchor", async () => {
   const { api } = renderScreen(withFlair({ inserts: [ON_ROW] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   expect(await screen.findByText(t("edit.flairInserts"))).toBeTruthy()
   expect(screen.getByText(ON_ROW.what)).toBeTruthy()
   await userEvent.click(screen.getByRole("button", { name: t("inserts.removeLabel", { picture: "เล็บสีชมพู" }) }))
@@ -1811,7 +1963,7 @@ test("a cutaway is listed in the graphics tab, and taken off there by its own an
 test("a cutaway says whether it covers the frame or sits as a card, and flips between the two", async () => {
   const { api } = renderScreen(withFlair({ inserts: [ON_ROW] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   const fit = await screen.findByRole("button", { name: t("inserts.fitLabel", { picture: "เล็บสีชมพู" }) })
   expect(fit.textContent).toBe(t("inserts.fit.cover"))
   await userEvent.click(fit)
@@ -1826,7 +1978,7 @@ test("two cutaways stacked at one place are listed apart, and each is changed an
   const errors = vi.spyOn(console, "error").mockImplementation(() => {})
   const { api } = renderScreen(withFlair({ inserts: [first, second] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await userEvent.click(await screen.findByRole("button", { name: t("inserts.fitLabel", { picture: "หน้าร้าน" }) }))
   expect(api.calls).toContainEqual(["setInsert", FOLDER, start, "m2", "cover", "m2"])
   const remove = () => screen.getByRole("button", { name: t("inserts.removeLabel", { picture: "เล็บสีชมพู" }) })
@@ -1840,45 +1992,27 @@ test("two cutaways stacked at one place are listed apart, and each is changed an
   // even one picture stacked twice at one place
   renderScreen(withFlair({ inserts: [first, { ...first, fit: "card" }] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   expect(await screen.findAllByRole("button", { name: t("inserts.removeLabel", { picture: "เล็บสีชมพู" }) })).toHaveLength(2)
   expect(errors.mock.calls.filter((call) => /same key/.test(String(call[0])))).toEqual([])
   errors.mockRestore()
 })
 
-test("with pictures but no cutaway yet, the graphics tab says where to pick one", async () => {
+test("with pictures but no cutaway yet, the techniques tab says where to pick one", async () => {
   renderScreen(withFlair())
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   expect(await screen.findByText(t("inserts.pickHint"))).toBeTruthy()
 })
 
-test("a sound already on a place shows as chosen, and can be taken off again", async () => {
-  const { api } = renderScreen(
-    withFlair({
-      cues: [{ anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 100_000, what: 'ข้อความเด่น "เอาล่ะ"', beatId: "b1", effectId: "s1", soundName: "ปัง", edited: true }],
-    }),
-  )
+test("a project with no spare pictures says so in the techniques tab", async () => {
+  renderScreen(withFlair({ media: [] }))
   await ready()
-  await openTab("sound")
-  const box = (await screen.findByRole("combobox", { name: t("flair.sound.label", { what: 'ข้อความเด่น "เอาล่ะ"' }) })) as HTMLSelectElement
-  expect(box.value).toBe("s1")
-  expect(screen.getByText(t("flair.edited"))).toBeTruthy()
-
-  await userEvent.selectOptions(box, "")
-  expect(api.calls).toContainEqual(["setSoundCue", FOLDER, { kind: "highlight", groupId: "g1", line: 0 }, null])
+  await openTab("techniques")
+  expect(await screen.findByText(t("flair.noMedia"))).toBeTruthy()
 })
 
-test("a machine with no sounds, and a project with no spare pictures, each say so in their own tab", async () => {
-  renderScreen(withFlair({ sounds: [], media: [] }))
-  await ready()
-  await openTab("sound")
-  expect(await screen.findByText(t("flair.noSounds"))).toBeTruthy()
-  await openTab("graphics")
-  expect(screen.getByText(t("flair.noMedia"))).toBeTruthy()
-})
-
-test("the graphics tab holds the switches of highlight text, its looks, zooms and cutaways, and each saves its choice", async () => {
+test("the techniques tab holds the switches of highlight text, its looks, zooms and cutaways, and each saves its choice; the graphics switch is not among them", async () => {
   const highlightsOn = { enabled: true, position: "auto" as const, hideSubtitles: true, custom: DEFAULT_HIGHLIGHT_OPTIONS.custom }
   const switches: [MessageKey, unknown][] = [
     ["highlights.enabled", { highlights: { ...highlightsOn, enabled: false } }],
@@ -1889,7 +2023,7 @@ test("the graphics tab holds the switches of highlight text, its looks, zooms an
   for (const [label, saved] of switches) {
     const { api } = renderScreen(withFlair())
     await ready()
-    await openTab("graphics")
+    await openTab("techniques")
     // a switch's hint is part of its name
     await userEvent.click(await within(panel()).findByRole("switch", { name: new RegExp(`^${t(label)}`) }))
     expect(api.calls, label).toContainEqual(["updateSettings", saved])
@@ -1899,25 +2033,30 @@ test("the graphics tab holds the switches of highlight text, its looks, zooms an
   // with the highlight text off, the zooms and cutaways are still there to set
   renderScreen({ ...withFlair(), getSettings: async () => settingsView({ flair: FLAIR_ON }) })
   await ready()
-  await openTab("graphics")
-  expect(await screen.findByRole("combobox", { name: t("flair.zoom.label", { what: "ช่วงเปิด" }) })).toBeTruthy()
+  await openTab("techniques")
+  expect(await screen.findByText(t("edit.flairMoves"))).toBeTruthy()
   expect(screen.getByText(t("edit.flairInserts"))).toBeTruthy()
   expect(screen.queryByRole("radio", { name: t("highlights.position.bottom") })).toBeNull()
+  // the graphics have a tab of their own, and so do their rows
+  expect(within(panel()).queryByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) })).toBeNull()
+  expect(screen.queryByText(t("edit.flairGraphics"))).toBeNull()
 })
 
 test("turning sounds off takes them away and saves the choice", async () => {
-  const { api } = renderScreen(withFlair())
+  const { api } = renderScreen(withFlair({ composed: [SOUND] }))
   await ready()
   const settings = await openSettings("sound")
+  expect(await screen.findByText(SOUND.role)).toBeTruthy()
   await userEvent.click(await within(settings).findByRole("switch", { name: t("flair.sound") }))
   expect(api.calls).toContainEqual(["updateSettings", { flair: { ...FLAIR_ON, sound: false } }])
-  expect(screen.queryByRole("combobox", { name: t("flair.sound.label", { what: 'ข้อความเด่น "เอาล่ะ"' }) })).toBeNull()
+  expect(screen.queryByText(SOUND.role)).toBeNull()
+  expect(screen.queryByText(t("sounds.none"))).toBeNull()
 })
 
 test("a group's look is changed in a popover of its own", async () => {
   const { api } = renderScreen(withFlair())
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   const look = screen.getByRole("group", { name: t("edit.look") })
@@ -1934,7 +2073,7 @@ test("changing one thing of a look keeps the rest as it shows, not as it was sto
   const shown = { ...g1!, look: { ...g1!.look, pattern: "stair" as const, tone: "accent" as const } }
   const { api } = renderScreen(withFlair({ groups: [shown, g2!] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   await userEvent.click(within(screen.getByRole("group", { name: t("edit.look") })).getByRole("radio", { name: t("flair.tone.alt") }))
@@ -1952,7 +2091,7 @@ const withHeldExit = () => {
 test("an exit held for want of CapCut Pro shows as chosen, followed by the exits the preview lists and no other", async () => {
   renderScreen(withHeldExit())
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   const look = screen.getByRole("group", { name: t("edit.look") })
@@ -1965,7 +2104,7 @@ test("an exit held for want of CapCut Pro shows as chosen, followed by the exits
 test("changing the pattern or the tone of a group with a held exit sends the held exit back, so the stored one is not lost", async () => {
   const { api } = renderScreen(withHeldExit())
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   const look = screen.getByRole("group", { name: t("edit.look") })
@@ -1978,7 +2117,7 @@ test("changing the pattern or the tone of a group with a held exit sends the hel
 test("choosing 'no exit' on a group with a held exit drops it on purpose", async () => {
   const { api } = renderScreen(withHeldExit())
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   await userEvent.selectOptions(screen.getByRole("combobox", { name: t("flair.exit") }), "หายเฉยๆ")
@@ -1988,7 +2127,7 @@ test("choosing 'no exit' on a group with a held exit drops it on purpose", async
 test("choosing another exit on a group with a held exit replaces the held one on purpose", async () => {
   const { api } = renderScreen(withHeldExit())
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   await userEvent.selectOptions(screen.getByRole("combobox", { name: t("flair.exit") }), "อัลเทอร์เนตเฟด")
@@ -2001,7 +2140,7 @@ const ALL_EXITS_PRO = "แอนิเมชันตอนหายไปทุ
 test("with no exit the user may have, the exit select is off, offers only 'no exit', and says every exit needs CapCut Pro", async () => {
   renderScreen(withFlair({ exits: [] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   const look = screen.getByRole("group", { name: t("edit.look") })
@@ -2018,7 +2157,7 @@ test("with no exit the user may have, a held exit keeps the select on, so it can
   const held = { ...g1!, heldExit: { id: "spin-out", name: "หมุนหายไป" } }
   const { api } = renderScreen(withFlair({ groups: [held, g2!], exits: [] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   const look = screen.getByRole("group", { name: t("edit.look") })
@@ -2038,7 +2177,7 @@ test("with no exit the user may have, a held exit's select waits while a change 
   const previews = heldPreviews(() => shown)
   const { api } = renderScreen({ ...withFlair(), previewHighlights: previews.previewHighlights })
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await waitFor(() => expect(placing()).toBe(false))
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
@@ -2067,7 +2206,7 @@ test("with exits the preview lists, the exit select is on and says nothing about
   for (const view of [withFlair(), withHeldExit()]) {
     renderScreen(view)
     await ready()
-    await openTab("graphics")
+    await openTab("techniques")
     await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
     await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
     const look = screen.getByRole("group", { name: t("edit.look") })
@@ -2083,7 +2222,7 @@ test("a coloured word says which stored line it is on, when a line above it was 
   const shifted = { ...g1!, lines: [{ index: 1, text: "ราคา 500", startUs: 900_000, partial: false }] }
   const { api } = renderScreen(withFlair({ groups: [shifted, g2!] }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   await userEvent.click(screen.getAllByRole("button", { name: new RegExp(t("edit.look")) })[0]!)
   await userEvent.selectOptions(screen.getByRole("combobox", { name: t("flair.accent") }), "0:500")
@@ -2096,7 +2235,7 @@ test("with the looks off a group offers none", async () => {
     getSettings: async () => settingsView({ highlights: { enabled: true, position: "auto" as const, hideSubtitles: true, custom: DEFAULT_HIGHLIGHT_OPTIONS.custom }, flair: { ...FLAIR_ON, text: false } }),
   })
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   await screen.findAllByRole("button", { name: t("highlights.removeGroup") })
   expect(screen.queryByRole("button", { name: new RegExp(t("edit.look")) })).toBeNull()
 })
@@ -2150,6 +2289,9 @@ const MOTION: GraphicView = {
   error: null,
   edited: false,
   off: false,
+  from: null,
+  replaces: false,
+  coversKeep: false,
 }
 /** A motion graphic with no fragment yet, as the main process lists it: nothing of it is rendered, so it waits with no poster. */
 const unwritten = (extra: Partial<GraphicView> = {}): GraphicView => ({ ...MOTION, spec: { ...MOTION_SPEC, html: null }, written: false, render: "waiting", ...extra })
@@ -2158,8 +2300,10 @@ const motionAt = (sourceUs: number, extra: Partial<GraphicView> = {}): GraphicVi
 // a second graphic of the opening, drawn from another idea, so that its row is told apart by what it shows
 const OTHER_IDEA = "ป้ายลดครึ่งราคาหมุนเข้ามาจากขวา แล้วเด้งหนึ่งครั้ง"
 const OTHER: GraphicView = motionAt(4_000_000, { summary: OTHER_IDEA, spec: { ...MOTION_SPEC, idea: OTHER_IDEA } })
-const graphicButton = (key: "graphics.redoLabel" | "graphics.offLabel" | "graphics.onLabel" | "graphics.removeLabel" | "graphics.retryLabel", summary = MOTION.summary) =>
-  screen.getByRole("button", { name: t(key, { summary }) })
+const graphicButton = (
+  key: "graphics.redoLabel" | "graphics.editLabel" | "graphics.undoLabel" | "graphics.offLabel" | "graphics.onLabel" | "graphics.removeLabel" | "graphics.retryLabel",
+  summary = MOTION.summary,
+) => screen.getByRole("button", { name: t(key, { summary }) })
 // the words of spec §8 of the free-form motion design, as the user reads them
 const REDO = "ทำใหม่"
 // read out, the button is named by what it shows and then by its graphic, as the row's other buttons are
@@ -2168,6 +2312,19 @@ const WRITING = "กำลังเขียน…"
 const UNWRITTEN = "ยังไม่ได้เขียน กดทำใหม่"
 const WRITE_FAILED = "เขียนไม่สำเร็จ"
 const STALE = "การตัดช่วงนี้เปลี่ยนไป กดทำใหม่"
+// the words of §2 of the design of editing a graphic by instruction (0.5.1), as the user reads them
+const EDIT = "แก้"
+const UNDO = "ย้อน"
+const editLabel = (summary = IDEA) => `${EDIT} ${summary}`
+const undoLabel = (summary = IDEA) => `${UNDO} ${summary}`
+const EDIT_FIELD = "จะให้ AI แก้อะไร"
+const SEND = "ส่งให้ AI แก้"
+const CANCEL = "ยกเลิก"
+const TOO_LONG = "ยาวเกิน 300 ตัวอักษร"
+const EDITING = "กำลังแก้…"
+const EDIT_FAILED = "แก้ไม่สำเร็จ"
+const editField = () => screen.getByRole("textbox", { name: EDIT_FIELD })
+const noEditField = () => expect(screen.queryByRole("textbox", { name: EDIT_FIELD })).toBeNull()
 /** What a row says of how its graphic stands: one line, so one text. */
 const stateOf = (row: HTMLElement) => [...row.querySelectorAll(".graphic-state")].map((line) => line.textContent)
 
@@ -2273,8 +2430,8 @@ test("with graphics alone on, a beat without one says so rather than that the be
   await ready()
   await openFlair()
   expect(screen.getByText(t("graphics.none"))).toBeTruthy()
-  // how to get some, as before, and then why there may be none: the AI puts none where it does not suit or has no room
-  expect(t("graphics.none")).toBe("ยังไม่มีกราฟิกในบีตนี้ กดคิดใหม่: กราฟิกและเทคนิค ในเมนู AI · AI ใส่กราฟิกเฉพาะจุดที่เหมาะและมีที่ว่างบนเฟรมพอ")
+  // that this stretch has none, and the menu item that plans some
+  expect(t("graphics.none")).toBe("ยังไม่มีกราฟิกในช่วงนี้ กดคิดใหม่: กราฟิก ในเมนู AI")
   expect(screen.queryByText(t("edit.flairEmpty"))).toBeNull()
 })
 
@@ -2285,21 +2442,24 @@ test("at the lightest level the graphics tab shows the graphics, as at any level
   expect(screen.getByText(MOTION.summary)).toBeTruthy()
 })
 
-test("the graphics tab counts the beat's highlight text, zooms, cutaways and the graphics that play", async () => {
+test("the techniques tab counts the beat's highlight text, zooms and cutaways, and the graphics tab the graphics that play", async () => {
   const off: GraphicView = { ...MOTION, anchor: { kind: "speech", videoId: "a", sourceUs: 4_000_000, beatId: "b1" }, off: true }
-  renderScreen(withGraphics({ graphics: [MOTION, off] }, ONLY_GRAPHICS))
+  renderScreen(withGraphics({ graphics: [MOTION, off], zooms: [{ anchor: { videoId: "a", sourceUs: 1_750_000 }, atUs: 0, durationUs: 1_000_000, what: "ช่วงเปิด", beatId: "b1", kind: "punch", edited: false }] }))
   await ready()
-  // the opening's group and the one graphic that plays
-  await waitFor(() => expect(tab("graphics").querySelector(".tab-count")!.textContent).toBe("2"))
+  // the opening's group and its zoom
+  await waitFor(() => expect(tab("techniques").querySelector(".tab-count")!.textContent).toBe("2"))
+  // the one graphic that plays
+  expect(tab("graphics").querySelector(".tab-count")!.textContent).toBe("1")
 })
 
 test("the graphics tab's count leaves the graphics out while graphics are off", async () => {
   renderScreen(withGraphics({ graphics: [MOTION] }, { ...ONLY_GRAPHICS, graphic: false }))
   await ready()
-  await openTab("graphics")
+  await openTab("techniques")
   // the preview is on screen once the beat counts its highlight text
   await waitFor(() => expect(within(beatPick("เปิดเรื่อง")).getByText("Aa 1")).toBeTruthy())
-  expect(tab("graphics").querySelector(".tab-count")!.textContent).toBe("1")
+  expect(tab("techniques").querySelector(".tab-count")!.textContent).toBe("1")
+  expect(tab("graphics").querySelector(".tab-count")!.textContent).toBe("0")
 })
 
 test("a graphic the user changed by hand says so, and one Claude made does not", async () => {
@@ -2310,6 +2470,100 @@ test("a graphic the user changed by hand says so, and one Claude made does not",
   const [claudes, users] = graphicRows()
   expect(within(users!).getByText(t("flair.edited"))).toBeTruthy()
   expect(within(claudes!).queryByText(t("flair.edited"))).toBeNull()
+})
+
+/** What a graphic's row says under its poster, line by line, in the order it says it. */
+const bodyLines = (row: HTMLElement) => [...row.querySelector(".graphic-body")!.children].map((line) => line.textContent)
+
+test("a free graphic's row says, in order: its idea, the last edit, why, the point it tells the story of, the level it plays from, that it takes the text's place, that it covers a face or a thing, how it stands, the failed edit and that it was changed by hand", async () => {
+  const free: GraphicView = {
+    ...MOTION,
+    pointId: "p1",
+    from: "medium",
+    replaces: true,
+    coversKeep: true,
+    instruction: "ให้ตัวเลขใหญ่ขึ้น",
+    editFailed: "Claude is busy",
+    edited: true,
+    render: "ready",
+  }
+  renderScreen(withGraphics({ graphics: [free], emphasis: emphasisOf() }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await screen.findByText(MOTION.summary)
+  expect(bodyLines(graphicRows()[0]!)).toEqual([
+    IDEA,
+    t("graphics.lastEdit", { instruction: "ให้ตัวเลขใหญ่ขึ้น" }),
+    MOTION.why,
+    t("graphics.ofPoint", { text: "เอาล่ะครับ" }),
+    t("graphics.from.medium"),
+    t("graphics.replaces"),
+    t("graphics.coversKeep"),
+    t("graphics.render.ready"),
+    `${t("graphics.editFailed")} · Claude is busy`,
+    t("flair.edited"),
+  ])
+  // in the user's words
+  expect(bodyLines(graphicRows()[0]!).slice(3, 7)).toEqual(["เล่าเรื่องของจุด “เอาล่ะครับ”", "เล่นตั้งแต่ระดับกลาง", "ขึ้นแทนข้อความเด่น", "ทับหน้าคนหรือของ จึงขึ้นแค่ 1.5 วิ"])
+})
+
+test("a free graphic says the level it plays from, each level in its own words, and says nothing of a text it does not replace or of a cover it does not make", async () => {
+  for (const from of ["light", "medium", "heavy"] as const) {
+    renderScreen(withGraphics({ graphics: [{ ...MOTION, from, render: "ready" }], emphasis: emphasisOf() }, ONLY_GRAPHICS))
+    await ready()
+    await openFlair()
+    await screen.findByText(MOTION.summary)
+    expect(bodyLines(graphicRows()[0]!), from).toEqual([IDEA, MOTION.why, t(`graphics.from.${from}` as MessageKey), t("graphics.render.ready")])
+    cleanup()
+  }
+  expect([t("graphics.from.light"), t("graphics.from.heavy")]).toEqual(["เล่นตั้งแต่ระดับเบา", "เล่นเฉพาะจัดเต็ม"])
+})
+
+test("a free graphic tied to no point, or to a point not on the cut, names none", async () => {
+  renderScreen(withGraphics({ graphics: [{ ...MOTION, from: "light", render: "ready" }, motionAt(4_000_000, { from: "light", render: "ready", pointId: "p9", summary: OTHER_IDEA })], emphasis: emphasisOf() }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await screen.findByText(MOTION.summary)
+  for (const row of graphicRows()) {
+    expect(within(row).queryByText(/เล่าเรื่องของจุด|จากจุดเน้น/)).toBeNull()
+  }
+})
+
+test("a graphic planned before 0.7.0 names the point it was made for as before, says no level and no cover, and says it takes the text's place only when main says it does", async () => {
+  renderScreen(withGraphics({ graphics: [{ ...MOTION, pointId: "p1", render: "ready" }], emphasis: emphasisOf() }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await screen.findByText(MOTION.summary)
+  expect(bodyLines(graphicRows()[0]!)).toEqual([IDEA, MOTION.why, t("emphasis.from", { text: "เอาล่ะครับ" }), t("graphics.render.ready")])
+  cleanup()
+
+  // written and fresh, a legacy graphic takes its point's text's place, and its row says so
+  renderScreen(withGraphics({ graphics: [{ ...MOTION, pointId: "p1", render: "ready", replaces: true }], emphasis: emphasisOf() }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await screen.findByText(MOTION.summary)
+  expect(bodyLines(graphicRows()[0]!)).toEqual([IDEA, MOTION.why, t("emphasis.from", { text: "เอาล่ะครับ" }), t("graphics.replaces"), t("graphics.render.ready")])
+})
+
+test("with graphics off the graphics tab holds the switch alone: no heading, no notice and no rows", async () => {
+  renderScreen(withGraphics({ graphics: [MOTION], graphicsWaitForPack: true }, { ...ONLY_GRAPHICS, graphic: false }))
+  await ready()
+  await openFlair()
+  expect(await within(panel()).findByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) })).toBeTruthy()
+  expect(screen.queryByText(t("edit.flairGraphics"))).toBeNull()
+  expect(screen.queryByText(t("graphics.waitForPack"))).toBeNull()
+  expect(panel().querySelector(".notice")).toBeNull()
+  expect(screen.queryByText(MOTION.summary)).toBeNull()
+  expect(screen.queryByText(t("graphics.none"))).toBeNull()
+})
+
+test("the whole clip lists its graphics in the order they play", async () => {
+  renderScreen(withGraphics({ graphics: [OTHER, MOTION], emphasis: emphasisOf() }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await userEvent.click(wholeClipPick())
+  await screen.findByText(MOTION.summary)
+  expect(graphicRows().map((row) => row.querySelector(".flair-what")!.textContent)).toEqual([IDEA, OTHER_IDEA])
 })
 
 test("a switched-off graphic says it is off rather than how its render stands, and offers no retry", async () => {
@@ -2426,6 +2680,13 @@ test("a graphic the cut changed under says to have it written again, rather than
   await openFlair()
   expect(stateOf(graphicRows()[0]!)).toEqual([STALE])
   expect(screen.queryByText(t("graphics.render.waiting"))).toBeNull()
+})
+
+test("a graphic the cut changed under, whose fragment a change of the user's made, names แก้ as well: a redo would throw that change away, where แก้ fits it to the cut and keeps it", async () => {
+  renderScreen(withGraphics({ graphics: [motionAt(2_500_000, { stale: true, render: "waiting", instruction: "ใหญ่ขึ้น", canUndo: true }), motionAt(4_000_000, { stale: true, render: "waiting" })] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  expect(graphicRows().map(stateOf)).toEqual([["การตัดช่วงนี้เปลี่ยนไป กดแก้หรือทำใหม่"], [STALE]])
 })
 
 test("a row says one thing of how its graphic stands, the first that holds: switched off, its writing failed, the cut changed, not written, then its render", async () => {
@@ -2614,10 +2875,8 @@ test("ทำใหม่ on a motion graphic's row has Claude write it again, as
   })
   playRedo(api)
   await act(async () => answer(REDONE))
-  // what the plan button sends, to the letter
-  await openTab("cut")
-  await waitFor(() => expect(planButton()).toHaveProperty("disabled", false))
-  await userEvent.click(planButton())
+  // what ทำทั้งหมด sends, to the letter
+  await planAll()
   await waitFor(() => expect(calls(api, "planPost")).toHaveLength(1))
   expect(calls(api, "planPost")[0]![2]).toEqual(request)
 })
@@ -2651,15 +2910,476 @@ test("ทำใหม่ waits while a run goes, the one it started included, an
   await waitFor(() => expect(redo()).toHaveProperty("disabled", false))
 })
 
-test("a row's buttons are ทำใหม่, a retry when its render failed, off or on, and remove, in that order: none opens a graphic to be changed by hand", async () => {
-  renderScreen(withGraphics({ graphics: [{ ...MOTION, render: "failed", error: "Chrome crashed" }, motionAt(4_000_000, { off: true })] }, ONLY_GRAPHICS))
+test("a row's buttons are ทำใหม่, แก้ for a written graphic, a retry when its render failed, ย้อน when it has a step to go back to, off or on, and remove, in that order: none opens a graphic's code to the user", async () => {
+  const why = "nothing was drawn: every frame is empty"
+  const writeFailed: Partial<GraphicView> = { spec: { ...MOTION_SPEC, html: null, failed: why }, written: false, writeFailed: why, render: "waiting" }
+  const graphics = [
+    motionAt(2_500_000, { render: "ready" }),
+    motionAt(3_000_000, { spec: { ...MOTION_SPEC, html: null }, written: false, render: "waiting" }),
+    motionAt(3_500_000, { stale: true, render: "waiting" }),
+    motionAt(4_000_000, { render: "failed", error: "Chrome crashed" }),
+    motionAt(4_500_000, writeFailed),
+    motionAt(5_000_000, { off: true }),
+    motionAt(5_500_000, { render: "failed", error: "Chrome crashed", instruction: "ใหญ่ขึ้น", canUndo: true }),
+    // a redo that failed keeps the fragment it replaced, to go back to
+    motionAt(6_000_000, { ...writeFailed, canUndo: true }),
+  ]
+  renderScreen(withGraphics({ graphics }, ONLY_GRAPHICS))
   await ready()
   await openFlair()
   const buttons = (row: HTMLElement) => within(row).getAllByRole("button").map((button) => button.textContent)
-  const [failed, off] = graphicRows()
-  expect(buttons(failed!)).toEqual([REDO, t("graphics.retry"), t("graphics.off"), t("graphics.remove")])
-  // what a graphic draws is Claude's to write again, not the user's to type: a switched-off one too
-  expect(buttons(off!)).toEqual([REDO, t("graphics.on"), t("graphics.remove")])
+  const [written, unwrittenOne, stale, renderFailed, failedWriting, off, edited, redoFailed] = graphicRows()
+  const OFF = t("graphics.off")
+  const REMOVE = t("graphics.remove")
+  const RETRY = t("graphics.retry")
+  expect(buttons(written!)).toEqual([REDO, EDIT, OFF, REMOVE])
+  // with no code there is nothing to change: it is written from its idea first
+  expect(buttons(unwrittenOne!)).toEqual([REDO, OFF, REMOVE])
+  // written for a cut that changed since, it can still be changed, and is fitted to the cut as it is now
+  expect(buttons(stale!)).toEqual([REDO, EDIT, OFF, REMOVE])
+  expect(buttons(renderFailed!)).toEqual([REDO, EDIT, RETRY, OFF, REMOVE])
+  expect(buttons(failedWriting!)).toEqual([REDO, OFF, REMOVE])
+  expect(buttons(off!)).toEqual([REDO, EDIT, t("graphics.on"), REMOVE])
+  expect(buttons(edited!)).toEqual([REDO, EDIT, RETRY, UNDO, OFF, REMOVE])
+  expect(buttons(redoFailed!)).toEqual([REDO, UNDO, OFF, REMOVE])
+  // read out, แก้ and ย้อน are named by what they show and then by their graphic, as the row's other buttons are
+  expect(within(edited!).getByRole("button", { name: editLabel() }).textContent).toBe(EDIT)
+  expect(within(edited!).getByRole("button", { name: undoLabel() }).textContent).toBe(UNDO)
+})
+
+test("แก้ opens a field under its row to say what to change, one on the page at a time; pressing แก้ again, ยกเลิก or Escape closes it and keeps nothing", async () => {
+  const { api } = renderScreen(withGraphics({ graphics: [MOTION, OTHER] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  const [first, second] = graphicRows()
+  const edit = within(first!).getByRole("button", { name: editLabel() })
+  const otherEdit = within(second!).getByRole("button", { name: editLabel(OTHER_IDEA) })
+  await waitFor(() => expect(edit).toHaveProperty("disabled", false))
+  noEditField()
+  expect(edit.getAttribute("aria-expanded")).toBe("false")
+  await userEvent.click(edit)
+  // under the row it belongs to, named, with an example of what may be asked, and ready to be typed in
+  const field = within(first!).getByRole("textbox", { name: EDIT_FIELD })
+  expect(field.getAttribute("placeholder")).toBe("เช่น ตัวเลขใหญ่ขึ้น หรือ จรวดพุ่งจากขวาแทน")
+  expect(document.activeElement).toBe(field)
+  expect(edit.getAttribute("aria-expanded")).toBe("true")
+  expect(within(first!).getAllByRole("button").map((button) => button.textContent).slice(-2)).toEqual([SEND, CANCEL])
+  await userEvent.type(field, "ช้าลง")
+  // another row's opens in its place, empty
+  await userEvent.click(otherEdit)
+  expect(within(first!).queryByRole("textbox")).toBeNull()
+  expect(screen.getAllByRole("textbox", { name: EDIT_FIELD })).toHaveLength(1)
+  expect(within(second!).getByRole("textbox", { name: EDIT_FIELD })).toHaveProperty("value", "")
+  expect([edit.getAttribute("aria-expanded"), otherEdit.getAttribute("aria-expanded")]).toEqual(["false", "true"])
+  // pressing its แก้ again closes it
+  await userEvent.click(otherEdit)
+  noEditField()
+  // ยกเลิก closes it, what was typed goes with it, and the keyboard is back on แก้
+  await userEvent.click(edit)
+  await userEvent.type(editField(), "ใหญ่ขึ้น")
+  await userEvent.click(within(first!).getByRole("button", { name: CANCEL }))
+  noEditField()
+  expect(document.activeElement).toBe(edit)
+  await userEvent.click(edit)
+  expect(editField()).toHaveProperty("value", "")
+  // and so does Escape in the field
+  await userEvent.type(editField(), "ใหญ่ขึ้น{Escape}")
+  noEditField()
+  expect(document.activeElement).toBe(edit)
+  await userEvent.click(edit)
+  expect(editField()).toHaveProperty("value", "")
+  expect(calls(api, "editGraphic")).toEqual([])
+})
+
+test("Escape pressed while a word is being composed belongs to the input method, and leaves the field open", async () => {
+  renderScreen(withGraphics({ graphics: [MOTION] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await waitFor(() => expect(graphicButton("graphics.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.editLabel"))
+  await userEvent.type(editField(), "ใหญ่")
+  fireEvent.keyDown(editField(), { key: "Escape", isComposing: true })
+  expect(editField()).toHaveProperty("value", "ใหญ่")
+  fireEvent.keyDown(editField(), { key: "Escape" })
+  noEditField()
+})
+
+/** Opens the edit field of the one graphic listed, once its แก้ can be pressed, and types in it. */
+async function openFieldOnFirst() {
+  await waitFor(() => expect(graphicButton("graphics.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.editLabel"))
+  await userEvent.type(editField(), "ใหญ่ขึ้น")
+}
+
+test("an open field belongs to the beat it was opened in: another beat, or the whole clip, starts with none, and coming back opens none", async () => {
+  renderScreen(withGraphics({ graphics: [MOTION] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  await openFieldOnFirst()
+  await userEvent.click(beatPick("ปิดท้าย"))
+  noEditField()
+  await userEvent.click(beatPick("เปิดเรื่อง"))
+  noEditField()
+  expect(document.activeElement).toBe(beatPick("เปิดเรื่อง"))
+  // the whole clip lists the same graphic, and still starts with none open
+  await openFieldOnFirst()
+  await userEvent.click(wholeClipPick())
+  noEditField()
+  expect(document.activeElement).toBe(wholeClipPick())
+})
+
+test("an open field goes with its graphic's fragment: a redo that fails lets it go, and the step back that brings the fragment back opens none", async () => {
+  const why = "nothing was drawn: every frame is empty"
+  let graphics: GraphicView[] = [{ ...MOTION, render: "ready" }]
+  const previews = listedPreviews(() => graphics)
+  let finish!: (view: PostRunView) => void
+  const { api } = renderScreen({
+    ...withGraphics({}, ONLY_GRAPHICS),
+    previewHighlights: previews.previewHighlights,
+    redoGraphic: () => new Promise<PostRunView>((resolve) => (finish = resolve)),
+    undoGraphic: async () => {
+      // back to the fragment the redo replaced, with nothing left to go back to
+      graphics = [{ ...MOTION, render: "ready" }]
+    },
+  })
+  await ready()
+  await openFlair()
+  await openFieldOnFirst()
+  await userEvent.click(graphicButton("graphics.redoLabel"))
+  // the writing fails: the graphic has no fragment now, and keeps the one it had to go back to
+  graphics = [unwritten({ spec: { ...MOTION_SPEC, html: null, failed: why }, writeFailed: why, canUndo: true })]
+  playRedo(api)
+  await act(async () => finish(REDONE))
+  await waitFor(() => expect(stateOf(graphicRows()[0]!)).toEqual([`${WRITE_FAILED} · ${why}`]))
+  noEditField()
+  await waitFor(() => expect(graphicButton("graphics.undoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.undoLabel"))
+  await waitFor(() => expect(stateOf(graphicRows()[0]!)).toEqual([t("graphics.render.ready")]))
+  noEditField()
+  expect(document.activeElement?.tagName).not.toBe("TEXTAREA")
+})
+
+test("an open field goes with its graphic removed, and opens none on a graphic written later at the same place, in the middle of a run", async () => {
+  let graphics: GraphicView[] = [MOTION]
+  const previews = listedPreviews(() => graphics)
+  const { api } = renderScreen({
+    ...withGraphics({}, ONLY_GRAPHICS),
+    previewHighlights: previews.previewHighlights,
+    setGraphic: async () => {
+      graphics = []
+    },
+  })
+  await ready()
+  await openFlair()
+  await openFieldOnFirst()
+  await userEvent.click(graphicButton("graphics.removeLabel"))
+  await waitFor(() => expect(screen.getByText(t("graphics.none"))).toBeTruthy())
+  noEditField()
+  // the graphics thought again: a new one is written at the same place, and read as its writing is stored
+  graphics = [{ ...MOTION, render: "ready" }]
+  act(() => api.emit(planEvent("graphics", { state: "running", done: 1, total: 1 })))
+  await waitFor(() => expect(graphicRows()).toHaveLength(1))
+  noEditField()
+  expect(document.activeElement?.tagName).not.toBe("TEXTAREA")
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+})
+
+test("ส่งให้ AI แก้ waits for a change to send: not nothing, not spaces alone, and at most 300 letters counted as they are seen, a Thai letter with its marks as one; past that the field says so", async () => {
+  renderScreen(withGraphics({ graphics: [MOTION] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  const [row] = graphicRows()
+  await waitFor(() => expect(graphicButton("graphics.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.editLabel"))
+  const send = () => within(row!).getByRole("button", { name: SEND })
+  expect(send()).toHaveProperty("disabled", true)
+  await userEvent.type(editField(), "   ")
+  expect(send()).toHaveProperty("disabled", true)
+  // a letter of three characters each, ท with its vowel and its tone mark, and the spaces around them are not counted
+  const letters = (count: number) => "ที่".repeat(count)
+  fireEvent.change(editField(), { target: { value: `  ${letters(300)}  ` } })
+  expect(send()).toHaveProperty("disabled", false)
+  expect(within(row!).queryByText(TOO_LONG)).toBeNull()
+  expect(editField().getAttribute("aria-describedby")).toBeNull()
+  expect(editField().getAttribute("aria-invalid")).toBeNull()
+  fireEvent.change(editField(), { target: { value: letters(301) } })
+  expect(send()).toHaveProperty("disabled", true)
+  const said = within(row!).getByText(TOO_LONG)
+  // the number said is the limit core keeps, not one of the text's own
+  expect(t("graphics.editTooLong", { max: 1 })).toBe("ยาวเกิน 1 ตัวอักษร")
+  expect(said.classList.contains("warn-text")).toBe(true)
+  expect(editField().getAttribute("aria-describedby")).toBe(said.id)
+  expect(editField().getAttribute("aria-invalid")).toBe("true")
+  // what was typed stays, to be cut down
+  expect(editField()).toHaveProperty("value", letters(301))
+  fireEvent.change(editField(), { target: { value: letters(299) } })
+  expect(send()).toHaveProperty("disabled", false)
+  expect(within(row!).queryByText(TOO_LONG)).toBeNull()
+})
+
+test("ส่งให้ AI แก้ has Claude change the graphic as typed, trimmed, asked through the room with the request a plan is asked with; the field closes and keeps nothing", async () => {
+  let answer!: (view: PostRunView) => void
+  const { api } = renderScreen({ ...withGraphics({ graphics: [MOTION] }, ONLY_GRAPHICS), editGraphic: () => new Promise<PostRunView>((resolve) => (answer = resolve)) })
+  await ready()
+  await openFlair()
+  const edit = graphicButton("graphics.editLabel")
+  await waitFor(() => expect(edit).toHaveProperty("disabled", false))
+  await userEvent.click(edit)
+  await userEvent.type(editField(), "  ตัวเลขใหญ่ขึ้น\nแล้วช้าลง  ")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  noEditField()
+  await waitFor(() => expect(calls(api, "editGraphic")).toHaveLength(1))
+  const [, folder, anchor, instruction, request] = calls(api, "editGraphic")[0]!
+  expect([folder, anchor, instruction]).toEqual([FOLDER, MOTION.anchor, "ตัวเลขใหญ่ขึ้น\nแล้วช้าลง"])
+  expect(calls(api, "redoGraphic")).toEqual([])
+  // main plays an edit as it plays a redo
+  playRedo(api)
+  await act(async () => answer(REDONE))
+  await waitFor(() => expect(edit).toHaveProperty("disabled", false))
+  await userEvent.click(edit)
+  expect(editField()).toHaveProperty("value", "")
+  // what ทำทั้งหมด sends, to the letter
+  await planAll()
+  await waitFor(() => expect(calls(api, "planPost")).toHaveLength(1))
+  expect(calls(api, "planPost")[0]![2]).toEqual(request)
+})
+
+test("while a graphic is changed only its own row reads กำลังแก้…, from the press until the read that follows the run's end has landed, and แก้ and ทำใหม่ wait on every row: then it reads its true line", async () => {
+  let graphics: GraphicView[] = [{ ...MOTION, render: "ready" }, { ...OTHER, render: "ready" }]
+  const previews = listedPreviews(() => graphics)
+  let finish!: (view: PostRunView) => void
+  const { api } = renderScreen({
+    ...withGraphics({}, ONLY_GRAPHICS),
+    previewHighlights: previews.previewHighlights,
+    editGraphic: () => new Promise<PostRunView>((resolve) => (finish = resolve)),
+  })
+  await ready()
+  await openFlair()
+  await waitFor(() => expect(placing()).toBe(false))
+  const READY = t("graphics.render.ready")
+  const states = () => graphicRows().map(stateOf)
+  const waiting = () => graphicRows().flatMap((row) => [within(row).getByRole("button", { name: /^แก้ / }), within(row).getByRole("button", { name: /^ทำใหม่ / })].map((button) => (button as HTMLButtonElement).disabled))
+  expect(states()).toEqual([[READY], [READY]])
+  await waitFor(() => expect(waiting()).toEqual([false, false, false, false]))
+
+  await userEvent.click(graphicButton("graphics.editLabel"))
+  await userEvent.type(editField(), "ใหญ่ขึ้น")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  expect(states()).toEqual([[EDITING], [READY]])
+  expect(waiting()).toEqual([true, true, true, true])
+  // as the main process plays it, and through the read its own count brings: the strip counts it as a redo's
+  act(() => api.emit(planEvent("graphics", { state: "waiting" })))
+  act(() => api.emit(planEvent("graphics", { state: "running" })))
+  act(() => api.emit(planEvent("graphics", { state: "running", done: 0, total: 1 })))
+  await act(async () => {})
+  expect(states()).toEqual([[EDITING], [READY]])
+  expect(screen.getByText("กำลังเขียนกราฟิก 0 จาก 1")).toBeTruthy()
+
+  previews.hold()
+  graphics = [{ ...MOTION, render: "rendering", instruction: "ใหญ่ขึ้น", canUndo: true }, { ...OTHER, render: "ready" }]
+  act(() => api.emit(planEvent("graphics", { state: "running", done: 1, total: 1 })))
+  act(() => api.emit(planEvent("graphics", { state: "done", count: 1, dropped: 0 })))
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await act(async () => finish(REDONE))
+  expect(previews.held.length).toBeGreaterThan(0)
+  // the run is over, and the rows still show what was read before its end
+  expect(states()).toEqual([[EDITING], [READY]])
+  await previews.land()
+  await waitFor(() => expect(states()).toEqual([[t("graphics.render.rendering")], [READY]]))
+  await waitFor(() => expect(waiting()).toEqual([false, false, false, false]))
+})
+
+test("a graphic changed as the user asked says the change under its idea, held to two lines, the whole of it for a pointer held over it", async () => {
+  const instruction = "ตัวเลขใหญ่ขึ้นอีกเท่าหนึ่ง แล้วให้เส้นใต้ลากช้าลงจนจบประโยค"
+  renderScreen(withGraphics({ graphics: [{ ...MOTION, instruction, canUndo: true }, OTHER] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  const [changed, other] = graphicRows()
+  const said = `แก้ล่าสุด: ${instruction}`
+  const line = within(changed!).getByText(said)
+  expect(line.getAttribute("title")).toBe(said)
+  expect(line.classList.contains("graphic-last-edit")).toBe(true)
+  // right under the idea
+  expect(within(changed!).getByText(IDEA).nextElementSibling).toBe(line)
+  expect(within(other!).queryByText(/แก้ล่าสุด/)).toBeNull()
+})
+
+test("the change that made a fragment is not said while that graphic is written again, from its idea or with another change: it is about the fragment being replaced", async () => {
+  for (const how of ["redo", "edit"] as const) {
+    const others = "ป้ายหมุนช้าลง"
+    renderScreen({
+      ...withGraphics({ graphics: [{ ...MOTION, instruction: "ใหญ่ขึ้น", canUndo: true }, { ...OTHER, instruction: others, canUndo: true }] }, ONLY_GRAPHICS),
+      redoGraphic: () => new Promise<PostRunView>(() => {}),
+      editGraphic: () => new Promise<PostRunView>(() => {}),
+    })
+    await ready()
+    await openFlair()
+    const [rewritten, other] = graphicRows()
+    expect(within(rewritten!).getByText("แก้ล่าสุด: ใหญ่ขึ้น")).toBeTruthy()
+    await waitFor(() => expect(graphicButton("graphics.redoLabel")).toHaveProperty("disabled", false))
+    if (how === "redo") await userEvent.click(graphicButton("graphics.redoLabel"))
+    else {
+      await userEvent.click(graphicButton("graphics.editLabel"))
+      await userEvent.type(editField(), "เล็กลง")
+      await userEvent.click(screen.getByRole("button", { name: SEND }))
+    }
+    expect(stateOf(rewritten!), how).toEqual([how === "redo" ? WRITING : EDITING])
+    expect(within(rewritten!).queryByText(/แก้ล่าสุด/), how).toBeNull()
+    // the graphic beside it is not being written
+    expect(within(other!).getByText(`แก้ล่าสุด: ${others}`), how).toBeTruthy()
+    cleanup()
+  }
+})
+
+test("an edit that failed says so on a line of its own under how the graphic stands, as a warning, in its last lines with the whole in its title; how it stands is said as before, and nothing of it while it is written again", async () => {
+  const why = [
+    "uses `setTimeout`: the renderer sets time itself, animate with CSS animations or el.animate()",
+    "",
+    "nothing was drawn: every frame is empty",
+    "it is still on screen at the end: the way out must be over, with everything invisible, 0.1 s before D",
+    "the page never became ready (its script did not finish)",
+  ].join("\n")
+  renderScreen({
+    ...withGraphics({ graphics: [{ ...MOTION, render: "ready", editFailed: why }, { ...OTHER, render: "ready", editFailed: "" }] }, ONLY_GRAPHICS),
+    editGraphic: () => new Promise<PostRunView>(() => {}),
+  })
+  await ready()
+  await openFlair()
+  const [failed, wordless] = graphicRows()
+  // the fragment from before the edit still stands, and its row says so as it would without the failure
+  expect(stateOf(failed!)).toEqual([t("graphics.render.ready")])
+  const said = `${EDIT_FAILED} · nothing was drawn: every frame is empty it is still on screen at the end: the way out must be over, with everything invisible, 0.1 s before D the page never became ready (its script did not finish)`
+  const line = within(failed!).getByText(said)
+  expect(line.getAttribute("title")).toBe(why)
+  expect(line.classList.contains("warn-text")).toBe(true)
+  expect(failed!.querySelector(".graphic-state")!.nextElementSibling).toBe(line)
+  // a failure that came with no words is a failure all the same
+  expect(stateOf(wordless!)).toEqual([t("graphics.render.ready")])
+  expect(within(wordless!).getByText(EDIT_FAILED)).toBeTruthy()
+  // changed again, the row speaks of the writing alone until it is over
+  await waitFor(() => expect(graphicButton("graphics.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.editLabel"))
+  await userEvent.type(editField(), "ใหญ่ขึ้น")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  expect(stateOf(failed!)).toEqual([EDITING])
+  expect(within(failed!).queryByText(new RegExp(EDIT_FAILED))).toBeNull()
+  expect(within(wordless!).getByText(EDIT_FAILED)).toBeTruthy()
+})
+
+test("ย้อน takes a graphic one step back, asked by its place, and the rows are read again, quietly", async () => {
+  let back = false
+  const { api } = renderScreen({
+    ...withGraphics({}, ONLY_GRAPHICS),
+    previewHighlights: async () => flairPreview({ graphics: [back ? { ...MOTION, canUndo: true } : { ...MOTION, instruction: "ใหญ่ขึ้น", canUndo: true }] }),
+    undoGraphic: async () => {
+      back = true
+    },
+  })
+  await ready()
+  await openFlair()
+  await screen.findByText("แก้ล่าสุด: ใหญ่ขึ้น")
+  await waitFor(() => expect(placing()).toBe(false))
+  const reads = calls(api, "previewHighlights").length
+  const undo = graphicButton("graphics.undoLabel")
+  await waitFor(() => expect(undo).toHaveProperty("disabled", false))
+  await userEvent.click(undo)
+  expect(calls(api, "undoGraphic")).toEqual([["undoGraphic", FOLDER, MOTION.anchor]])
+  await waitFor(() => expect(screen.queryByText(/แก้ล่าสุด/)).toBeNull())
+  expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+  // no Claude, and no run
+  expect([calls(api, "editGraphic"), calls(api, "redoGraphic")]).toEqual([[], []])
+  expect(screen.queryByRole("progressbar")).toBeNull()
+})
+
+test("ย้อน waits while its step back is being saved: a second click meanwhile asks nothing more, since a second step back would come back", async () => {
+  let answer!: () => void
+  const { api } = renderScreen({ ...withGraphics({ graphics: [{ ...MOTION, canUndo: true }] }, ONLY_GRAPHICS), undoGraphic: () => new Promise<void>((resolve) => (answer = resolve)) })
+  await ready()
+  await openFlair()
+  const undo = graphicButton("graphics.undoLabel")
+  await waitFor(() => expect(undo).toHaveProperty("disabled", false))
+  await userEvent.dblClick(undo)
+  expect(calls(api, "undoGraphic")).toHaveLength(1)
+  expect(undo).toHaveProperty("disabled", true)
+  await act(async () => answer())
+  await waitFor(() => expect(undo).toHaveProperty("disabled", false))
+  expect(calls(api, "undoGraphic")).toHaveLength(1)
+})
+
+test("ย้อน stays held while its step back is out, though another change of the user's begins and ends meanwhile", async () => {
+  let answer!: () => void
+  const { api } = renderScreen({ ...withGraphics({ graphics: [{ ...MOTION, canUndo: true }] }, ONLY_GRAPHICS), undoGraphic: () => new Promise<void>((resolve) => (answer = resolve)) })
+  await ready()
+  await openFlair()
+  await waitFor(() => expect(graphicButton("graphics.undoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.undoLabel"))
+  expect(graphicButton("graphics.undoLabel")).toHaveProperty("disabled", true)
+  // the style waits only for a write: it is chosen, saved and placed while the step back is still out
+  const settings = await openSettings("techniques")
+  await userEvent.selectOptions(within(settings).getByRole("combobox", { name: t("highlights.style") }), "cute-pink")
+  await waitFor(() => expect(calls(api, "setHighlightStyle")).toHaveLength(1))
+  await waitFor(() => expect(placing()).toBe(false))
+  await openFlair()
+  const undo = graphicButton("graphics.undoLabel")
+  expect(undo).toHaveProperty("disabled", true)
+  await act(async () => answer())
+  await waitFor(() => expect(undo).toHaveProperty("disabled", false))
+  expect(calls(api, "undoGraphic")).toHaveLength(1)
+})
+
+test("what main refuses of a change or a step back is said in Thai: a graphic not written yet as the graphics work's failure, one with nothing to go back to above the page", async () => {
+  // main throws it inside the graphics work, as it does a graphic with no place
+  const notWritten: PostWorkState = { state: "failed", error: "this graphic has not been written yet" }
+  let answer!: (view: PostRunView) => void
+  const previews = listedPreviews(() => [{ ...MOTION, canUndo: true }])
+  const { api } = renderScreen({
+    ...withGraphics({}, ONLY_GRAPHICS),
+    previewHighlights: previews.previewHighlights,
+    editGraphic: () => new Promise<PostRunView>((resolve) => (answer = resolve)),
+    undoGraphic: async () => {
+      throw new Error("Error invoking remote method 'api:undoGraphic': Error: this graphic has nothing to go back to")
+    },
+  })
+  await ready()
+  await openFlair()
+  await waitFor(() => expect(graphicButton("graphics.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.editLabel"))
+  await userEvent.type(editField(), "ใหญ่ขึ้น")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  act(() => api.emit(planEvent("graphics", { state: "waiting" })))
+  act(() => api.emit(planEvent("graphics", { state: "running" })))
+  act(() => api.emit(planEvent("graphics", notWritten)))
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await act(async () => answer({ running: false, states: { graphics: notWritten } }))
+  expect(await screen.findByText(`${t("post.work.graphics")} ไม่สำเร็จ: กราฟิกนี้ยังไม่ได้เขียน กดทำใหม่ก่อน`)).toBeTruthy()
+  expect(screen.queryByText(/not been written/)).toBeNull()
+  await waitFor(() => expect(stateOf(graphicRows()[0]!)).toEqual([t("graphics.render.rendering")]))
+
+  await waitFor(() => expect(graphicButton("graphics.undoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.undoLabel"))
+  expect(await screen.findByText(t("error.generic", { message: "ไม่มีชิ้นก่อนหน้าให้ย้อน" }))).toBeTruthy()
+  expect(screen.queryByText(/nothing to go back to/)).toBeNull()
+})
+
+test("แก้ and ย้อน wait while a run goes, as ทำใหม่ does, and so does sending a change typed meanwhile; the change stays in its field", async () => {
+  const { api } = renderScreen(withGraphics({ graphics: [{ ...MOTION, canUndo: true }] }, ONLY_GRAPHICS))
+  await ready()
+  await openFlair()
+  const edit = graphicButton("graphics.editLabel")
+  const undo = graphicButton("graphics.undoLabel")
+  await waitFor(() => expect(edit).toHaveProperty("disabled", false))
+  expect(undo).toHaveProperty("disabled", false)
+  await userEvent.click(edit)
+  await userEvent.type(editField(), "ใหญ่ขึ้น")
+  const send = () => screen.getByRole("button", { name: SEND })
+  expect(send()).toHaveProperty("disabled", false)
+  // the whole plan, or one work thought again
+  act(() => api.emit(planEvent("sounds", { state: "running" })))
+  expect([edit, undo, graphicButton("graphics.redoLabel"), send()].map((button) => (button as HTMLButtonElement).disabled)).toEqual([true, true, true, true])
+  expect(editField()).toHaveProperty("value", "ใหญ่ขึ้น")
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await waitFor(() => expect(edit).toHaveProperty("disabled", false))
+  expect([undo, send()].map((button) => (button as HTMLButtonElement).disabled)).toEqual([false, false])
 })
 
 test("as the graphics work counts on, the rows are read again, quietly: the plan's graphics show as being written once it is stored, and each leaves that for how it stands as its writing is stored", async () => {
@@ -2696,9 +3416,9 @@ test("as the graphics work counts on, the rows are read again, quietly: the plan
   expect(reads()).toBe(before + 3)
   await waitFor(() => expect(states()).toEqual([[t("graphics.render.ready")], [`${WRITE_FAILED} · ${why}`]]))
   expect(placing()).toBe(false)
-  // only the graphics work stores as it counts, and only this project's is this room's to read
+  // only the graphics and the sounds works store as they count (the sounds' are read in the sound tab's tests), and only this project's is this room's to read
   act(() => {
-    api.emit(planEvent("sounds", { state: "running", done: 1, total: 2 }))
+    api.emit(planEvent("techniques", { state: "running", done: 1, total: 2 }))
     api.emit({ type: "post-plan", folder: "/drafts/0815", work: "graphics", state: { state: "running", done: 1, total: 2 } })
   })
   expect(reads()).toBe(before + 3)
@@ -2711,6 +3431,10 @@ test("a graphic that plays is counted on its beat in the graphics tab", async ()
   await openTab("graphics")
   await waitFor(() => expect(within(beatPick("เปิดเรื่อง")).getByText("📊 1")).toBeTruthy())
   expect(within(beatPick("ปิดท้าย")).queryByText(/📊/)).toBeNull()
+  // the graphics tab marks the graphics alone, and the techniques tab marks none
+  expect(within(beatPick("เปิดเรื่อง")).queryByText(/Aa/)).toBeNull()
+  await openTab("techniques")
+  expect(screen.queryByText(/📊/)).toBeNull()
 })
 
 test("a graphic marks nothing when it does not play: switched off, or with graphics off", async () => {
@@ -2721,9 +3445,10 @@ test("a graphic marks nothing when it does not play: switched off, or with graph
   for (const [graphic, flair] of cases) {
     renderScreen(withGraphics({ graphics: [graphic] }, flair))
     await ready()
-    await openTab("graphics")
+    await openTab("techniques")
     // the preview is on screen once the beat counts its highlight text
     await waitFor(() => expect(within(beatPick("เปิดเรื่อง")).getByText("Aa 1")).toBeTruthy())
+    await openTab("graphics")
     expect(screen.queryByText(/📊/)).toBeNull()
     cleanup()
   }
@@ -2905,7 +3630,7 @@ test("new colours for the user's own style read the graphics again, once saved a
   await ready()
   await openFlair()
   await screen.findByText(MOTION.summary)
-  const settings = await openSettings("graphics")
+  const settings = await openSettings("techniques")
   const accent = await within(settings).findByLabelText(t("highlights.swatch.accent"))
   const reads = () => calls(api, "previewHighlights").length
   const before = reads()
@@ -2930,11 +3655,455 @@ test("new colours for the user's own style read the graphics again, once saved a
   expect(reads()).toBe(before + 2)
 })
 
+/* the sound tab: the sounds Claude composed, and the user's own */
+
+// a sound Claude composed on วันนี้ in the opening, written and rendered, as the main process lists it
+const SOUND: ComposedSoundView = {
+  anchor: { kind: "speech", videoId: "a", sourceUs: 2_500_000, beatId: "b1" },
+  atUs: 750_000,
+  durationUs: 1_260_000,
+  beatId: "b1",
+  role: "เสียงวูบขึ้นสั้นๆ ตอนพูดว่าวันนี้ ให้คนดูตื่นตัว",
+  from: "medium",
+  loudness: "normal",
+  graphic: null,
+  written: true,
+  stale: null,
+  writeFailed: null,
+  instruction: null,
+  editFailed: null,
+  canUndo: false,
+  off: false,
+  render: "ready",
+  error: null,
+}
+/** The same sound at another place of the opening, which is what the main process finds a sound by, with another role so its row is told apart. */
+const soundAt = (sourceUs: number, extra: Partial<ComposedSoundView> = {}): ComposedSoundView => ({
+  ...SOUND,
+  anchor: { kind: "speech", videoId: "a", sourceUs, beatId: "b1" },
+  atUs: sourceUs - 1_750_000,
+  role: `เสียงที่ ${sourceUs}`,
+  ...extra,
+})
+const soundRows = () => screen.getAllByRole("listitem").filter((item) => item.classList.contains("sound"))
+/** What a sound's row says of how it stands: one line, so one text. */
+const soundStateOf = (row: HTMLElement) => [...row.querySelectorAll(".sound-state")].map((line) => line.textContent)
+const soundButton = (
+  key: "sounds.redoLabel" | "sounds.editLabel" | "sounds.undoLabel" | "sounds.offLabel" | "sounds.onLabel" | "sounds.removeLabel",
+  role = SOUND.role,
+) => screen.getByRole("button", { name: t(key, { role }) })
+const ONLY_SOUNDS = { text: false, zoom: false, insert: false }
+const withSounds = (extra: Partial<HighlightPreview> = {}) => ({
+  ...withFlair(extra),
+  getSettings: async () => settingsView({ flair: { ...FLAIR_ON, ...ONLY_SOUNDS } }),
+})
+/** Preview reads that list the sounds as they are at each moment, held from `hold` until `land`. */
+function listedSounds(listed: () => ComposedSoundView[]) {
+  const answer = () => flairPreview({ composed: structuredClone(listed()) })
+  const previews = heldPreviews(answer)
+  return {
+    previewHighlights: previews.previewHighlights,
+    held: previews.held,
+    hold: () => void (previews.holding = true),
+    land: () => act(async () => previews.held.splice(0).forEach(({ resolve }) => resolve(answer()))),
+  }
+}
+// the words of the sound tab, as the user reads them
+const SOUND_EDIT_FIELD = "จะให้ AI แก้เสียงนี้อย่างไร"
+const soundEditField = () => screen.getByRole("textbox", { name: SOUND_EDIT_FIELD })
+
+test("the sound tab lists the beat's composed sounds in time order, each with its role, what it follows, the level it plays from, how it stands and how long it plays", async () => {
+  const tied = soundAt(4_000_000, { graphic: { summary: IDEA }, from: "heavy" })
+  renderScreen(withSounds({ composed: [tied, { ...SOUND, pointId: "p1" }], emphasis: emphasisOf() }))
+  await ready()
+  await openTab("sound")
+  expect(await screen.findByText(t("sounds.composed"))).toBeTruthy()
+  const [first, second] = soundRows()
+  expect(soundRows()).toHaveLength(2)
+  // in the order they play
+  expect(within(first!).getByText("0:00.7")).toBeTruthy()
+  // the role is held to two lines, and the whole of it is there for a pointer held over it
+  expect(within(first!).getByText(SOUND.role).getAttribute("title")).toBe(SOUND.role)
+  expect(within(first!).getByText(t("emphasis.from", { text: "เอาล่ะครับ" }))).toBeTruthy()
+  expect(within(first!).getByText("เล่นตั้งแต่ระดับกลาง")).toBeTruthy()
+  expect(soundStateOf(first!)).toEqual(["พร้อม"])
+  // how long it plays, to the tenth below
+  expect(within(first!).getByText(t("edit.pieceLength", { seconds: "1.2" }))).toBeTruthy()
+  // one that scores a graphic names the graphic rather than a point
+  expect(within(second!).getByText(`ตามกราฟิก: ${IDEA}`)).toBeTruthy()
+  expect(within(second!).getByText("เล่นเฉพาะจัดเต็ม")).toBeTruthy()
+  // the old way of picking a CapCut sound for each place is gone
+  expect(screen.queryByRole("combobox")).toBeNull()
+})
+
+test("a sound's row says one thing of how it stands, the first that holds: switched off, its composing failed, the picture changed, the cut changed, not composed, then its render", async () => {
+  const why = "the sound is silent: its peak is under -60 dBFS\nit lasts 0.1 s"
+  const renderWhy = "the sealed page closed\nthe render took too long"
+  const cases: [Partial<ComposedSoundView>, string, string?][] = [
+    [{ off: true, writeFailed: why, stale: "cut" }, "ปิดอยู่"],
+    [{ written: false, writeFailed: why, stale: "picture", render: "pending" }, "แต่งไม่สำเร็จ · the sound is silent: its peak is under -60 dBFS it lasts 0.1 s", why],
+    [{ stale: "picture", render: "pending" }, "ภาพเปลี่ยน กดทำใหม่"],
+    [{ stale: "cut", render: "pending" }, "การตัดช่วงนี้เปลี่ยนไป กดแก้หรือทำใหม่"],
+    [{ written: false, render: "pending" }, "ยังไม่ได้แต่ง"],
+    [{ render: "failed", error: renderWhy }, "เรนเดอร์ไม่สำเร็จ · the sealed page closed the render took too long", renderWhy],
+    [{ render: "pending" }, "กำลังเรนเดอร์…"],
+    [{}, "พร้อม"],
+  ]
+  for (const [extra, said, title] of cases) {
+    renderScreen(withSounds({ composed: [{ ...SOUND, ...extra }] }))
+    await ready()
+    await openTab("sound")
+    await screen.findByText(SOUND.role)
+    const [row] = soundRows()
+    expect(soundStateOf(row!), said).toEqual([said])
+    // a failure's whole reason is kept for a pointer held over its last lines
+    expect(row!.querySelector(".sound-state")!.getAttribute("title")).toBe(title ?? null)
+    cleanup()
+  }
+})
+
+test("a sound's buttons are ทำใหม่, แก้ for a written one, ย้อน when it has a step to go back to, off or on, and remove, in that order, each named by its role", async () => {
+  const button = (row: HTMLElement) => within(row).getAllByRole("button").map((one) => one.textContent)
+  renderScreen(withSounds({ composed: [{ ...SOUND, canUndo: true }, soundAt(3_000_000, { written: false, render: "pending" }), soundAt(4_000_000, { off: true })] }))
+  await ready()
+  await openTab("sound")
+  await screen.findByText(SOUND.role)
+  const [written, unwritten, off] = soundRows()
+  expect(button(written!)).toEqual(["ทำใหม่", "แก้", "ย้อน", "ปิด", "ลบ"])
+  expect(button(unwritten!)).toEqual(["ทำใหม่", "ปิด", "ลบ"])
+  expect(button(off!)).toEqual(["ทำใหม่", "แก้", "เปิด", "ลบ"])
+  expect(soundButton("sounds.redoLabel").textContent).toBe("ทำใหม่")
+  expect(screen.getByRole("button", { name: `ทำเสียงนี้ใหม่: ${SOUND.role}` })).toBeTruthy()
+  expect(screen.getByRole("button", { name: `ย้อนเสียง: ${SOUND.role}` })).toBeTruthy()
+  expect(screen.getByRole("button", { name: `เปิดเสียง: เสียงที่ 4000000` })).toBeTruthy()
+})
+
+test("ทำใหม่ has Claude compose a sound again, asked through the room by its place; off, on and remove change it as the user's own change", async () => {
+  const { api } = renderScreen(withSounds({ composed: [SOUND, soundAt(4_000_000, { off: true })] }))
+  await ready()
+  await openTab("sound")
+  await waitFor(() => expect(soundButton("sounds.redoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.redoLabel"))
+  await waitFor(() => expect(calls(api, "redoSound")).toHaveLength(1))
+  expect(calls(api, "redoSound")[0]!.slice(0, 3)).toEqual(["redoSound", FOLDER, SOUND.anchor])
+  await waitFor(() => expect(soundButton("sounds.offLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.offLabel"))
+  expect(api.calls).toContainEqual(["setSound", FOLDER, SOUND.anchor, { off: true }])
+  await waitFor(() => expect(soundButton("sounds.onLabel", "เสียงที่ 4000000")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.onLabel", "เสียงที่ 4000000"))
+  expect(api.calls).toContainEqual(["setSound", FOLDER, soundAt(4_000_000).anchor, { off: false }])
+  await waitFor(() => expect(soundButton("sounds.removeLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.removeLabel"))
+  expect(api.calls).toContainEqual(["setSound", FOLDER, SOUND.anchor, null])
+  // none of these is the old CapCut pick
+  expect(calls(api, "setSoundCue")).toEqual([])
+})
+
+test("แก้ opens the field with the sound's own words, one on the page at a time; sending has Claude change the sound as typed, trimmed, and the field closes", async () => {
+  const { api } = renderScreen(withSounds({ composed: [SOUND, soundAt(4_000_000)] }))
+  await ready()
+  await openTab("sound")
+  await waitFor(() => expect(soundButton("sounds.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.editLabel"))
+  expect(soundEditField().getAttribute("placeholder")).toBe("เช่น เบาลง สั้นลง หรือให้ตึงกว่านี้")
+  expect(soundButton("sounds.editLabel").getAttribute("aria-expanded")).toBe("true")
+  // another row's แก้ moves the field there
+  await userEvent.click(soundButton("sounds.editLabel", "เสียงที่ 4000000"))
+  expect(screen.getAllByRole("textbox", { name: SOUND_EDIT_FIELD })).toHaveLength(1)
+  expect(within(soundRows()[1]!).getByRole("textbox", { name: SOUND_EDIT_FIELD })).toBeTruthy()
+  await userEvent.click(soundButton("sounds.editLabel"))
+  await userEvent.type(soundEditField(), "  เบาลงอีกนิด  ")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  await waitFor(() => expect(calls(api, "editSound")).toHaveLength(1))
+  expect(calls(api, "editSound")[0]!.slice(0, 4)).toEqual(["editSound", FOLDER, SOUND.anchor, "เบาลงอีกนิด"])
+  expect(screen.queryByRole("textbox", { name: SOUND_EDIT_FIELD })).toBeNull()
+  // ยกเลิก closes a field and keeps nothing
+  await waitFor(() => expect(soundButton("sounds.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.editLabel"))
+  await userEvent.click(screen.getByRole("button", { name: CANCEL }))
+  expect(screen.queryByRole("textbox", { name: SOUND_EDIT_FIELD })).toBeNull()
+})
+
+test("an open field goes with its sound's code: a sound no longer composed, or no longer listed, lets it go, and one composed later opens none", async () => {
+  let composed: ComposedSoundView[] = [SOUND]
+  const { api } = renderScreen({ ...withSounds(), previewHighlights: async () => flairPreview({ composed }) })
+  await ready()
+  await openTab("sound")
+  await waitFor(() => expect(soundButton("sounds.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.editLabel"))
+  expect(soundEditField()).toBeTruthy()
+  // a composing again that failed took its code
+  composed = [{ ...SOUND, written: false, writeFailed: "nothing was heard", render: "pending" }]
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: SOUND_EDIT_FIELD })).toBeNull())
+  composed = [SOUND]
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await waitFor(() => expect(screen.getByRole("button", { name: t("sounds.editLabel", { role: SOUND.role }) })).toBeTruthy())
+  expect(screen.queryByRole("textbox", { name: SOUND_EDIT_FIELD })).toBeNull()
+})
+
+test("a sound changed as the user asked says the change under its role; an edit that failed says so as a warning; neither is said while it is written again", async () => {
+  const instruction = "เบาลงครึ่งหนึ่ง แล้วให้หางเสียงยาวขึ้น"
+  const failed = "the change could not be composed\nthe sound is silent"
+  let composed: ComposedSoundView[] = [{ ...SOUND, instruction, editFailed: failed, canUndo: true }]
+  const previews = listedSounds(() => composed)
+  let finish!: (view: PostRunView) => void
+  const { api } = renderScreen({ ...withSounds(), previewHighlights: previews.previewHighlights, redoSound: () => new Promise<PostRunView>((resolve) => (finish = resolve)) })
+  await ready()
+  await openTab("sound")
+  const last = await screen.findByText(`แก้ล่าสุด: ${instruction}`)
+  expect(last.getAttribute("title")).toBe(`แก้ล่าสุด: ${instruction}`)
+  const editFailed = screen.getByText("แก้ไม่สำเร็จ · the change could not be composed the sound is silent")
+  expect(editFailed.getAttribute("title")).toBe(failed)
+  expect(editFailed.classList.contains("warn-text")).toBe(true)
+  await waitFor(() => expect(placing()).toBe(false))
+  await waitFor(() => expect(soundButton("sounds.redoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.redoLabel"))
+  expect(soundStateOf(soundRows()[0]!)).toEqual(["กำลังแต่ง…"])
+  expect(screen.queryByText(/แก้ล่าสุด/)).toBeNull()
+  expect(screen.queryByText(/แก้ไม่สำเร็จ/)).toBeNull()
+  previews.hold()
+  composed = [SOUND]
+  act(() => api.emit(planEvent("sounds", { state: "done", count: 1, dropped: 0 })))
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await act(async () => finish({ running: false, states: { sounds: { state: "done", count: 1, dropped: 0 } } }))
+  await previews.land()
+  await waitFor(() => expect(soundStateOf(soundRows()[0]!)).toEqual(["พร้อม"]))
+})
+
+test("while a sound is written again or changed only its own row reads กำลังแต่ง… or กำลังแก้…, from the press until the read that follows the run's end has landed, and the graphic at its place reads its own line", async () => {
+  for (const how of ["redo", "edit"] as const) {
+    // the first sound scores the graphic, and has the graphic's place
+    let composed: ComposedSoundView[] = [{ ...SOUND, anchor: MOTION.anchor, graphic: { summary: IDEA } }, soundAt(4_000_000)]
+    const answer = () => flairPreview({ composed: structuredClone(composed), graphics: [{ ...MOTION, render: "ready" }] })
+    const previews = heldPreviews(answer)
+    let finish!: (view: PostRunView) => void
+    const pending = () => new Promise<PostRunView>((resolve) => (finish = resolve))
+    const { api } = renderScreen({
+      ...withGraphics({}, { text: false, zoom: false, insert: false }),
+      previewHighlights: previews.previewHighlights,
+      redoSound: pending,
+      editSound: pending,
+    })
+    await ready()
+    await openTab("sound")
+    await screen.findByText(SOUND.role)
+    await waitFor(() => expect(placing()).toBe(false))
+    const states = () => soundRows().map(soundStateOf)
+    const marked = how === "redo" ? "กำลังแต่ง…" : "กำลังแก้…"
+    await waitFor(() => expect(soundButton("sounds.editLabel")).toHaveProperty("disabled", false))
+    if (how === "redo") await userEvent.click(soundButton("sounds.redoLabel"))
+    else {
+      await userEvent.click(soundButton("sounds.editLabel"))
+      await userEvent.type(soundEditField(), "สั้นลง")
+      await userEvent.click(screen.getByRole("button", { name: SEND }))
+    }
+    expect(states(), how).toEqual([[marked], ["พร้อม"]])
+    // its buttons, and every row's that asks Claude, wait while the run goes
+    expect([soundButton("sounds.redoLabel"), soundButton("sounds.redoLabel", "เสียงที่ 4000000")].map((one) => (one as HTMLButtonElement).disabled)).toEqual([true, true])
+    act(() => api.emit(planEvent("sounds", { state: "running", done: 0, total: 1 })))
+    await act(async () => {})
+    expect(states(), how).toEqual([[marked], ["พร้อม"]])
+    expect(screen.getByText("กำลังแต่งเสียง 0 จาก 1")).toBeTruthy()
+    // the graphic at the same place is not the one being written
+    await openTab("graphics")
+    expect(stateOf(graphicRows()[0]!)).toEqual([t("graphics.render.ready")])
+    await openTab("sound")
+
+    previews.holding = true
+    composed = [{ ...composed[0]!, render: "pending" }, soundAt(4_000_000)]
+    act(() => api.emit(planEvent("sounds", { state: "done", count: 1, dropped: 0 })))
+    act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+    await act(async () => finish({ running: false, states: { sounds: { state: "done", count: 1, dropped: 0 } } }))
+    expect(previews.held.length).toBeGreaterThan(0)
+    // the run is over, and the rows still show what was read before its end
+    expect(states(), how).toEqual([[marked], ["พร้อม"]])
+    await act(async () => previews.held.splice(0).forEach(({ resolve }) => resolve(answer())))
+    await waitFor(() => expect(states(), how).toEqual([["กำลังเรนเดอร์…"], ["พร้อม"]]))
+    cleanup()
+  }
+})
+
+test("ย้อน takes a sound one step back by its place, the rows read again quietly; what main refuses of a sound is said in Thai", async () => {
+  const notWritten: PostWorkState = { state: "failed", error: "this sound has not been written yet" }
+  let answer!: (view: PostRunView) => void
+  const { api } = renderScreen({
+    ...withSounds({ composed: [{ ...SOUND, canUndo: true }] }),
+    editSound: () => new Promise<PostRunView>((resolve) => (answer = resolve)),
+    undoSound: async () => {
+      throw new Error("Error invoking remote method 'api:undoSound': Error: this sound has nothing to go back to")
+    },
+  })
+  await ready()
+  await openTab("sound")
+  await waitFor(() => expect(placing()).toBe(false))
+  await waitFor(() => expect(soundButton("sounds.undoLabel")).toHaveProperty("disabled", false))
+  const reads = calls(api, "previewHighlights").length
+  await userEvent.click(soundButton("sounds.undoLabel"))
+  expect(calls(api, "undoSound")).toEqual([["undoSound", FOLDER, SOUND.anchor]])
+  expect(await screen.findByText(t("error.generic", { message: "ไม่มีเสียงก่อนหน้าให้ย้อน" }))).toBeTruthy()
+  expect(screen.queryByText(/nothing to go back to/)).toBeNull()
+  // refused, it reads nothing again
+  expect(calls(api, "previewHighlights")).toHaveLength(reads)
+
+  await waitFor(() => expect(soundButton("sounds.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.editLabel"))
+  await userEvent.type(soundEditField(), "เบาลง")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  act(() => api.emit(planEvent("sounds", { state: "running" })))
+  act(() => api.emit(planEvent("sounds", notWritten)))
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await act(async () => answer({ running: false, states: { sounds: notWritten } }))
+  expect(await screen.findByText(`${t("post.work.sounds")} ไม่สำเร็จ: เสียงนี้ยังไม่ได้แต่ง กดทำใหม่ก่อน`)).toBeTruthy()
+  expect(screen.queryByText(/not been written/)).toBeNull()
+})
+
+test("a step back that goes through reads the sounds again, quietly", async () => {
+  let back = false
+  const { api } = renderScreen({
+    ...withSounds(),
+    previewHighlights: async () => flairPreview({ composed: [back ? { ...SOUND } : { ...SOUND, instruction: "เบาลง", canUndo: true }] }),
+    undoSound: async () => {
+      back = true
+    },
+  })
+  await ready()
+  await openTab("sound")
+  await screen.findByText("แก้ล่าสุด: เบาลง")
+  await waitFor(() => expect(placing()).toBe(false))
+  const reads = calls(api, "previewHighlights").length
+  await waitFor(() => expect(soundButton("sounds.undoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(soundButton("sounds.undoLabel"))
+  await waitFor(() => expect(screen.queryByText(/แก้ล่าสุด/)).toBeNull())
+  expect(calls(api, "previewHighlights")).toHaveLength(reads + 1)
+  expect([calls(api, "editSound"), calls(api, "redoSound")]).toEqual([[], []])
+})
+
+test("ทำใหม่, แก้ and ย้อน wait while a run goes; off and remove wait only for a change being saved", async () => {
+  const { api } = renderScreen(withSounds({ composed: [{ ...SOUND, canUndo: true }] }))
+  await ready()
+  await openTab("sound")
+  await waitFor(() => expect(soundButton("sounds.redoLabel")).toHaveProperty("disabled", false))
+  act(() => api.emit(planEvent("graphics", { state: "running" })))
+  const held = () => (["sounds.redoLabel", "sounds.editLabel", "sounds.undoLabel", "sounds.offLabel", "sounds.removeLabel"] as const).map((key) => (soundButton(key) as HTMLButtonElement).disabled)
+  expect(held()).toEqual([true, true, true, false, false])
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await waitFor(() => expect(held()).toEqual([false, false, false, false, false]))
+})
+
+test("the user's own CapCut sounds are listed under the composed ones, by time and name, each taken off by its place; the list is not there when there are none", async () => {
+  const anchor = { kind: "highlight" as const, groupId: "g1", line: 0 }
+  const cue = { anchor, atUs: 100_000, what: 'ข้อความเด่น "เอาล่ะ"', beatId: "b1", effectId: "s1", soundName: "ปัง", edited: true }
+  const { api } = renderScreen(withSounds({ composed: [SOUND], cues: [cue], ownSounds: [{ anchor, atUs: 100_000, name: "ปัง" }] }))
+  await ready()
+  await openTab("sound")
+  expect(await screen.findByText(t("sounds.own"))).toBeTruthy()
+  const remove = screen.getByRole("button", { name: "ลบเสียง ปัง" })
+  const row = remove.closest("li")!
+  expect(within(row).getByText("0:00.1")).toBeTruthy()
+  expect(within(row).getByText("ปัง")).toBeTruthy()
+  await waitFor(() => expect(remove).toHaveProperty("disabled", false))
+  await userEvent.click(remove)
+  expect(api.calls).toContainEqual(["setSoundCue", FOLDER, anchor, null])
+  // a beat it is not in lists none of them
+  await userEvent.click(beatPick("ปิดท้าย"))
+  expect(screen.queryByText(t("sounds.own"))).toBeNull()
+  cleanup()
+
+  renderScreen(withSounds({ composed: [SOUND] }))
+  await ready()
+  await openTab("sound")
+  await screen.findByText(SOUND.role)
+  expect(screen.queryByText(t("sounds.own"))).toBeNull()
+})
+
+test("with the sounds on and none composed in the beat, the tab says how to get some; a machine a sound's render found unfit says why above the list", async () => {
+  renderScreen(withSounds())
+  await ready()
+  await openTab("sound")
+  expect(await screen.findByText("ยังไม่มีเสียง กด AI คิดใหม่: เสียง")).toBeTruthy()
+  expect(soundRowsOrNone()).toEqual([])
+  cleanup()
+
+  const problem = "the app's ffmpeg is missing"
+  renderScreen(withSounds({ composed: [{ ...SOUND, render: "pending" }], soundsProblem: problem }))
+  await ready()
+  await openTab("sound")
+  const notice = await screen.findByText(`ทำเสียงบนเครื่องนี้ไม่ได้ · ${problem}`)
+  expect(notice.classList.contains("warn-text")).toBe(true)
+  // above the list
+  expect(notice.compareDocumentPosition(soundRows()[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(screen.queryByText(t("sounds.none"))).toBeNull()
+})
+const soundRowsOrNone = () => screen.queryAllByRole("listitem").filter((item) => item.classList.contains("sound"))
+
+test("the sound tab's badge counts the rows it lists that play: composed sounds switched on, and the user's own CapCut sounds", async () => {
+  const cue = (groupId: string, edited: boolean) => ({ anchor: { kind: "highlight" as const, groupId, line: 0 }, atUs: 100_000, what: "", beatId: "b1", effectId: "s1", soundName: "ปัง", edited })
+  renderScreen(
+    withSounds({
+      composed: [SOUND, soundAt(4_000_000, { off: true })],
+      // Claude's CapCut sound from before 0.6.0 still plays, but is not listed
+      cues: [cue("g1", true), cue("g2", false)],
+      ownSounds: [{ anchor: cue("g1", true).anchor, atUs: 100_000, name: "ปัง" }],
+    }),
+  )
+  await ready()
+  await openTab("sound")
+  await screen.findByText(SOUND.role)
+  expect(within(beatPick("เปิดเรื่อง")).getByText("🔊 2")).toBeTruthy()
+})
+
+test("while a graphic is written again, the sound tied to it is not marked in the sound tab", async () => {
+  const tied: ComposedSoundView = { ...SOUND, anchor: MOTION.anchor, graphic: { summary: IDEA } }
+  renderScreen({
+    ...withGraphics({ graphics: [{ ...MOTION, render: "ready" }], composed: [tied] }, { text: false, zoom: false, insert: false }),
+    redoGraphic: () => new Promise<PostRunView>(() => {}),
+  })
+  await ready()
+  await openFlair()
+  await waitFor(() => expect(graphicButton("graphics.redoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(graphicButton("graphics.redoLabel"))
+  expect(stateOf(graphicRows()[0]!)).toEqual([WRITING])
+  await openTab("sound")
+  expect(soundStateOf(soundRows()[0]!)).toEqual(["พร้อม"])
+})
+
+test("the strip counts the sounds being composed, and says nothing of a sounds work that had none to compose", async () => {
+  const { api } = renderScreen(withSounds({ composed: [SOUND] }))
+  await ready()
+  await openTab("sound")
+  await screen.findByText(SOUND.role)
+  act(() => api.emit(planEvent("graphics", { state: "running" })))
+  act(() => api.emit(planEvent("sounds", { state: "waiting" })))
+  act(() => api.emit(planEvent("sounds", { state: "running", done: 1, total: 3 })))
+  expect(screen.getByText("กำลังแต่งเสียง 1 จาก 3")).toBeTruthy()
+  // a graphic written again runs the sounds work after it, which ends with nothing done when no sound follows the graphic
+  act(() => api.emit(planEvent("graphics", { state: "done", count: 1, dropped: 0 })))
+  act(() => api.emit(planEvent("sounds", { state: "done", count: 0, dropped: 0 })))
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await waitFor(() => expect(screen.getByText(t("post.run.done", { work: t("post.work.graphics"), count: 1 }))).toBeTruthy())
+  expect(screen.queryByText(new RegExp(`^${t("post.work.sounds")} `))).toBeNull()
+  // a run asked for the sounds alone says it composed none
+  act(() => api.emit(planEvent("sounds", { state: "running" })))
+  act(() => api.emit(planEvent("sounds", { state: "done", count: 0, dropped: 0 })))
+  expect(screen.getByText(t("post.run.done", { work: t("post.work.sounds"), count: 0 }))).toBeTruthy()
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  cleanup()
+
+  // a whole plan, which writes graphics and then plans the sounds, says it composed none too: only a graphic's redo or edit is quiet
+  const plan = renderScreen(withSounds({ composed: [SOUND] }))
+  await ready()
+  for (const work of ["emphasis", "text", "techniques", "graphics", "sounds", "subtitles"] as const) act(() => plan.api.emit(planEvent(work, { state: "waiting" })))
+  act(() => plan.api.emit(planEvent("graphics", { state: "done", count: 1, dropped: 0 })))
+  act(() => plan.api.emit(planEvent("sounds", { state: "done", count: 0, dropped: 0 })))
+  expect(screen.getByText(t("post.run.done", { work: t("post.work.sounds"), count: 0 }))).toBeTruthy()
+})
+
 /* while a write runs */
 
 test("while a write runs nothing on the post page can be changed, since the write already took what it writes", async () => {
   renderScreen({
-    ...withGraphics({ graphics: [MOTION], emphasis: emphasisOf() }),
+    ...withGraphics({ graphics: [{ ...MOTION, canUndo: true }], composed: [{ ...SOUND, canUndo: true }], emphasis: emphasisOf() }),
     getSettings: async () =>
       settingsView({
         subtitles: { enabled: true, length: "line", polish: true },
@@ -2946,7 +4115,6 @@ test("while a write runs nothing on the post page can be changed, since the writ
   await ready()
   await waitFor(() => expect(within(speechRows()[1]!).getByRole("button", { name: t("timeline.action.keep") })).toHaveProperty("disabled", true))
   expect(screen.getByRole("radio", { name: t("timeline.preset.loose") })).toHaveProperty("disabled", true)
-  expect(planButton()).toHaveProperty("disabled", true)
 
   await openTab("emphasis")
   await screen.findByText("เอาล่ะครับ")
@@ -2956,17 +4124,23 @@ test("while a write runs nothing on the post page can be changed, since the writ
   await userEvent.click(today)
   expect(today.getAttribute("aria-pressed")).toBe("false")
   expect(screen.getByRole("button", { name: t("emphasis.deleteLabel", { text: "เอาล่ะครับ" }) })).toHaveProperty("disabled", true)
-  expect(screen.getByRole("radio", { name: t("flair.level.heavy") })).toHaveProperty("disabled", true)
+
+  await openTab("techniques")
+  expect(screen.getByRole("textbox", { name: t("highlights.lineLabel", { number: 1, time: "0:00.1" }) })).toHaveProperty("disabled", true)
+  expect(screen.getByRole("switch", { name: new RegExp(`^${t("flair.zoom")}`) })).toHaveProperty("disabled", true)
 
   await openTab("graphics")
-  expect(screen.getByRole("textbox", { name: t("highlights.lineLabel", { number: 1, time: "0:00.1" }) })).toHaveProperty("disabled", true)
   expect(graphicButton("graphics.offLabel")).toHaveProperty("disabled", true)
   expect(graphicButton("graphics.redoLabel")).toHaveProperty("disabled", true)
+  expect(graphicButton("graphics.editLabel")).toHaveProperty("disabled", true)
+  expect(graphicButton("graphics.undoLabel")).toHaveProperty("disabled", true)
   expect(screen.getByRole("switch", { name: new RegExp(`^${t("flair.graphic")}`) })).toHaveProperty("disabled", true)
 
   await openTab("sound")
   expect(screen.getByRole("switch", { name: t("flair.sound") })).toHaveProperty("disabled", true)
-  expect(screen.getByRole("combobox", { name: t("flair.sound.label", { what: 'ข้อความเด่น "เอาล่ะ"' }) })).toHaveProperty("disabled", true)
+  for (const key of ["sounds.redoLabel", "sounds.editLabel", "sounds.undoLabel", "sounds.offLabel", "sounds.removeLabel"] as const) {
+    expect(soundButton(key), key).toHaveProperty("disabled", true)
+  }
 
   await openTab("subtitles")
   const line = (await screen.findAllByRole("textbox"))[0] as HTMLInputElement
@@ -2977,10 +4151,15 @@ test("while a write runs nothing on the post page can be changed, since the writ
   expect(screen.getByRole("switch", { name: t("subtitles.enabled") })).toHaveProperty("disabled", true)
 
   const menu = await openAi()
-  for (const work of ["emphasis", "graphics", "sounds", "subtitles"] as const) {
+  // the level is shut with the rest: the write took it as it was
+  for (const level of within(menu).getAllByRole("radio")) expect(level).toHaveProperty("disabled", true)
+  for (const work of ["emphasis", "techniques", "graphics", "sounds", "subtitles"] as const) {
     expect(within(menu).getByRole("button", { name: t(`post.ai.rethink.${work}` as MessageKey) })).toHaveProperty("disabled", true)
   }
-  expect(within(menu).getAllByText(t("edit.ai.writing"))).toHaveLength(4)
+  expect(planItem()).toHaveProperty("disabled", true)
+  expect(reasonOf(planItem())).toBe(t("edit.ai.writing"))
+  // one reason for them all, said once
+  expect(within(menu).getAllByText(t("edit.ai.writing"))).toHaveLength(1)
 })
 
 test("while a write runs the way back to the outline is shut, and looks it", async () => {
@@ -3019,6 +4198,7 @@ test("the bar carries the reason the write is held (when one shows), then the AI
   const room = renderScreen({}, { capcutRunning: true })
   await ready()
   expect(barParts()).toEqual(["reason", "ai menu", "write button"])
+  // the whole plan is the menu's first item, not a button of its own
   expect(within(bar()).getAllByRole("button").map((button) => button.textContent)).toEqual([`✦ ${t("post.ai")} ▾`, t("timeline.write")])
   // nothing holds the write: no reason, and the buttons are where they were
   room.setCapcutRunning(false)
@@ -3108,4 +4288,284 @@ test("the way back to the outline is one click", async () => {
   await ready()
   await userEvent.click(screen.getByRole("button", { name: new RegExp(t("edit.editOutline")) }))
   expect(outline()).toBe(1)
+})
+
+/* moves of the picture */
+
+// a move Claude designed on the word the opening's graphic is on, as the main process lists it
+const MOVE: MoveView = {
+  anchor: { kind: "speech", videoId: "a", sourceUs: 2_500_000, beatId: "b1" },
+  insert: false,
+  atUs: 750_000,
+  durationUs: 1_200_000,
+  beatId: "b1",
+  about: "ดันเข้าหาหน้าช้าๆ แล้วเอียงนิดเดียว",
+  from: "medium",
+  edited: false,
+  off: false,
+  instruction: null,
+  editFailed: null,
+  canUndo: false,
+}
+/** Another move of the opening, at another word, told apart by what it does. */
+const moveAt = (sourceUs: number, extra: Partial<MoveView> = {}): MoveView => ({
+  ...MOVE,
+  anchor: { kind: "speech", videoId: "a", sourceUs, beatId: "b1" },
+  atUs: sourceUs - 1_750_000,
+  about: `ท่าที่ ${sourceUs}`,
+  ...extra,
+})
+// a punch of before 0.8.0 on the opening's piece, still playing
+const PUNCH: ZoomView = { anchor: { videoId: "a", sourceUs: 1_750_000, beatId: "b1" }, atUs: 0, durationUs: 1_550_000, what: "ช่วงเปิด", beatId: "b1", kind: "punch", edited: false }
+/** What the page names a legacy zoom's row by: its kind, then its piece. */
+const punchAbout = `${t("flair.zoom.punch")} ช่วงเปิด`
+const moveRows = () => screen.getAllByRole("listitem").filter((item) => item.classList.contains("move"))
+const moveButton = (key: "moves.redoLabel" | "moves.editLabel" | "moves.undoLabel" | "moves.offLabel" | "moves.onLabel" | "moves.removeLabel", about = MOVE.about) =>
+  screen.getByRole("button", { name: t(key, { about }) })
+/** The lines of a move's row, in order, under its time. */
+const moveLines = (row: HTMLElement) => [...row.querySelector(".graphic-body")!.children].map((line) => line.textContent)
+const moveStateOf = (row: HTMLElement) => [...row.querySelectorAll(".move-state")].map((line) => line.textContent)
+/** The anchor the API is asked with: the stored place and whether it is on a cutaway. */
+const moveAnchor = (move: MoveView) => ({ ...move.anchor, insert: move.insert })
+const MOVE_FIELD = "บอก AI ว่าจะแก้การเคลื่อนภาพนี้อย่างไร"
+const REDOING_MOVE = "AI กำลังทำใหม่…"
+const EDITING_MOVE = "AI กำลังแก้…"
+
+test("the techniques tab lists the moves and the legacy zooms in the order they play, after the highlight text and before the cutaways", async () => {
+  renderScreen(withFlair({ moves: [moveAt(4_000_000), MOVE, moveAt(3_000_000, { off: true, edited: true })], zooms: [PUNCH], inserts: [ON_ROW] }))
+  await ready()
+  await openTab("techniques")
+  await screen.findByText(MOVE.about)
+  expect(moveRows().map((row) => row.querySelector(".flair-what")!.textContent)).toEqual([t("flair.zoom.punch"), MOVE.about, "ท่าที่ 3000000", "ท่าที่ 4000000"])
+  expect(within(moveRows()[1]!).getByText("0:00.7")).toBeTruthy()
+  // the order of the sections in the tab
+  const sections = [...panel().querySelectorAll(".tab-section")].map((one) => one.textContent)
+  expect(sections.indexOf(t("highlights.title"))).toBeLessThan(sections.indexOf(t("edit.flairMoves")))
+  expect(sections.indexOf(t("edit.flairMoves"))).toBeLessThan(sections.indexOf(t("edit.flairInserts")))
+})
+
+test("a move's row says, in order: what it does, the last edit, the point it was made for, the level it plays from, that it moves a cutaway, how it stands, the failed edit and that it was switched by hand", async () => {
+  const why = "the face leaves the frame at 0.4 s"
+  const full: MoveView = { ...MOVE, insert: true, pointId: "p1", from: "light", instruction: "ช้าลง", editFailed: why, off: true, edited: true, canUndo: true }
+  renderScreen(withFlair({ emphasis: emphasisOf(), moves: [full] }))
+  await ready()
+  await openTab("techniques")
+  await screen.findByText(MOVE.about)
+  const [row] = moveRows()
+  expect(moveLines(row!)).toEqual([
+    MOVE.about,
+    "แก้ล่าสุด: ช้าลง",
+    t("emphasis.from", { text: "เอาล่ะครับ" }),
+    "เล่นตั้งแต่ระดับเบา",
+    "บนสื่อแทรก",
+    "ปิดอยู่ ไม่ใส่ในคลิป",
+    `แก้ไม่สำเร็จ · ${why}`,
+    t("flair.edited"),
+  ])
+  // the whole of why the edit failed is there for a pointer held over it
+  expect(row!.querySelector(".graphic-edit-failed")!.getAttribute("title")).toBe(why)
+  expect(within(row!).getByText(t("edit.pieceLength", { seconds: "1.2" }))).toBeTruthy()
+  cleanup()
+
+  // one of Claude's that plays on the footage says only what it does and the level it plays from
+  renderScreen(withFlair({ moves: [MOVE] }))
+  await ready()
+  await openTab("techniques")
+  await screen.findByText(MOVE.about)
+  expect(moveLines(moveRows()[0]!)).toEqual([MOVE.about, "เล่นตั้งแต่ระดับกลาง"])
+  expect(moveStateOf(moveRows()[0]!)).toEqual([])
+})
+
+test("each level a move plays from is said in its own words", async () => {
+  renderScreen(withFlair({ moves: [moveAt(2_500_000, { from: "light" }), moveAt(3_000_000, { from: "medium" }), moveAt(3_500_000, { from: "heavy" })] }))
+  await ready()
+  await openTab("techniques")
+  await screen.findByText("ท่าที่ 2500000")
+  expect(moveRows().map((row) => row.querySelector(".move-from")!.textContent)).toEqual(["เล่นตั้งแต่ระดับเบา", "เล่นตั้งแต่ระดับกลาง", "เล่นเฉพาะจัดเต็ม"])
+})
+
+test("a move's buttons are ทำใหม่, แก้, ย้อน when it has a step to go back to, ปิด or เปิด, and ลบ; a legacy zoom's is ลบ alone, having no switch", async () => {
+  renderScreen(withFlair({ moves: [MOVE, moveAt(3_000_000, { canUndo: true }), moveAt(3_500_000, { off: true })], zooms: [PUNCH] }))
+  await ready()
+  await openTab("techniques")
+  await screen.findByText(MOVE.about)
+  const buttons = (row: HTMLElement) => within(row).getAllByRole("button").map((button) => button.textContent)
+  const [legacy, plain, undoable, off] = moveRows()
+  expect(buttons(legacy!)).toEqual(["ลบ"])
+  expect(buttons(plain!)).toEqual(["ทำใหม่", "แก้", "ปิด", "ลบ"])
+  expect(buttons(undoable!)).toEqual(["ทำใหม่", "แก้", "ย้อน", "ปิด", "ลบ"])
+  expect(buttons(off!)).toEqual(["ทำใหม่", "แก้", "เปิด", "ลบ"])
+  // read out, each is named by what it shows and then by its move
+  expect(within(plain!).getByRole("button", { name: `ทำใหม่ ${MOVE.about}` }).textContent).toBe("ทำใหม่")
+  expect(within(legacy!).getByRole("button", { name: `ลบ ${punchAbout}` }).textContent).toBe("ลบ")
+  // a legacy zoom says what it is and where, and nothing of a level or a state
+  expect(moveLines(legacy!)).toEqual([t("flair.zoom.punch"), "ช่วงเปิด"])
+})
+
+test("ทำใหม่ on a move has Claude design it again, asked by its place and whether it is on a cutaway, with the request a plan is asked with", async () => {
+  const onCutaway: MoveView = { ...MOVE, insert: true, about: "ซูมรูปที่แทรกเข้าช้าๆ" }
+  const { api } = renderScreen(withFlair({ moves: [MOVE, onCutaway] }))
+  await ready()
+  await openTab("techniques")
+  await waitFor(() => expect(moveButton("moves.redoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.redoLabel"))
+  await waitFor(() => expect(calls(api, "redoMove")).toHaveLength(1))
+  const [, folder, anchor, request] = calls(api, "redoMove")[0]!
+  expect([folder, anchor]).toEqual([FOLDER, { ...MOVE.anchor, insert: false }])
+  await planAll()
+  await waitFor(() => expect(calls(api, "planPost")).toHaveLength(1))
+  expect(calls(api, "planPost")[0]![2]).toEqual(request)
+  // the one on the cutaway at the same word is asked for as that one
+  await waitFor(() => expect(moveButton("moves.redoLabel", onCutaway.about)).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.redoLabel", onCutaway.about))
+  await waitFor(() => expect(calls(api, "redoMove")).toHaveLength(2))
+  expect(calls(api, "redoMove")[1]![2]).toEqual({ ...MOVE.anchor, insert: true })
+})
+
+test("ปิด, เปิด and ลบ switch a move or remove it by its place, and ย้อน takes it one step back; a legacy zoom's ลบ takes it off its piece as before", async () => {
+  const off = moveAt(3_000_000, { off: true })
+  const back = moveAt(3_500_000, { canUndo: true })
+  const { api } = renderScreen(withFlair({ moves: [MOVE, off, back], zooms: [PUNCH] }))
+  await ready()
+  await openTab("techniques")
+  const press = async (button: () => HTMLElement) => {
+    await waitFor(() => expect(button()).toHaveProperty("disabled", false))
+    await userEvent.click(button())
+  }
+  await press(() => moveButton("moves.offLabel"))
+  await press(() => moveButton("moves.onLabel", off.about))
+  await press(() => moveButton("moves.removeLabel"))
+  await press(() => moveButton("moves.undoLabel", back.about))
+  await press(() => moveButton("moves.removeLabel", punchAbout))
+  await waitFor(() => expect(calls(api, "setZoom")).toHaveLength(1))
+  expect(calls(api, "setMove")).toEqual([
+    ["setMove", FOLDER, moveAnchor(MOVE), { off: true }],
+    ["setMove", FOLDER, moveAnchor(off), { off: false }],
+    ["setMove", FOLDER, moveAnchor(MOVE), null],
+  ])
+  expect(calls(api, "undoMove")).toEqual([["undoMove", FOLDER, moveAnchor(back)]])
+  expect(calls(api, "setZoom")).toEqual([["setZoom", FOLDER, PUNCH.anchor, null]])
+  // none of them asks Claude
+  expect([calls(api, "redoMove"), calls(api, "editMove")]).toEqual([[], []])
+})
+
+test("ทำใหม่, แก้ and ย้อน wait while a run goes, the one a move started included; ปิด and ลบ do not", async () => {
+  let finish!: (view: PostRunView) => void
+  const other = moveAt(3_000_000, { canUndo: true })
+  const { api } = renderScreen({ ...withFlair({ moves: [MOVE, other], zooms: [PUNCH] }), redoMove: () => new Promise<PostRunView>((resolve) => (finish = resolve)) })
+  await ready()
+  await openTab("techniques")
+  await waitFor(() => expect(moveButton("moves.redoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.redoLabel"))
+  const asking = () => [moveButton("moves.redoLabel"), moveButton("moves.editLabel"), moveButton("moves.redoLabel", other.about), moveButton("moves.undoLabel", other.about)]
+  expect(asking().map((button) => (button as HTMLButtonElement).disabled)).toEqual([true, true, true, true])
+  const own = () => [moveButton("moves.offLabel"), moveButton("moves.removeLabel"), moveButton("moves.removeLabel", punchAbout)]
+  expect(own().map((button) => (button as HTMLButtonElement).disabled)).toEqual([false, false, false])
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await act(async () => finish({ running: false, states: { techniques: { state: "done", count: 1, dropped: 0 } } }))
+  await waitFor(() => expect(asking().map((button) => (button as HTMLButtonElement).disabled)).toEqual([false, false, false, false]))
+})
+
+test("แก้ opens a field under the move's row in the move's words, and sending has Claude change it as typed, trimmed, with the request a plan is asked with; the field closes", async () => {
+  const { api } = renderScreen(withFlair({ moves: [{ ...MOVE, insert: true }] }))
+  await ready()
+  await openTab("techniques")
+  await waitFor(() => expect(moveButton("moves.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.editLabel"))
+  const field = within(moveRows()[0]!).getByRole("textbox", { name: MOVE_FIELD })
+  expect(field.getAttribute("placeholder")).toBe("เช่น แรงขึ้น ช้าลง ไม่ต้องหมุน")
+  expect(document.activeElement).toBe(field)
+  await userEvent.type(field, "  แรงขึ้น ")
+  await userEvent.click(screen.getByRole("button", { name: SEND }))
+  await waitFor(() => expect(calls(api, "editMove")).toHaveLength(1))
+  const [, folder, anchor, instruction, request] = calls(api, "editMove")[0]!
+  expect([folder, anchor, instruction]).toEqual([FOLDER, { ...MOVE.anchor, insert: true }, "แรงขึ้น"])
+  expect(request).toEqual({ rules: settingsView().cut, view: { position: "auto", subtitlesOn: false, highlightsOn: true, flair: FLAIR_ON }, subtitles: null })
+  expect(screen.queryByRole("textbox", { name: MOVE_FIELD })).toBeNull()
+  // ยกเลิก closes it and keeps nothing, the keyboard back on แก้
+  await waitFor(() => expect(moveButton("moves.editLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.editLabel"))
+  await userEvent.type(screen.getByRole("textbox", { name: MOVE_FIELD }), "หมุน")
+  await userEvent.click(screen.getByRole("button", { name: CANCEL }))
+  expect(screen.queryByRole("textbox", { name: MOVE_FIELD })).toBeNull()
+  expect(document.activeElement).toBe(moveButton("moves.editLabel"))
+  expect(calls(api, "editMove")).toHaveLength(1)
+})
+
+test("while a move is designed again or changed only its own row says so, not the move on the cutaway at the same word, until the read that follows the run's end has landed", async () => {
+  const onCutaway: MoveView = { ...MOVE, insert: true, about: "ซูมรูปที่แทรกเข้าช้าๆ" }
+  for (const how of ["redo", "edit"] as const) {
+    let finish!: (view: PostRunView) => void
+    const pending = () => new Promise<PostRunView>((resolve) => (finish = resolve))
+    const { api } = renderScreen({ ...withFlair({ moves: [MOVE, onCutaway], graphics: [{ ...MOTION, render: "ready" }] }), redoMove: pending, editMove: pending })
+    await ready()
+    await openTab("techniques")
+    await waitFor(() => expect(moveButton("moves.editLabel")).toHaveProperty("disabled", false))
+    if (how === "redo") await userEvent.click(moveButton("moves.redoLabel"))
+    else {
+      await userEvent.click(moveButton("moves.editLabel"))
+      await userEvent.type(screen.getByRole("textbox", { name: MOVE_FIELD }), "ช้าลง")
+      await userEvent.click(screen.getByRole("button", { name: SEND }))
+    }
+    const marked = how === "redo" ? REDOING_MOVE : EDITING_MOVE
+    expect(moveRows().map(moveStateOf), how).toEqual([[marked], []])
+    act(() => api.emit(planEvent("techniques", { state: "running" })))
+    act(() => api.emit(planEvent("techniques", { state: "done", count: 1, dropped: 0 })))
+    act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+    await act(async () => finish({ running: false, states: { techniques: { state: "done", count: 1, dropped: 0 } } }))
+    await waitFor(() => expect(moveRows().map(moveStateOf), how).toEqual([[], []]))
+    cleanup()
+  }
+})
+
+test("what main refuses of a move is said in Thai: one with no place now as the techniques work's failure, one with nothing to go back to above the page", async () => {
+  const noPlace: PostWorkState = { state: "failed", error: "this move has no place on the clip now" }
+  let answer!: (view: PostRunView) => void
+  const { api } = renderScreen({
+    ...withFlair({ moves: [{ ...MOVE, canUndo: true }] }),
+    redoMove: () => new Promise<PostRunView>((resolve) => (answer = resolve)),
+    undoMove: async () => {
+      throw new Error("Error invoking remote method 'api:undoMove': Error: this move has nothing to go back to")
+    },
+  })
+  await ready()
+  await openTab("techniques")
+  await waitFor(() => expect(moveButton("moves.redoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.redoLabel"))
+  act(() => api.emit(planEvent("techniques", { state: "running" })))
+  act(() => api.emit(planEvent("techniques", noPlace)))
+  act(() => api.emit({ type: "post-plan-finished", folder: FOLDER }))
+  await act(async () => answer({ running: false, states: { techniques: noPlace } }))
+  expect(await screen.findByText(`${t("post.work.techniques")} ไม่สำเร็จ: การเคลื่อนภาพนี้ไม่มีที่ในคลิปแล้ว`)).toBeTruthy()
+  expect(screen.queryByText(/no place on the clip/)).toBeNull()
+
+  await waitFor(() => expect(moveButton("moves.undoLabel")).toHaveProperty("disabled", false))
+  await userEvent.click(moveButton("moves.undoLabel"))
+  expect(await screen.findByText(t("error.generic", { message: "ไม่มีท่าก่อนหน้าให้ย้อน" }))).toBeTruthy()
+  expect(screen.queryByText(/nothing to go back to/)).toBeNull()
+})
+
+test("the techniques tab counts the moves that play and the legacy zooms, beside the highlight text; a move switched off is not counted", async () => {
+  renderScreen(withFlair({ moves: [MOVE, moveAt(3_000_000, { off: true })], zooms: [PUNCH] }))
+  await ready()
+  // the opening's group, its move that plays and its punch
+  await waitFor(() => expect(tab("techniques").querySelector(".tab-count")!.textContent).toBe("3"))
+})
+
+test("with zooms on and no move yet, the techniques tab says how to get some; with zooms off it lists none", async () => {
+  renderScreen(withFlair())
+  await ready()
+  await openTab("techniques")
+  expect(await screen.findByText(t("moves.none"))).toBeTruthy()
+  cleanup()
+
+  renderScreen({
+    ...withFlair({ moves: [MOVE] }),
+    getSettings: async () => settingsView({ highlights: { enabled: true, position: "auto" as const, hideSubtitles: true, custom: DEFAULT_HIGHLIGHT_OPTIONS.custom }, flair: { ...FLAIR_ON, zoom: false } }),
+  })
+  await ready()
+  await openTab("techniques")
+  await screen.findByText(t("edit.flairInserts"))
+  expect(screen.queryByText(t("edit.flairMoves"))).toBeNull()
+  expect(screen.queryByText(MOVE.about)).toBeNull()
 })

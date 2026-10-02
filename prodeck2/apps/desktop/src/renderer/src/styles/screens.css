@@ -95,6 +95,19 @@
   color: var(--danger);
 }
 
+/* the prepare page's line about finding where things are in the pictures: offered, going, or failed */
+.objects-line {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+}
+
+.objects-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .warnings {
   display: grid;
   gap: 6px;
@@ -386,7 +399,8 @@
 }
 
 .brief-panel textarea,
-.brief-panel input[type="text"] {
+.brief-panel input[type="text"],
+.graphic-edit textarea {
   -webkit-app-region: no-drag;
   width: 100%;
   padding: 7px 10px;

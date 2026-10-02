@@ -4,9 +4,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { TranscriptCache, type Transcript } from "@boxblack/core/asr"
 import { MediaCache } from "@boxblack/core/cache"
-import { PROMPT_VERSION, speechKey, VISION_SAMPLING, type VideoInsight, type VisionKey } from "@boxblack/core/vision"
+import { OBJECTS_VERSION, PROMPT_VERSION, speechKey, VISION_SAMPLING, type SceneObjects, type VideoInsight, type VisionKey } from "@boxblack/core/vision"
 import type { ProjectDetail } from "../shared/api.ts"
 import { analysedVideos, footageKeys, knownRetakes, loadFootage, type FootageDeps } from "./footage.ts"
+import { objectsKey, type ObjectsKey } from "./objects.ts"
 import { SettingsStore } from "./settings.ts"
 
 const transcript: Transcript = { engine: "whisper-local", model: "large-v3-q5_0", language: "th", utterances: [], words: [], audioEvents: [] }
@@ -128,4 +129,25 @@ test("what was seen belongs to how often Claude looked: at another rate a video 
   await deps.settings.update({ vision: { frameEveryS: 3 } })
   expect((await footageKeys(deps)).insight).toMatchObject({ intervalUs: VISION_SAMPLING.intervalUs, maxFrames: VISION_SAMPLING.maxFrames })
   expect(await analysedVideos(deps, project.folder)).toEqual(["both"])
+})
+
+test("a clip carries the objects found for its insight; one analysed before the objects pass loads with none", async () => {
+  const { deps, project } = await setup()
+  const withObjects = { ...deps, objects: new MediaCache<SceneObjects, ObjectsKey>(await mkdtemp(join(tmpdir(), "boxblack-footage-objects-"))) }
+  const [old] = await loadFootage(withObjects, project.folder, ["both"])
+  expect(old!.objects).toBeNull()
+  // a video with no insight has no objects either
+  expect((await loadFootage(withObjects, project.folder, ["audio-only"]))[0]!.objects).toBeNull()
+
+  const found: SceneObjects = { version: OBJECTS_VERSION, scenes: [] }
+  await withObjects.objects.put(old!.path, objectsKey(VISION_KEY, insight), found)
+  expect((await loadFootage(withObjects, project.folder, ["both"]))[0]!.objects).toEqual(found)
+})
+
+test("a clip carries its video's width and height from the bin, which the zoom's cap is worked out from", async () => {
+  const { deps, project } = await setup()
+  project.videos[0]!.width = 3840
+  project.videos[0]!.height = 2160
+  const [clip] = await loadFootage(deps, project.folder, ["both"])
+  expect(clip).toMatchObject({ width: 3840, height: 2160 })
 })

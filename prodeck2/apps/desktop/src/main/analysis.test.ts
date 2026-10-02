@@ -11,9 +11,10 @@ import { join } from "node:path"
 import { TranscriptCache, type AsrEngine, type MediaTools, type Transcript, type WhisperModel } from "@boxblack/core/asr"
 import { MediaCache } from "@boxblack/core/cache"
 import type { Effort, LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
-import { RETAKE_PROMPT, type VideoInsight, type VisionKey, type VisionTools } from "@boxblack/core/vision"
+import { OBJECTS_PROMPT, RETAKE_PROMPT, type SceneObjects, type VideoInsight, type VisionKey, type VisionTools } from "@boxblack/core/vision"
 import type { AppEvent, ProjectDetail } from "../shared/api.ts"
 import { createAnalysisService, defaultTransports, SCRIBE_MODEL, scribeEngine, whisperEngine, type AnalysisDeps } from "./analysis.ts"
+import type { ObjectsKey } from "./objects.ts"
 import { ProgressStore } from "./progress.ts"
 import { SecretStore, SettingsStore, type SecretBox } from "./settings.ts"
 
@@ -98,6 +99,7 @@ async function setup(overrides: Partial<AnalysisDeps> = {}) {
     secrets: new SecretStore(join(dir, "secrets.json"), box),
     transcripts: new TranscriptCache(join(dir, "transcripts")),
     insights: new MediaCache<VideoInsight, VisionKey>(join(dir, "insights")),
+    objects: new MediaCache<SceneObjects, ObjectsKey>(join(dir, "objects")),
     progress: new ProgressStore(join(dir, "progress")),
     workDir: join(dir, "work"),
     modelsDir: join(dir, "models"),
@@ -122,6 +124,9 @@ async function setup(overrides: Partial<AnalysisDeps> = {}) {
   }
   return { deps, service: createAnalysisService(deps), events, engineCalls, transportCalls, project }
 }
+
+/** A call that describes pictures, not one of the objects pass that follows it. */
+const describing = (call: { system: string }) => call.system !== OBJECTS_PROMPT.system
 
 async function finished(events: AppEvent[]) {
   for (let i = 0; i < 400; i++) {
@@ -198,7 +203,8 @@ test("the Anthropic API is called with the stored key and the chosen model", asy
   await deps.settings.update({ llm: { model: "claude-sonnet-5" } })
   await service.start(project.folder, ["a"])
   await finished(events)
-  expect(transportCalls.map(({ kind, credential, model }) => ({ kind, credential, model }))).toEqual([
+  // the objects pass after the pictures goes the same way; only the describing is counted here
+  expect(transportCalls.filter(describing).map(({ kind, credential, model }) => ({ kind, credential, model }))).toEqual([
     { kind: "api", credential: "sk-ant-user", model: "claude-sonnet-5" },
   ])
 })
@@ -225,7 +231,7 @@ test("the pictures are looked at as hard as the settings say with Opus 5.5, on e
   // another model is a fresh look
   await deps.settings.update({ llm: { model: "claude-opus-5" } })
   await run("a")
-  expect(transportCalls.map(({ kind, model, effort }) => [kind, model, effort])).toEqual([
+  expect(transportCalls.filter(describing).map(({ kind, model, effort }) => [kind, model, effort])).toEqual([
     ["api", "claude-opus-5-5", "high"],
     ["cli", "claude-opus-5-5", "low"],
     ["cli", "claude-opus-5", undefined],
@@ -638,11 +644,211 @@ test("the pictures are looked at as often as the settings say, and what was seen
   await service.start(project.folder, ["a"])
   expect(await finished(events)).toMatchObject({ outcome: "done" })
   // a 4 s clip: half a second in, then every second — four frames, where every 3 s gives two
-  expect(looked).toEqual([[500_000, 1_500_000, 2_500_000, 3_500_000]])
+  // and the objects pass is shown the very same frames, not a new sampling
+  expect(looked).toEqual([[500_000, 1_500_000, 2_500_000, 3_500_000], [500_000, 1_500_000, 2_500_000, 3_500_000]])
   expect(await service.analysed(project.folder)).toEqual(["a"])
   // at another rate it has to be looked at again; back at this one, what was seen is still there
   await deps.settings.update({ vision: { frameEveryS: 3 } })
   expect(await service.analysed(project.folder)).toEqual([])
   await deps.settings.update({ vision: { frameEveryS: 1 } })
   expect(await service.analysed(project.folder)).toEqual(["a"])
+})
+
+/**
+ * The harness's transcriber names its model "m", which the cache keys of the settings never expect,
+ * so the objects pass finds no insight for what it read; this one names Scribe's real model.
+ */
+const realScribe = (transcribe: AsrEngine["transcribe"] = async () => transcriptOf("said in a")) => {
+  const engine = (language: string): AsrEngine => ({ settings: { engine: "scribe", model: SCRIBE_MODEL, language: language as "th" }, audioFormat: "flac", transcribe })
+  return { scribe: (_apiKey: string, language: string) => engine(language), whisper: (_binary: string, _modelPath: string, _model: WhisperModel, language: string) => engine(language) }
+}
+
+test("once the pictures are described, the same run finds the objects in them, and finishes after that", async () => {
+  const { service, events, project, transportCalls } = await ready({ engines: realScribe() })
+  await service.start(project.folder, ["a"])
+  expect(await finished(events)).toEqual({ type: "analysis-finished", folder: project.folder, outcome: "done" })
+  const order = events.map((e) => (e.type === "vision" || e.type === "objects" ? `${e.type}:${e.status.state}` : e.type)).filter((step) => !step.startsWith("transcription"))
+  // the pictures are done, and so "analysed", before the objects pass starts
+  expect(order.slice(order.indexOf("vision:done"))).toEqual(["vision:done", "objects:running", "objects:done", "analysis-finished"])
+  expect(events).toContainEqual({ type: "objects", folder: project.folder, videoId: "a", status: { state: "done" } })
+  expect(transportCalls.at(-1)!.system).toBe(OBJECTS_PROMPT.system)
+  expect(await service.withoutObjects(project.folder)).toEqual([])
+})
+
+test("an objects pass that fails is told on its video and leaves the analysis done", async () => {
+  const context = await ready({ engines: realScribe() })
+  const describing = context.deps.transports!
+  const { events, project, deps } = context
+  deps.transports = {
+    ...describing,
+    anthropic: (apiKey, effort) => {
+      const transport = describing.anthropic(apiKey, effort)
+      return {
+        ...transport,
+        generate: async (request) => {
+          if (request.system === OBJECTS_PROMPT.system) throw new Error("Claude ล่ม")
+          return transport.generate(request)
+        },
+      }
+    },
+  }
+  const failing = createAnalysisService(deps)
+  await failing.start(project.folder, ["a"])
+  expect(await finished(events)).toEqual({ type: "analysis-finished", folder: project.folder, outcome: "done" })
+  expect(events).toContainEqual({ type: "objects", folder: project.folder, videoId: "a", status: { state: "failed", error: "Claude ล่ม" } })
+  expect(failing.state()).toMatchObject({ outcome: "done", vision: { a: { state: "done" } } })
+  expect((await deps.progress.get(project.folder))!.videoIds).toEqual(["a"])
+  // and the button may offer it again
+  expect(await failing.withoutObjects(project.folder)).toEqual(["a"])
+})
+
+/** Runs an analysis of both videos with no objects pass able to find anything, so both are analysed without objects. */
+async function analysedWithoutObjects(overrides: Partial<AnalysisDeps> = {}) {
+  const context = await ready({ engines: realScribe(), ...overrides })
+  const { service, events, project } = context
+  const objects = context.deps.objects
+  // a cache that cannot be written keeps the first run's objects from being stored
+  context.deps.objects = { entry: async () => ({ get: async () => null, put: async () => {} }), get: async () => null, put: async () => {} } as unknown as typeof objects
+  await service.start(project.folder, ["a", "b"])
+  await finished(events)
+  context.deps.objects = objects
+  events.length = 0
+  return context
+}
+
+test("the objects of videos analysed before the pass existed are found on request, and the run says when it is done", async () => {
+  const { service, events, project, transportCalls } = await analysedWithoutObjects()
+  expect(await service.withoutObjects(project.folder)).toEqual(["a", "b"])
+  const asked = transportCalls.length
+  await service.locateObjects(project.folder, ["b"])
+  expect(await finished(events)).toEqual({ type: "analysis-finished", folder: project.folder, outcome: "done" })
+  expect(events.filter((e) => e.type === "objects").map((e) => e.type === "objects" && [e.videoId, e.status.state])).toEqual([
+    ["b", "running"],
+    ["b", "done"],
+  ])
+  expect(transportCalls.slice(asked).map((call) => call.system)).toEqual([OBJECTS_PROMPT.system])
+  expect(await service.withoutObjects(project.folder)).toEqual(["a"])
+  // nothing about the analysis itself changed: the screen that rebuilds from it still sees the last run
+  expect(Object.keys(service.state()!.transcription)).toEqual(["a", "b"])
+})
+
+test("finding objects takes the one-run lock: neither it nor an analysis starts while the other runs", async () => {
+  let release!: () => void
+  const blocked = new Promise<void>((resolve) => (release = resolve))
+  const context = await analysedWithoutObjects()
+  const { events, project, deps } = context
+  const extract = deps.visionTools!.extractFrames
+  deps.visionTools = {
+    ...deps.visionTools!,
+    extractFrames: async (...args) => {
+      await blocked
+      return extract(...args)
+    },
+  }
+  const locking = createAnalysisService(deps)
+  await locking.locateObjects(project.folder, ["a"])
+  await expect(locking.start(project.folder, ["b"])).rejects.toThrow("an analysis is already running")
+  await expect(locking.locateObjects(project.folder, ["b"])).rejects.toThrow("an analysis is already running")
+  release()
+  expect(await finished(events)).toMatchObject({ outcome: "done" })
+
+  // and while an analysis runs, objects are refused
+  let releaseRun!: () => void
+  const running = new Promise<void>((resolve) => (releaseRun = resolve))
+  const transcribing = createAnalysisService({
+    ...deps,
+    engines: realScribe(async () => {
+      await running
+      return transcriptOf("said in a")
+    }),
+  })
+  events.length = 0
+  await transcribing.start(project.folder, ["a"])
+  await expect(transcribing.locateObjects(project.folder, ["b"])).rejects.toThrow("an analysis is already running")
+  releaseRun()
+  await finished(events)
+})
+
+test("finding objects refuses a folder that is not a project, and videos that are not in it", async () => {
+  const { service, project, events } = await analysedWithoutObjects()
+  await expect(service.locateObjects("/tmp/elsewhere", ["a"])).rejects.toThrow("not a CapCut project")
+  await expect(service.locateObjects(project.folder, ["a", "z"])).rejects.toThrow("video z is not in this project")
+  expect(events).toEqual([])
+  // a refusal does not hold the lock
+  await service.locateObjects(project.folder, ["a"])
+  expect(await finished(events)).toMatchObject({ outcome: "done" })
+})
+
+test("finding objects refuses when Claude or ffmpeg cannot be reached", async () => {
+  const { service, project, deps } = await analysedWithoutObjects()
+  await deps.secrets.delete("anthropic")
+  await expect(service.locateObjects(project.folder, ["a"])).rejects.toThrow(/not ready: anthropic-key-missing/)
+})
+
+test("a cancel stops finding objects and says so", async () => {
+  const context = await analysedWithoutObjects()
+  const { project, events, deps } = context
+  const cancelling = createAnalysisService({
+    ...deps,
+    visionTools: {
+      ...deps.visionTools!,
+      extractFrames: (_input, _timesUs, _outDir, signal) => new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason))),
+    },
+  })
+  await cancelling.locateObjects(project.folder, ["a", "b"])
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  cancelling.cancel()
+  expect(await finished(events)).toEqual({ type: "analysis-finished", folder: project.folder, outcome: "cancelled" })
+  expect(events.filter((e) => e.type === "objects").map((e) => e.type === "objects" && e.videoId)).toEqual(["a"])
+  // and the lock is free again
+  await expect(cancelling.locateObjects(project.folder, ["a"])).resolves.toBeUndefined()
+  cancelling.cancel()
+})
+
+test("a settings change while the speech is read does not make the pass after the pictures miss them", async () => {
+  let release!: () => void
+  const blocked = new Promise<void>((resolve) => (release = resolve))
+  const { service, events, project, deps } = await ready({
+    engines: realScribe(async () => {
+      await blocked
+      return transcriptOf("said in a")
+    }),
+  })
+  await service.start(project.folder, ["a"])
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  // the run has read its settings by now; the user changes the rate meanwhile
+  await deps.settings.update({ vision: { frameEveryS: 1 } })
+  release()
+  expect(await finished(events)).toMatchObject({ outcome: "done" })
+  expect(events).toContainEqual({ type: "objects", folder: project.folder, videoId: "a", status: { state: "done" } })
+})
+
+test("a cancel during the objects pass of an analysis ends it cancelled, with the videos read already noted and their pictures done", async () => {
+  let extractions = 0
+  const context = await ready({ engines: realScribe() })
+  const { project, events, deps } = context
+  const extract = deps.visionTools!.extractFrames
+  const cancelling = createAnalysisService({
+    ...deps,
+    visionTools: {
+      ...deps.visionTools!,
+      // the first extraction is the describing; the second, the objects pass, waits for the cancel
+      extractFrames: (input, timesUs, outDir, signal) =>
+        ++extractions === 1 ? extract(input, timesUs, outDir, signal) : new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason))),
+    },
+  })
+  await cancelling.start(project.folder, ["a"])
+  for (let i = 0; i < 400 && !events.some((e) => e.type === "objects"); i++) await new Promise((resolve) => setTimeout(resolve, 5))
+  cancelling.cancel()
+  expect(await finished(events)).toEqual({ type: "analysis-finished", folder: project.folder, outcome: "cancelled" })
+  expect((await deps.progress.get(project.folder))!.videoIds).toEqual(["a"])
+  expect(cancelling.state()).toMatchObject({ outcome: "cancelled", vision: { a: { state: "done" } } })
+})
+
+test("finding objects for no video is refused, and holds no lock", async () => {
+  const { service, project, events } = await analysedWithoutObjects()
+  await expect(service.locateObjects(project.folder, [])).rejects.toThrow("no video is chosen")
+  expect(events).toEqual([])
+  await service.locateObjects(project.folder, ["a"])
+  expect(await finished(events)).toMatchObject({ outcome: "done" })
 })

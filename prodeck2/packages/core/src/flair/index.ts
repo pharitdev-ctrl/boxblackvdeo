@@ -32,5 +32,4 @@ export {
   type TechniquesReply,
   type ZoomSlot,
 } from "./direct.ts"
-export { acceptSounds, describeSounds, planSounds, SOUNDS_PROMPT, SOUNDS_PROMPT_VERSION, SoundsReplySchema, type SoundSlot, type SoundsReply } from "./sound-plan.ts"
 export { DEFAULT_LOOK, enforce, type Accent, type GroupLook } from "./plan.ts"

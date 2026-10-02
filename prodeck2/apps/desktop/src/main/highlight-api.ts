@@ -2,9 +2,9 @@ import { FLAIR_LEVELS } from "@boxblack/core/flair/catalogue"
 import { EMPHASIS_REASON_MAX, EMPHASIS_TYPES, IMPORTANCE, type EmphasisType, type Importance } from "@boxblack/core/emphasis/types"
 import { MEDIA_FITS } from "@boxblack/core/flair/look-at"
 import { TONES, ZOOM_KINDS } from "@boxblack/core/flair/plan"
-import { INSTRUCTION_MAX } from "@boxblack/core/graphics/plan"
+import { INSTRUCTION_MAX, instructionLength } from "@boxblack/core/graphics/plan"
 import { HIGHLIGHT_POSITIONS, HIGHLIGHT_STYLE_IDS } from "@boxblack/core/highlights/styles"
-import type { CueAnchor, DesktopApi, EmphasisAnchor, EmphasisPatch, GraphicPatch, HighlightViewOptions } from "../shared/api.ts"
+import type { CueAnchor, DesktopApi, EmphasisAnchor, EmphasisPatch, GraphicPatch, HighlightViewOptions, MoveAnchor } from "../shared/api.ts"
 import type { FlairService } from "./flair.ts"
 import type { EmphasisService } from "./emphasis.ts"
 import type { HighlightService } from "./highlights.ts"
@@ -30,6 +30,14 @@ type HighlightApi = Pick<
   | "redoGraphic"
   | "editGraphic"
   | "undoGraphic"
+  | "redoMove"
+  | "editMove"
+  | "undoMove"
+  | "setMove"
+  | "redoSound"
+  | "editSound"
+  | "undoSound"
+  | "setSound"
   | "planEmphasis"
   | "setEmphasisPoint"
   | "addEmphasisPoint"
@@ -48,20 +56,19 @@ const MAX_SOURCE_US = 86_400_000_000
 const POINT_FIELDS = ["importance", "type", "reason", "anchor"]
 
 const isText = (value: unknown): value is string => typeof value === "string" && value.length <= MAX_TEXT
-const graphemes = new Intl.Segmenter("th", { granularity: "grapheme" })
+/** More code units than a change of INSTRUCTION_MAX graphemes could need, sixteen to each: a text past it is refused unread. */
+const MAX_INSTRUCTION_UNITS = INSTRUCTION_MAX * 16
 /**
- * A change the user may ask of a graphic, as it is kept: trimmed, with something in it, and of INSTRUCTION_MAX
- * graphemes at the most, counted as the screen counts them (a Thai letter with its marks, or an emoji, is one); null
- * for anything else.
+ * A change the user may ask of a graphic or a composed sound, as it is kept: trimmed, with something in it, and of
+ * INSTRUCTION_MAX graphemes at the most, counted as the screen counts them (`instructionLength`: a Thai letter with its
+ * marks, or an emoji, is one); null for anything else. A text of more code units than MAX_INSTRUCTION_UNITS, white
+ * space around it included, is refused before it is trimmed or its graphemes are counted, so a request of any size is
+ * never walked through; one within the cap is counted whole.
  */
 const instructionOf = (value: unknown): string | null => {
-  if (typeof value !== "string") return null
-  const trimmed = value.trim()
-  if (trimmed === "") return null
-  // counted one by one, and no further than one past the limit: a long text is refused without being walked through
-  let count = 0
-  for (const _ of graphemes.segment(trimmed)) if (++count > INSTRUCTION_MAX) return null
-  return trimmed
+  if (typeof value !== "string" || value.length > MAX_INSTRUCTION_UNITS) return null
+  const length = instructionLength(value)
+  return length === 0 || length > INSTRUCTION_MAX ? null : value.trim()
 }
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 const isWhole = (value: unknown, max: number): value is number => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= max
@@ -114,11 +121,21 @@ export function createHighlightApi({ highlights, flair, emphasis, post }: { high
       subtitles: subtitles === null ? null : { length: subtitles.length, polish: subtitles.polish, hideUnderHighlights: subtitles.hideUnderHighlights },
     }
   }
-  /** A graphic's place, which is only ever a moment of speech. */
+  /** A graphic's place, which is only ever a moment of speech; a composed sound's too, on a word or on its graphic's place. */
   const speechAnchor = (anchor: CueAnchor): CueAnchor => {
     const place = checkedAnchor(anchor)
     if (place.kind !== "speech") throw refuse()
     return place
+  }
+  /**
+   * A move's place: a moment of speech, as a graphic's is, and whether it is on a cutaway, which only `insert: true`
+   * says; anything else there is refused.
+   */
+  const moveAnchor = (anchor: MoveAnchor): MoveAnchor => {
+    if (typeof anchor !== "object" || anchor === null) throw refuse()
+    const { insert, ...place } = anchor
+    if (insert !== undefined && typeof insert !== "boolean") throw refuse()
+    return { ...speechAnchor(place as CueAnchor), ...(insert === true ? { insert: true } : {}) }
   }
   /** A change the post-production page could make to a graphic: switched off or on, and no other field. */
   const checkedPatch = (patch: unknown): GraphicPatch | null => {
@@ -127,6 +144,12 @@ export function createHighlightApi({ highlights, flair, emphasis, post }: { high
     const { off } = patch
     if (off !== undefined && typeof off !== "boolean") throw refuse()
     return off !== undefined ? { off } : {}
+  }
+  /** A change the post-production page could make to a composed sound or a move: switched off or on, and no other field. */
+  const checkedSoundPatch = (patch: unknown): { off: boolean } | null => {
+    if (patch === null) return null
+    if (!isObject(patch) || Array.isArray(patch) || typeof patch.off !== "boolean") throw refuse()
+    return { off: patch.off }
   }
   const refuseEmphasis = () => new Error("unknown emphasis request")
   /** A video or beat id of sane length. */
@@ -198,7 +221,9 @@ export function createHighlightApi({ highlights, flair, emphasis, post }: { high
       return post.state(folder)
     },
     async setSoundCue(folder, anchor, effectId) {
-      if ((effectId !== null && !isText(effectId)) || typeof anchor !== "object" || anchor === null) throw refuse()
+      // sounds are composed now: a CapCut sound the user chose can only be taken off
+      if (effectId !== null) throw new Error("choosing a CapCut sound is no longer possible")
+      if (typeof anchor !== "object" || anchor === null) throw refuse()
       return flair.setCue(folder, checkedAnchor(anchor), effectId)
     },
     async setInsert(folder, anchor, binId, fit, replacing) {
@@ -229,6 +254,38 @@ export function createHighlightApi({ highlights, flair, emphasis, post }: { high
     async undoGraphic(folder, anchor) {
       if (!folderOk(folder)) throw refuse()
       return post.undoGraphic(folder, speechAnchor(anchor))
+    },
+    async redoMove(folder, anchor, request) {
+      if (!folderOk(folder)) throw refuse()
+      return post.redoMove(folder, moveAnchor(anchor), checkedPostRequest(request))
+    },
+    async editMove(folder, anchor, instruction, request) {
+      const change = instructionOf(instruction)
+      if (!folderOk(folder) || change === null) throw refuse()
+      return post.editMove(folder, moveAnchor(anchor), change, checkedPostRequest(request))
+    },
+    async undoMove(folder, anchor) {
+      if (!folderOk(folder)) throw refuse()
+      return post.undoMove(folder, moveAnchor(anchor))
+    },
+    async setMove(folder, anchor, patch) {
+      return flair.setMove(folder, moveAnchor(anchor), checkedSoundPatch(patch))
+    },
+    async redoSound(folder, anchor, request) {
+      if (!folderOk(folder)) throw refuse()
+      return post.redoSound(folder, speechAnchor(anchor), checkedPostRequest(request))
+    },
+    async editSound(folder, anchor, instruction, request) {
+      const change = instructionOf(instruction)
+      if (!folderOk(folder) || change === null) throw refuse()
+      return post.editSound(folder, speechAnchor(anchor), change, checkedPostRequest(request))
+    },
+    async undoSound(folder, anchor) {
+      if (!folderOk(folder)) throw refuse()
+      return post.undoSound(folder, speechAnchor(anchor))
+    },
+    async setSound(folder, anchor, patch) {
+      return flair.setSound(folder, speechAnchor(anchor), checkedSoundPatch(patch))
     },
     async planEmphasis(folder, rules) {
       if (typeof folder !== "string") throw refuseEmphasis()

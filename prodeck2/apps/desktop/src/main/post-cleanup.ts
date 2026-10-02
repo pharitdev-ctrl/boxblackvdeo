@@ -18,7 +18,7 @@ export const POST_VERSION = 2
 /**
  * The one-time cleanup of an outline from before M25: Claude's highlight groups that are not the user's
  * (usersGroup: made, changed, or given a look by hand) go with their looks and the line sounds nobody
- * edited (regroupFlair with nothing taking them), every unedited sound, zoom, cutaway and graphic goes,
+ * edited (regroupFlair with nothing taking them), every unedited sound, zoom, move, cutaway and graphic goes,
  * and postVersion becomes 1, where 0.4 had it, for the cleanup of 0.5.0 to take from there. What the user
  * edited stays, with no pointId: spec §7 lets a group take only its own look and its unedited line sounds,
  * so an edited sound, cutaway or graphic on a line of a group that goes moves to the start of that line's
@@ -39,6 +39,7 @@ export function withoutOldEffects(stored: StoredOutline): StoredOutline {
     // an edited line sound moves off a group that goes, like a cutaway or graphic (spec §7)
     ...(was.cues ? { cues: offGoneLines(edited(was.cues), stored, before, staying) } : {}),
     ...(was.zooms ? { zooms: edited(was.zooms) } : {}),
+    ...(was.moves ? { moves: edited(was.moves) } : {}),
     ...(was.inserts ? { inserts: offGoneLines(edited(was.inserts), stored, before, staying) } : {}),
     ...(was.graphics ? { graphics: offGoneLines(edited(was.graphics), stored, before, staying) } : {}),
   }
@@ -63,7 +64,7 @@ const slotOfEntry = (entry: unknown) => (isObject(entry) && isObject(entry.ancho
  * go with it, unless a zoom, a cutaway or a graphic still there holds that moment (withoutSoundsOn, as when one
  * of Claude's graphics is taken away by hand). Here a sound on one of the user's own graphics goes the same way:
  * it was chosen for a graphic that can never play again. A motion graphic stays as it is, and so do the text and
- * its looks, the zooms, the cutaways, the user's own sounds and every other sound.
+ * its looks, the zooms, the moves, the cutaways, the user's own sounds and every other sound.
  * The list is a file's, which is outside the type system: an entry of any other shape than a motion graphic with
  * a place (none at all, one with no spec or no place) goes as the kit's do, and a list that is no list is none.
  * An outline at any other version is handed back as the same object: one at POST_VERSION is clean already, and

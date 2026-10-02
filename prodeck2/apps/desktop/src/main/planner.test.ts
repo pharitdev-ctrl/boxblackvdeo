@@ -7,6 +7,7 @@ import { MediaCache } from "@boxblack/core/cache"
 import type { LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
 import { PLANNER_PROMPT, type Brief, type OutlineReply } from "@boxblack/core/planner"
 import type { EmphasisPoint } from "@boxblack/core/emphasis"
+import { SOUND_VERSION, type ComposedSound } from "@boxblack/core/sound/spec"
 import { PROMPT_VERSION, VISION_PROMPT, VISION_SAMPLING, type VideoInsight, type VisionKey } from "@boxblack/core/vision"
 import type { ProjectDetail } from "../shared/api.ts"
 import { createPlannerService, OutlineStore, type PlannerDeps } from "./planner.ts"
@@ -184,6 +185,16 @@ test("edits can reorder and remove beats but never add unknown ones", async () =
   await expect(service.saveEdits(project.folder, [b!, "made-up"], false)).rejects.toThrow(/unknown beat/)
 })
 
+/** A move of the picture on a word of "talk" in a beat. */
+const moveOn = (beatId: string) => ({
+  anchor: { kind: "speech" as const, videoId: "talk", sourceUs: 2_000_000, beatId },
+  from: "light" as const,
+  about: "ดันเข้า",
+  poses: [{ s: 0, scale: 1.1, x: 0, y: 0, rot: 0, ease: "line" as const }],
+  edited: false,
+  off: false,
+})
+
 test("a beat taken out of the outline takes the sounds and cutaways on its edges with it", async () => {
   const { service, project, deps } = await setup()
   const first = await service.plan(project.folder, ["talk", "broll"], brief)
@@ -201,6 +212,7 @@ test("a beat taken out of the outline takes the sounds and cutaways on its edges
         { anchor: { videoId: "talk", sourceUs: 0, beatId: b! }, kind: "drift", edited: false },
         { anchor: { videoId: "talk", sourceUs: 0 }, kind: "punch", edited: true },
       ],
+      moves: [moveOn(a!), moveOn(b!)],
     },
   })
   const edited = await service.saveEdits(project.folder, [c!, a!], false)
@@ -211,6 +223,8 @@ test("a beat taken out of the outline takes the sounds and cutaways on its edges
     { anchor: { videoId: "talk", sourceUs: 0, beatId: a! }, kind: "punch", edited: true },
     { anchor: { videoId: "talk", sourceUs: 0 }, kind: "punch", edited: true },
   ])
+  // and so does a move
+  expect(edited.flair!.moves).toEqual([moveOn(a!)])
   expect((await service.get(project.folder))!.flair).toEqual(edited.flair)
 })
 
@@ -399,6 +413,7 @@ test("a part that grows a beat keeps what sat on that beat: its sounds, cutaways
         { anchor: { kind: "speech", videoId: "talk", sourceUs: 2_000_000, beatId: opening!.id }, binId: "m", edited: true },
       ],
       zooms: [{ anchor: { videoId: "talk", sourceUs: 2_000_000, beatId: opening!.id }, kind: "punch", edited: true }],
+      moves: [moveOn(opening!.id)],
     },
   })
   const next = await service.addPart(project.folder, "talk:u0")
@@ -413,6 +428,7 @@ test("a part that grows a beat keeps what sat on that beat: its sounds, cutaways
   expect(next.flair!.inserts!.map((insert) => insert.anchor)).toEqual([edge(grown), { kind: "speech", videoId: "talk", sourceUs: 2_000_000, beatId: grown }])
   expect(next.highlights!.groups[0]!.beatId).toBe(grown)
   expect(next.flair!.zooms!.map((zoom) => zoom.anchor)).toEqual([{ videoId: "talk", sourceUs: 2_000_000, beatId: grown }])
+  expect(next.flair!.moves).toEqual([moveOn(grown)])
   // confirming the grown outline keeps them
   expect((await service.saveEdits(project.folder, next.outline.beats.map((beat) => beat.id), true)).flair!.cues).toHaveLength(4)
   // a beat taken out takes the joins and cutaways that name it too; those saved before they named a beat stay
@@ -485,4 +501,55 @@ test("the store reads every outline it holds, for a list that wants all of them 
   const all = await store.all()
   expect(all.map((one) => one.folder).sort()).toEqual(["/drafts/0815", "/drafts/0917"])
   expect(all.find((one) => one.folder === "/drafts/0917")!.confirmed).toBe(true)
+})
+
+/** A sound Claude composed on a moment of the talk in a beat (or saved with none), tied to a graphic on that moment in `graphicBeatId` when given. */
+const soundOn = (sourceUs: number, beatId?: string, graphicBeatId?: string): ComposedSound => ({
+  anchor: { kind: "speech", videoId: "talk", sourceUs, ...(beatId ? { beatId } : {}) },
+  ...(graphicBeatId ? { graphic: { kind: "speech" as const, videoId: "talk", sourceUs, beatId: graphicBeatId }, graphicHtml: "0123456789abcdef" } : {}),
+  from: "medium",
+  role: "เสียงติ๊ง",
+  loudness: "normal",
+  seconds: 1,
+  words: [],
+  code: null,
+  version: SOUND_VERSION,
+  off: false,
+})
+
+test("a beat taken out takes the sounds composed on its sentences with it, and those tied to a graphic there; one saved before it knew its beat stays", async () => {
+  const { service, project, deps } = await setup()
+  const first = await service.plan(project.folder, ["talk", "broll"], brief)
+  const [a, b, c] = first.outline.beats.map((beat) => beat.id)
+  await deps.store.put({ ...first, flair: { looks: {}, composed: [soundOn(1_000_000, a!), soundOn(2_000_000, b!), soundOn(3_000_000), soundOn(4_000_000, a!, a!), soundOn(5_000_000, a!, b!)] } })
+  const edited = await service.saveEdits(project.folder, [c!, a!], false)
+  expect(edited.flair!.composed).toEqual([soundOn(1_000_000, a!), soundOn(3_000_000), soundOn(4_000_000, a!, a!)])
+  expect((await service.get(project.folder))!.flair!.composed).toEqual(edited.flair!.composed)
+})
+
+test("a part that grows a beat keeps the sounds composed on that beat's sentences, and the graphics they are tied to there: both follow the new beat", async () => {
+  const { service, project, deps } = await setup()
+  const planned = await service.plan(project.folder, ["talk", "broll"], brief)
+  const [opening, picture] = planned.outline.beats
+  await service.saveEdits(project.folder, [opening!.id, picture!.id], true)
+  const stored = (await deps.store.get(project.folder))!
+  await deps.store.put({ ...stored, flair: { looks: {}, composed: [soundOn(2_000_000, opening!.id), soundOn(3_000_000, opening!.id, opening!.id), soundOn(4_000_000, picture!.id, picture!.id), soundOn(5_000_000)] } })
+  const next = await service.addPart(project.folder, "talk:u0")
+  const grown = next.outline.beats[0]!.id
+  expect(grown).not.toBe(opening!.id)
+  expect(next.flair!.composed).toEqual([soundOn(2_000_000, grown), soundOn(3_000_000, grown, grown), soundOn(4_000_000, picture!.id, picture!.id), soundOn(5_000_000)])
+})
+
+test("a stored composed entry that is no sound is left as it is when beats are taken out or renamed", async () => {
+  const { service, project, deps } = await setup()
+  const planned = await service.plan(project.folder, ["talk", "broll"], brief)
+  const [opening, picture] = planned.outline.beats
+  await service.saveEdits(project.folder, [opening!.id, picture!.id], true)
+  const odd = [null, { role: "no anchor" }] as unknown as ComposedSound[]
+  await deps.store.put({ ...(await deps.store.get(project.folder))!, flair: { looks: {}, composed: [...odd, soundOn(2_000_000, opening!.id)] } })
+  const next = await service.addPart(project.folder, "talk:u0")
+  const grown = next.outline.beats[0]!.id
+  expect(next.flair!.composed).toEqual([...odd, soundOn(2_000_000, grown)])
+  const left = await service.saveEdits(project.folder, [picture!.id], true)
+  expect(left.flair!.composed).toEqual(odd)
 })

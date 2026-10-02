@@ -3,9 +3,9 @@ import type { EmphasisPointView } from "../../../shared/api.ts"
 import { t } from "../i18n.ts"
 import { failureText, mainText, pointLabel, POST_TABS, TAB_OF_WORK, tabRuns, wasStopped } from "./postTabs.ts"
 
-test("the five tabs are in the order of the work, and each work of the run fills one of them", () => {
-  expect(POST_TABS).toEqual(["cut", "emphasis", "graphics", "sound", "subtitles"])
-  expect(TAB_OF_WORK).toEqual({ emphasis: "emphasis", text: "graphics", techniques: "graphics", graphics: "graphics", sounds: "sound", subtitles: "subtitles" })
+test("the six tabs are in the order of the work, and each work of the run fills one of them: the text and the techniques one tab, the graphics their own", () => {
+  expect(POST_TABS).toEqual(["cut", "emphasis", "techniques", "graphics", "sound", "subtitles"])
+  expect(TAB_OF_WORK).toEqual({ emphasis: "emphasis", text: "techniques", techniques: "techniques", graphics: "graphics", sounds: "sound", subtitles: "subtitles" })
 })
 
 test("a tab spins while a work of it runs, is flagged when one failed, and is idle otherwise", () => {
@@ -22,18 +22,23 @@ test("a tab spins while a work of it runs, is flagged when one failed, and is id
   expect(runs).toEqual({
     cut: { state: "idle" },
     emphasis: { state: "idle" },
-    graphics: { state: "running" },
+    techniques: { state: "running" },
+    graphics: { state: "idle" },
     sound: { state: "idle" },
     subtitles: { state: "failed", error: "timed out" },
   })
 })
 
 test("a failed work of a tab shows until another work of that tab runs", () => {
-  expect(tabRuns({ running: true, states: { text: { state: "running" }, techniques: { state: "failed", error: "Claude is busy" } } }).graphics).toEqual({ state: "running" })
-  expect(tabRuns({ running: false, states: { text: { state: "done", count: 1, dropped: 0 }, graphics: { state: "failed", error: "Claude is busy" } } }).graphics).toEqual({
+  expect(tabRuns({ running: true, states: { text: { state: "running" }, techniques: { state: "failed", error: "Claude is busy" } } }).techniques).toEqual({ state: "running" })
+  expect(tabRuns({ running: false, states: { text: { state: "done", count: 1, dropped: 0 }, techniques: { state: "failed", error: "Claude is busy" } } }).techniques).toEqual({
     state: "failed",
     error: "Claude is busy",
   })
+  // the graphics have a tab of their own: a failure of theirs flags it, and the text running does not hide it
+  const apart = tabRuns({ running: true, states: { text: { state: "running" }, graphics: { state: "failed", error: "Claude is busy" } } })
+  expect(apart.graphics).toEqual({ state: "failed", error: "Claude is busy" })
+  expect(apart.techniques).toEqual({ state: "running" })
 })
 
 test("the user's stop is not a failure: the tab it caught stays idle", () => {
@@ -80,6 +85,15 @@ test("what main refuses on the page, and a work with no Claude connection, is sa
     ["this graphic has no place on the clip now", t("graphics.refused.noPlace")],
     ["this graphic has not been written yet", t("graphics.refused.notWritten")],
     ["this graphic has nothing to go back to", t("graphics.refused.nothingBack")],
+    // a composed sound's own refusals, worded as a graphic's are
+    ["this sound has no place on the clip now", t("sounds.refused.noPlace")],
+    ["this sound has not been written yet", t("sounds.refused.notWritten")],
+    ["this sound has nothing to go back to", t("sounds.refused.nothingBack")],
+    // a move's: the techniques work's failure for a redo or an edit, the call's own for a step back or a switch
+    ["this move has no place on the clip now", t("moves.refused.noPlace")],
+    ["there is no move at that place", t("moves.refused.noPlace")],
+    ["this move has nothing to go back to", t("moves.refused.nothingBack")],
+    ["composing sounds is not ready: no Claude connection", t("error.noClaude")],
     ["a plan for this project is already running", t("post.alreadyRunning")],
   ]
   for (const [message, thai] of said) {
@@ -98,4 +112,17 @@ test("an item names the point it was made for; one bound to none, or to a point 
   expect(pointLabel([point], "p1")).toBe(t("emphasis.from", { text: "ราคา 590" }))
   expect(pointLabel([point], undefined)).toBeNull()
   expect(pointLabel([point], "p9")).toBeNull()
+})
+
+test("two works of a run running at once, the graphics written while the sounds are composed, spin both their tabs", () => {
+  const runs = tabRuns({
+    running: true,
+    states: {
+      emphasis: { state: "done", count: 2, dropped: 0 },
+      graphics: { state: "running", done: 3, total: 9 },
+      sounds: { state: "running", done: 5, total: 12 },
+      subtitles: { state: "done", count: 4, dropped: 0 },
+    },
+  })
+  expect([runs.graphics, runs.sound, runs.emphasis]).toEqual([{ state: "running" }, { state: "running" }, { state: "idle" }])
 })

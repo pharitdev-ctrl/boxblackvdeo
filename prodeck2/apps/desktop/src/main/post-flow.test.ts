@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto"
+import { existsSync } from "node:fs"
+import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { expect, test } from "vitest"
 import { DEFAULT_CUT_RULES } from "@boxblack/core/cut/rules"
@@ -6,24 +7,27 @@ import { EMPHASIS_PROMPT, type EmphasisPoint, type EmphasisReply } from "@boxbla
 import type { FlairLevel } from "@boxblack/core/flair/catalogue"
 import { TECHNIQUES_PROMPT } from "@boxblack/core/flair/direct"
 import type { CueAnchor, InsertCue, SoundCue } from "@boxblack/core/flair/plan"
-import { SOUNDS_PROMPT } from "@boxblack/core/flair/sound-plan"
 import { BUILT_IN_SOUNDS } from "@boxblack/core/flair/sound-catalogue"
 import type { SoundEffect } from "@boxblack/core/flair/sounds"
-import { MOTION_PLAN_PROMPT } from "@boxblack/core/graphics/motion/direct"
+import { FREE_PLAN_PROMPT } from "@boxblack/core/graphics/motion/free"
 import { MOTION_CONTRACT } from "@boxblack/core/graphics/motion/write"
 import { isMotion, MOTION_VERSION, type GraphicCue, type MotionSpec } from "@boxblack/core/graphics/plan"
 import { HIGHLIGHT_PROMPT, type HighlightReply } from "@boxblack/core/highlights"
 import { styleFor } from "@boxblack/core/highlights/styles"
 import type { LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
+import { SOUND_PLAN_PROMPT } from "@boxblack/core/sound/plan"
+import { SOUND_CONTRACT } from "@boxblack/core/sound/write"
 import type { AppEvent, HighlightPreview, PostRequest, PostWork, WriteResult } from "../shared/api.ts"
 import { createEmphasisService } from "./emphasis.ts"
 import { createFlairService } from "./flair.ts"
 import { transcriptFingerprint } from "./footage.ts"
-import { problemFor, type RenderJob } from "./graphics-render.ts"
+import { hashOf, problemFor, type RenderJob } from "./graphics-render.ts"
 import { createHighlightService } from "./highlights.ts"
 import { CANCELLED } from "./ai-calls.ts"
 import { createPostPlanService } from "./post-plan.ts"
 import { createTimelineService, type TimelineDeps } from "./timeline.ts"
+import { soundStatusOf } from "./composed-cues.ts"
+import { hashOf as soundHashOf, type SoundJob } from "./sound-render.ts"
 import { CLIP_ID, readInfo, s, segments, setup, transcript } from "./timeline-fixture.ts"
 
 // The post-production chain on the fixture draft with the real services, Claude faked by prompt. Its transcript:
@@ -61,16 +65,11 @@ function fakeClaude() {
 }
 
 /**
- * A renderer that makes every job it is waited for, and never fails one; like the real one it knows a job by what is
- * drawn: the fragment, its box and length, the times of its words, the frame, the font and the colours. What else the
- * spec says (its reason, its idea, the change that made it, the fragment kept for a step back) makes no other file.
+ * A renderer that makes every job it is waited for, and never fails one; it knows a job by the real renderer's name
+ * for it, which is of what is drawn: what else the spec says (its reason, its idea, the change that made it, the
+ * fragment kept for a step back) makes no other file.
  */
 function fakeRenderer(dir: string) {
-  const hashOf = (job: RenderJob) =>
-    createHash("sha256")
-      .update(JSON.stringify([job.spec.html, job.spec.box, job.spec.seconds, job.times ?? [], job.canvas, job.fps, job.font, job.palette]))
-      .digest("hex")
-      .slice(0, 16)
   const made = new Set<string>()
   return {
     hashOf,
@@ -92,6 +91,58 @@ function fakeRenderer(dir: string) {
   }
 }
 
+/** A WAV of `seconds` of silence, 16-bit stereo at 48 kHz, as the sound renderer keeps one. */
+function silence(seconds: number): Buffer {
+  const bytes = Math.round(seconds * 48_000) * 4
+  const header = Buffer.alloc(44)
+  header.write("RIFF", 0, "latin1")
+  header.writeUInt32LE(36 + bytes, 4)
+  header.write("WAVEfmt ", 8, "latin1")
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(2, 22)
+  header.writeUInt32LE(48_000, 24)
+  header.writeUInt32LE(192_000, 28)
+  header.writeUInt16LE(4, 32)
+  header.writeUInt16LE(16, 34)
+  header.write("data", 36, "latin1")
+  header.writeUInt32LE(bytes, 40)
+  return Buffer.concat([header, Buffer.alloc(bytes)])
+}
+
+/**
+ * A sound renderer whose check passes every sound and keeps its file, as the real one does, by the real renderer's
+ * name for it; ensure makes what is missing. `rendered` counts the files each made.
+ */
+function fakeSoundRenderer(dir: string) {
+  const fileOf = (job: SoundJob) => join(dir, `${soundHashOf(job)}.wav`)
+  const rendered = { checked: 0, ensured: 0 }
+  const make = async (job: SoundJob) => {
+    await mkdir(dir, { recursive: true })
+    await writeFile(fileOf(job), silence(job.seconds))
+  }
+  return {
+    rendered,
+    fileOf,
+    async check(job: SoundJob) {
+      await make(job)
+      rendered.checked++
+      return []
+    },
+    async ensure(jobs: SoundJob[]) {
+      for (const job of jobs) {
+        if (existsSync(fileOf(job))) continue
+        await make(job)
+        rendered.ensured++
+      }
+    },
+    statusOf: async (job: SoundJob) => (existsSync(fileOf(job)) ? ("ready" as const) : ("pending" as const)),
+    failureOf: () => null,
+    environmentProblem: () => null,
+    forgetMachine() {},
+  }
+}
+
 /**
  * Every service of the post-production page, wired as the app wires them: the points, the text, the flair, the
  * run, and a timeline service that writes graphics through the highlight service's jobs. The flair service and
@@ -107,7 +158,11 @@ async function withFlow(options: { pro?: boolean; sounds?: SoundEffect[]; /** th
   let groups = 0
   const events: AppEvent[] = []
   const emphasis = createEmphasisService({ outlines: base.outlines, timeline: base.service, llm: claude.llm, newId: () => `p${++points}` })
+  const soundsDir = join(base.dir, "Movies", "CapCut", "BOXBLACK", "sounds")
+  const soundRenderer = fakeSoundRenderer(soundsDir)
   const highlights = createHighlightService({
+    soundStatus: soundStatusOf(soundRenderer),
+    soundRenderer,
     outlines: base.outlines,
     timeline: base.service,
     footage: base.deps,
@@ -125,15 +180,24 @@ async function withFlow(options: { pro?: boolean; sounds?: SoundEffect[]; /** th
     timeline: base.service,
     llm: claude.llm,
     sounds: library,
-    // read from settings, as the app wires it
-    pro: async () => (await base.deps.settings.read()).capcut.pro,
     media,
     graphics: renderer,
     graphicsReady: async () => true,
     graphicJobs: (folder, rules, options) => highlights.graphicJobs(folder, rules, options),
     candidateJob: (folder, rules, graphic, spec) => highlights.candidateJob(folder, rules, graphic, spec),
+    composedSounds: (folder, rules, options) => highlights.composedSounds(folder, rules, options),
+    soundRenderer,
   })
-  const deps: TimelineDeps = { ...base.deps, graphics: renderer, graphicsReady: async () => true, graphicJobs: highlights.graphicJobs, graphicsDir }
+  const deps: TimelineDeps = {
+    ...base.deps,
+    graphics: renderer,
+    graphicsReady: async () => true,
+    graphicJobs: highlights.graphicJobs,
+    graphicsDir,
+    soundRenderer,
+    composedSounds: (folder, rules, options) => highlights.composedSounds(folder, rules, options),
+    soundsDir,
+  }
   const timeline = createTimelineService(deps)
   const post = createPostPlanService({ outlines: base.outlines, emphasis, highlights, flair, timeline, send: (event) => events.push(event), ...(options.stop ? { stopSignal: () => options.stop! } : {}) })
   const { folder } = base
@@ -146,21 +210,30 @@ async function withFlow(options: { pro?: boolean; sounds?: SoundEffect[]; /** th
   }
   /** What the screen was told about one work, in order. */
   const told = (work: PostWork) => events.flatMap((event) => (event.type === "post-plan" && event.work === work ? [event.state.state] : []))
-  return { ...base, claude, emphasis, highlights, flair, timeline, post, events, preview, write, told, renderer }
+  return { ...base, claude, emphasis, highlights, flair, timeline, post, events, preview, write, told, renderer, soundRenderer }
 }
 
 type Flow = Awaited<ReturnType<typeof withFlow>>
 
-/** Where the written draft plays each kind: the cutaways and graphics by their files, the sounds on their track. */
+/** Where the written draft plays each kind: the cutaways and graphics by their files, CapCut's sounds and the composed ones by their materials. */
 async function written(flow: Flow) {
   const info = await readInfo(flow.folder)
   const videos = info.materials.videos as { id: string; path: string }[]
+  const audios = info.materials.audios as { id: string; type: string }[]
+  const audioOf = (type: string) =>
+    info.tracks
+      .filter((track) => track.type === "audio")
+      .flatMap((track) => track.segments)
+      .filter((segment) => audios.find((audio) => audio.id === segment.material_id)?.type === type)
+      .map((segment) => segment.target_timerange.start)
+      .sort((a, b) => a - b)
   const overlays = info.tracks.filter((track) => track.type === "video" && track.flag === 2).flatMap((track) => track.segments)
   const pathOf = (segment: (typeof overlays)[number]) => videos.find((video) => video.id === segment.material_id)?.path ?? ""
   return {
     cutaways: overlays.filter((segment) => pathOf(segment) === PICTURE.path).map((segment) => segment.target_timerange.start),
     graphics: overlays.filter((segment) => pathOf(segment).endsWith(".mov")).map((segment) => segment.target_timerange.start),
-    sounds: info.tracks.filter((track) => track.type === "audio").flatMap((track) => track.segments.map((segment) => segment.target_timerange.start)),
+    sounds: audioOf("sound"),
+    composed: audioOf("extract_music"),
   }
 }
 
@@ -270,8 +343,16 @@ test("an item whose own moment is cut away and whose point is not on the rough c
 const answer = (at: number, quote: string, importance: EmphasisPoint["importance"], type: EmphasisPoint["type"]): EmphasisReply["points"][number] => ({ at, scene: "", quote, importance, type, reason: "" })
 const PLAIN = { pattern: "stack" as const, tone: "base" as const, accentLine: 0, accentWord: "", exit: "" }
 const lines = (...pairs: [string, string][]) => pairs.map(([quote, text]) => ({ quote, text }))
-/** Claude's plan for one motion graphic, from its point's first word, under the text and clear of the subtitles' room. */
-const MOTION_REPLY = { word: "", until: "", seconds: 2, why: "ไปไหน", box: [0.1, 0.6, 0.9, 0.75], idea: "จรวดพุ่งขึ้นจากขอบล่างของกรอบ" }
+/** One graphic of Claude's free plan, on no point, in a box under the text and clear of the subtitles' room. */
+const MOTION_REPLY = { word: 1, until: 0, seconds: 2, point: 0, from: "light", why: "ไปไหน", box: [0.1, 0.6, 0.9, 0.75], idea: "จรวดพุ่งขึ้นจากขอบล่างของกรอบ" }
+/**
+ * Claude's free plan for one motion graphic, tied to a point and from its first word (ขึ้น, อวกาศ and the second สาม are
+ * the rough cut's words 1, 4 and 6), playing from the level its point's importance shows at, under the text and clear of
+ * the subtitles' room. In OVER it is over the point's text, which it then takes the place of.
+ */
+const onPoint = (point: number, extra: Record<string, unknown> = {}) => ({ ...MOTION_REPLY, word: [0, 1, 4, 6][point], point, from: ["", "light", "medium", "heavy"][point], ...extra })
+/** A box over where the fixture draws a point's highlight text, in the upper part of the frame, and below the app's bar. */
+const OVER = [0.1, 0.1, 0.9, 0.35]
 /** What Claude writes for it: a fragment the linter passes. */
 const FRAGMENT = '<style>.n{animation:up 1s both}@keyframes up{from{opacity:0}}</style><div class="n">อวกาศ</div>'
 const done = (count: number, dropped = 0) => ({ state: "done", count, dropped })
@@ -290,14 +371,19 @@ async function previewEqualsWrite(flow: Flow, level: FlairLevel) {
     inserts: shown.inserts.length,
     graphics: shown.graphics.filter((graphic) => !graphic.off).length,
     sounds: shown.cues.length,
+    // the composed sounds that play as they were composed, their files made
+    composed: shown.composed.filter((sound) => !sound.off && sound.written && sound.stale === null && sound.render === "ready").length,
     points: shown.emphasis.points.filter((point) => point.shown).length,
   }
+  const playing = shown.composed.filter((sound) => !sound.off)
   expect({
     highlightCount: result.highlightCount,
     zoomCount: result.zoomCount,
     insertCount: result.insertCount,
     graphicCount: result.graphicCount,
     soundCount: result.soundCount,
+    composedCount: result.composedCount,
+    composedLeftOut: result.composedLeftOut,
     emphasisCount: result.emphasisCount,
     dropped: result.dropped,
     lost: [result.zoomsLost, result.graphicsSkipped],
@@ -308,8 +394,14 @@ async function previewEqualsWrite(flow: Flow, level: FlairLevel) {
     insertCount: counts.inserts,
     graphicCount: counts.graphics,
     soundCount: counts.sounds,
+    composedCount: counts.composed,
+    composedLeftOut: {
+      unwritten: playing.filter((sound) => !sound.written && sound.writeFailed === null).length,
+      stale: playing.filter((sound) => sound.written && sound.stale !== null).length,
+      failed: playing.filter((sound) => sound.writeFailed !== null || sound.render === "failed").length,
+    },
     emphasisCount: counts.points,
-    dropped: { sounds: 0, zooms: 0, inserts: 0, graphics: 0 },
+    dropped: { sounds: 0, zooms: 0, inserts: 0, graphics: 0, moves: 0 },
     lost: [0, 0],
     proLeftOut: shown.proLeftOut,
   })
@@ -317,6 +409,7 @@ async function previewEqualsWrite(flow: Flow, level: FlairLevel) {
   sameTimes(laid.cutaways, shown.inserts.map((insert) => insert.atUs))
   sameTimes(laid.graphics, shown.graphics.filter((graphic) => !graphic.off).map((graphic) => graphic.atUs))
   sameTimes(laid.sounds, shown.cues.map((cue) => cue.atUs))
+  sameTimes(laid.composed, shown.composed.filter((sound) => !sound.off && sound.written && sound.stale === null && sound.render === "ready").map((sound) => sound.atUs))
   return counts
 }
 
@@ -367,12 +460,14 @@ test("the one button plans every work on the points, the preview at each level i
     ],
   }
   claude.replies.set(HIGHLIGHT_PROMPT.system, text)
-  // a cutaway where "ขึ้นไป" starts, a punch on the countdown's piece, a motion graphic on "อวกาศ", which Claude then writes
-  claude.replies.set(TECHNIQUES_PROMPT.system, { zooms: [{ point: 3, kind: "punch" }], inserts: [{ point: 1, picture: 1 }] })
-  claude.replies.set(MOTION_PLAN_PROMPT.system, { graphics: [{ ...MOTION_REPLY, point: 2 }] })
+  // a cutaway where "ขึ้นไป" starts and no move, a motion graphic on "อวกาศ", which Claude then writes
+  claude.replies.set(TECHNIQUES_PROMPT.system, { moves: [], inserts: [{ point: 1, picture: 1 }] })
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(2, { box: OVER })] })
   claude.replies.set(MOTION_CONTRACT, FRAGMENT)
-  // a sound on the first line of each point's text, where the cutaway, the graphic and the punch share its moment
-  claude.replies.set(SOUNDS_PROMPT.system, { cues: [{ at: 1, sound: 1 }, { at: 2, sound: 1 }, { at: 3, sound: 1 }] })
+  // a sound composed on each point's first word: ขึ้น, อวกาศ and the second สาม
+  const sound = (word: number, point: number) => ({ word, graphic: null, seconds: 1, role: "ติ๊ง", point, from: "light", loudness: "normal" })
+  claude.replies.set(SOUND_PLAN_PROMPT, { palette: "Key: C major", sounds: [sound(1, 1), sound(4, 2), sound(6, 3)] })
+  claude.replies.set(SOUND_CONTRACT, "function compose(ctx, cue, kit) { }")
 
   const ran = await post.plan(folder, requestAt("medium"))
   expect(ran).toEqual({
@@ -381,13 +476,23 @@ test("the one button plans every work on the points, the preview at each level i
       emphasis: done(3),
       // the text the middle level shows: the extra point's is held back
       text: done(2),
-      techniques: done(2),
+      techniques: done(1),
       graphics: done(1),
       sounds: done(3),
       subtitles: { state: "skipped", reason: "off" },
     },
   })
-  for (const work of ["emphasis", "text", "techniques", "sounds"] as const) expect(flow.told(work)).toEqual(["waiting", "running", "done"])
+  for (const work of ["emphasis", "text", "techniques"] as const) expect(flow.told(work)).toEqual(["waiting", "running", "done"])
+  // the sounds work says how far its composing has got: before its three sounds, and after each
+  expect(flow.events.flatMap((event) => (event.type === "post-plan" && event.work === "sounds" ? [event.state] : []))).toEqual([
+    { state: "waiting" },
+    { state: "running" },
+    { state: "running", done: 0, total: 3 },
+    { state: "running", done: 1, total: 3 },
+    { state: "running", done: 2, total: 3 },
+    { state: "running", done: 3, total: 3 },
+    done(3),
+  ])
   // the graphics work says how far its writing has got: before its one graphic, and after it
   expect(flow.events.flatMap((event) => (event.type === "post-plan" && event.work === "graphics" ? [event.state] : []))).toEqual([
     { state: "waiting" },
@@ -401,45 +506,64 @@ test("the one button plans every work on the points, the preview at each level i
   expect(flow.renderer.made.size).toBe(1)
   expect(flow.events.at(-1)).toEqual({ type: "post-plan-finished", folder })
   // both works ran clean on the points as they are: nothing is behind
-  expect((await outlines.get(folder))!.emphasis).toMatchObject({ version: 1, plannedOn: { graphics: 1, sounds: 1 } })
-  expect((await flow.preview()).emphasis.changed).toEqual({ graphics: false, sounds: false })
+  expect((await outlines.get(folder))!.emphasis).toMatchObject({ version: 1, plannedOn: { techniques: 1, graphics: 1, sounds: 1 } })
+  expect((await flow.preview()).emphasis.changed).toEqual({ techniques: false, graphics: false, sounds: false })
+
+  // the sounds were composed, one on each point; they are CapCut sounds no more, so none is among the cues
+  expect((await flow.preview("heavy")).composed.map((shown) => [shown.pointId, shown.written, shown.stale])).toEqual([
+    ["p1", true, null],
+    ["p2", true, null],
+    ["p3", true, null],
+  ])
 
   // each level shows the points it lets through, and the write lays what the preview shows. Where "อวกาศ" shows, its
-  // graphic plays in the place of its text, so one group fewer is drawn; the sound on that text's line plays all the same
-  expect(await previewEqualsWrite(flow, "light")).toEqual({ text: 1, zooms: 0, inserts: 1, graphics: 0, sounds: 1, points: 1 })
-  expect(await previewEqualsWrite(flow, "medium")).toEqual({ text: 1, zooms: 0, inserts: 1, graphics: 1, sounds: 2, points: 2 })
-  expect(await previewEqualsWrite(flow, "heavy")).toEqual({ text: 2, zooms: 1, inserts: 1, graphics: 1, sounds: 3, points: 3 })
+  // graphic, drawn over its text, plays in the place of that text, so one group fewer is drawn
+  // the composed sounds, their files made as their composing was checked, are laid where the preview shows them
+  expect(await previewEqualsWrite(flow, "light")).toEqual({ text: 1, zooms: 0, inserts: 1, graphics: 0, sounds: 0, composed: 1, points: 1 })
+  expect(await previewEqualsWrite(flow, "medium")).toEqual({ text: 1, zooms: 0, inserts: 1, graphics: 1, sounds: 0, composed: 2, points: 2 })
+  expect(await previewEqualsWrite(flow, "heavy")).toEqual({ text: 2, zooms: 0, inserts: 1, graphics: 1, sounds: 0, composed: 3, points: 3 })
   expect((await flow.preview("heavy")).groups.map((group) => [group.pointId, group.replaced])).toEqual([
     ["p1", false],
     ["p2", true],
     ["p3", false],
   ])
-  // the writes laid the file the writing's check made: nothing was rendered a second time
+  // the writes laid the file the writing's check made: nothing was rendered a second time, graphic or sound
   expect(flow.renderer.made.size).toBe(1)
+  expect(flow.soundRenderer.rendered).toEqual({ checked: 3, ensured: 0 })
 
   // a point deleted takes Claude's items on it along and leaves the version: no banner
   await emphasis.setPoint(folder, "p2", null)
   const deleted = await flow.preview("heavy")
-  expect([deleted.emphasis.points.map((point) => point.id), deleted.graphics, deleted.emphasis.changed]).toEqual([["p1", "p3"], [], { graphics: false, sounds: false }])
-  // a point added raises it: both works are behind
+  expect([deleted.emphasis.points.map((point) => point.id), deleted.graphics, deleted.emphasis.changed]).toEqual([["p1", "p3"], [], { techniques: false, graphics: false, sounds: false }])
+  // a point added on "ใน" raises it: every work is behind
   const added = await emphasis.addPoint(folder, { kind: "speech", videoId: CLIP_ID, from: 4, to: 5, beatId: "beat-1" })
-  expect((await flow.preview()).emphasis.changed).toEqual({ graphics: true, sounds: true })
+  expect((await flow.preview()).emphasis.changed).toEqual({ techniques: true, graphics: true, sounds: true })
 
-  // thinking the graphics again catches them up: the graphic goes on the new point, and the sounds are behind what they sat on
-  claude.replies.set(HIGHLIGHT_PROMPT.system, { style: "headline", groups: [text.groups[0]!, { ...text.groups[2]!, point: 3 }] })
+  // thinking the text and techniques again catches them up, with text for the new point across "อวกาศใน"; the graphics are still behind,
+  // and the sounds are behind what they sat on
+  claude.replies.set(HIGHLIGHT_PROMPT.system, { style: "headline", groups: [text.groups[0]!, { point: 2, lines: lines(["อวกาศใน", "ใน"]), ...PLAIN }, { ...text.groups[2]!, point: 3 }] })
+  const techniques = await post.rethink(folder, "techniques", requestAt("medium"))
+  expect(techniques.states).toMatchObject({ text: { state: "done" }, techniques: done(1), graphics: done(1), sounds: done(3) })
+  expect((await outlines.get(folder))!.emphasis!.plannedOn).toEqual({ techniques: 2, graphics: 1, sounds: null })
+  expect((await flow.preview()).emphasis.changed).toEqual({ techniques: false, graphics: true, sounds: true })
+  // thinking the graphics again catches them up: the graphic goes on the new point, over its text, which starts on the
+  // rough cut's fifth word
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(2, { word: 5, box: OVER })] })
   const graphics = await post.rethink(folder, "graphics", requestAt("medium"))
-  expect(graphics.states).toMatchObject({ text: { state: "done" }, techniques: done(2), graphics: done(1), sounds: done(3) })
-  expect((await outlines.get(folder))!.emphasis!.plannedOn).toEqual({ graphics: 2, sounds: null })
+  expect(graphics.states).toMatchObject({ techniques: done(1), graphics: done(1), sounds: done(3) })
+  expect((await outlines.get(folder))!.emphasis!.plannedOn).toEqual({ techniques: 2, graphics: 2, sounds: null })
   const rethought = await flow.preview("heavy")
   expect(rethought.graphics.map((graphic) => graphic.pointId)).toEqual([added])
-  expect(rethought.emphasis.changed).toEqual({ graphics: false, sounds: true })
+  expect(rethought.emphasis.changed).toEqual({ techniques: false, graphics: false, sounds: true })
 
   // thinking the sounds again catches them up too
   const sounds = await post.rethink(folder, "sounds", requestAt("medium"))
   expect(sounds.states.sounds).toMatchObject({ state: "done" })
-  expect(flow.told("sounds").slice(-3)).toEqual(["waiting", "running", "done"])
-  expect((await outlines.get(folder))!.emphasis!.plannedOn).toEqual({ graphics: 2, sounds: 2 })
-  expect((await flow.preview()).emphasis.changed).toEqual({ graphics: false, sounds: false })
+  // its composing reported as it went, before the work was done
+  expect(flow.told("sounds").at(-1)).toBe("done")
+  expect(flow.told("sounds").slice(-7, -5)).toEqual(["waiting", "running"])
+  expect((await outlines.get(folder))!.emphasis!.plannedOn).toEqual({ techniques: 2, graphics: 2, sounds: 2 })
+  expect((await flow.preview()).emphasis.changed).toEqual({ techniques: false, graphics: false, sounds: false })
   await previewEqualsWrite(flow, "heavy")
 })
 
@@ -452,16 +576,25 @@ const fragments = async (flow: Flow) => ((await flow.outlines.get(flow.folder))!
 /** Another fragment, as a later writing answers. */
 const MENDED = '<style>.m{animation:in 1s both}@keyframes in{from{opacity:0}}</style><div class="m">ขึ้นไป</div>'
 
-test("a stop pressed while the graphics are written ends the work as a stopped call ends one: what was written stays, the rest is left unwritten, and the works after it are stopped", async () => {
+test("a stop pressed while the graphics are written and the sounds composed beside them ends both as a stopped call ends one: what was written stays, the rest is left unwritten", async () => {
   const stop = new AbortController()
   const flow = await withFlow({ stop: stop.signal })
   const { folder, claude, post } = flow
   claude.replies.set(EMPHASIS_PROMPT.system, { points: [answer(1, "ขึ้นไป", "key", "action"), answer(2, "สามสอง", "key", "number")] })
-  claude.replies.set(MOTION_PLAN_PROMPT.system, { graphics: [{ ...MOTION_REPLY, point: 1, idea: "จรวด" }, { ...MOTION_REPLY, point: 2, idea: "นาฬิกา" }] })
-  // the rocket is written at once; the clock's call is still going when the user presses stop, once the rocket is stored
+  // with the text off, each on its point's first word, where the point plays
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(1, { idea: "จรวด" }), onPoint(2, { word: 6, from: "light", idea: "นาฬิกา" })] })
+  // a sound on "ใน", and one on the clock
+  claude.replies.set(SOUND_PLAN_PROMPT, { palette: "Key: C major", sounds: [{ word: 3, graphic: null, seconds: 1, role: "ติ๊ง", point: null, from: "light", loudness: "normal" }, { word: 6, graphic: 2, seconds: 1, role: "นาฬิกา", point: 2, from: "light", loudness: "normal" }] })
+  // the sound on "ใน" is being composed when the stop comes, and ends with it
+  claude.replies.set(SOUND_CONTRACT, async (asked: LlmRequest<unknown>) => {
+    if (!asked.signal!.aborted) await new Promise((resolve) => asked.signal!.addEventListener("abort", resolve, { once: true }))
+    throw asked.signal!.reason
+  })
+  // the rocket is written at once; the clock's call is still going when the user presses stop, once the rocket is
+  // stored and the sound on "ใน" is being composed
   claude.replies.set(MOTION_CONTRACT, async (asked: LlmRequest<unknown>) => {
     if (asked.content.some((entry) => entry.type === "text" && entry.text.includes("จรวด"))) return FRAGMENT
-    while ((await fragments(flow))[0] !== FRAGMENT) await new Promise((resolve) => setTimeout(resolve, 2))
+    while ((await fragments(flow))[0] !== FRAGMENT || !claude.requests.some((request) => request.system === SOUND_CONTRACT)) await new Promise((resolve) => setTimeout(resolve, 2))
     stop.abort()
     // as a call ends when the run's stop is pressed
     throw asked.signal!.reason
@@ -472,13 +605,83 @@ test("a stop pressed while the graphics are written ends the work as a stopped c
   const off = { state: "skipped", reason: "off" }
   expect(ran).toEqual({
     running: false,
-    states: { emphasis: done(2), text: off, techniques: off, graphics: { state: "failed", error: CANCELLED }, sounds: { state: "skipped", reason: "stopped" }, subtitles: off },
+    states: { emphasis: done(2), text: off, techniques: off, graphics: { state: "failed", error: CANCELLED }, sounds: { state: "failed", error: CANCELLED }, subtitles: off },
   })
   expect(graphicsStates(flow)).toEqual([{ state: "waiting" }, { state: "running" }, { state: "running", done: 0, total: 2 }, { state: "running", done: 1, total: 2 }, { state: "failed", error: CANCELLED }])
   expect(await fragments(flow)).toEqual([FRAGMENT, null])
-  // the sounds were never asked for
-  expect(claude.requests.some((request) => request.system === SOUNDS_PROMPT.system)).toBe(false)
+  // the sounds were planned and stored; none was composed, the clock's never asked for
+  const composed = (await flow.outlines.get(folder))!.flair?.composed ?? []
+  expect(composed.map((sound) => [sound.role, sound.code])).toEqual([
+    ["ติ๊ง", null],
+    ["นาฬิกา", null],
+  ])
+  expect(claude.requests.filter((request) => request.system === SOUND_CONTRACT)).toHaveLength(1)
   expect(flow.events.at(-1)).toEqual({ type: "post-plan-finished", folder })
+})
+
+test("in the one button the sounds are planned once the graphics are stored, before any is written, and composed while they are: a tied one waits for its graphic and scores its fragment, one whose graphic failed stays uncomposed", async () => {
+  const flow = await withFlow()
+  const { folder, claude, post } = flow
+  claude.replies.set(EMPHASIS_PROMPT.system, { points: [answer(1, "ขึ้นไป", "key", "action"), answer(2, "สามสอง", "key", "number")] })
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(1, { idea: "จรวด" }), onPoint(2, { word: 6, from: "light", idea: "นาฬิกา" })] })
+  // what the graphics stored held when the sounds were planned, and when the sound on "ใน" was composed
+  const atPlanning: { graphics?: (string | false | null)[] } = {}
+  const atUntied: { graphics?: (string | false | null)[] } = {}
+  claude.replies.set(SOUND_PLAN_PROMPT, async () => {
+    atPlanning.graphics = await fragments(flow)
+    return {
+      palette: "Key: C major",
+      sounds: [
+        { word: 1, graphic: 1, seconds: 1, role: "จรวดพุ่ง", point: 1, from: "light", loudness: "normal" },
+        { word: 3, graphic: null, seconds: 1, role: "ติ๊ง", point: null, from: "light", loudness: "normal" },
+        { word: 6, graphic: 2, seconds: 1, role: "นาฬิกาเดิน", point: 2, from: "light", loudness: "normal" },
+      ],
+    }
+  })
+  // the graphics are written only once the sound on "ใน" has been composed: the rocket is drawn, the clock's writing fails
+  let composedFirst!: () => void
+  const untied = new Promise<void>((resolve) => (composedFirst = resolve))
+  claude.replies.set(SOUND_CONTRACT, async (asked: LlmRequest<unknown>) => {
+    if (asked.content.some((entry) => entry.type === "text" && entry.text.includes("ติ๊ง"))) {
+      atUntied.graphics = await fragments(flow)
+      composedFirst()
+    }
+    return "function compose(ctx, cue, kit) { }"
+  })
+  claude.replies.set(MOTION_CONTRACT, async (asked: LlmRequest<unknown>) => {
+    await untied
+    if (asked.content.some((entry) => entry.type === "text" && entry.text.includes("จรวด"))) return FRAGMENT
+    throw new Error("Claude declined this request: no")
+  })
+  const asked = requestAt("medium")
+  const ran = await post.plan(folder, { ...asked, view: { ...asked.view, highlightsOn: false, flair: { ...ALL_ON, zoom: false, insert: false } } })
+  expect(ran.states).toMatchObject({ graphics: done(1, 1), sounds: done(2, 0) })
+  // planned on both graphics stored and neither written, each said to be not drawn yet
+  expect(atPlanning.graphics).toEqual([null, null])
+  const planning = claude.requests.find((request) => request.system === SOUND_PLAN_PROMPT)!
+  const text = planning.content.flatMap((entry) => (entry.type === "text" ? [entry.text] : [])).join("\n")
+  expect(text.match(/\(not drawn yet\)/g)).toHaveLength(2)
+  // the sound on "ใน" was composed before any graphic was written; the rocket's after it, to its fragment
+  expect(atUntied.graphics).toEqual([null, null])
+  const rocketSound = claude.requests.filter((request) => request.system === SOUND_CONTRACT).find((request) => request.content.some((entry) => entry.type === "text" && entry.text.includes("จรวดพุ่ง")))!
+  expect(rocketSound.content.some((entry) => entry.type === "text" && entry.text.includes(FRAGMENT))).toBe(true)
+  expect(claude.requests.filter((request) => request.system === SOUND_CONTRACT)).toHaveLength(2)
+  const composed = (await flow.outlines.get(folder))!.flair?.composed ?? []
+  expect(composed.map((sound) => [sound.role, sound.code !== null])).toEqual([
+    ["จรวดพุ่ง", true],
+    ["ติ๊ง", true],
+    ["นาฬิกาเดิน", false],
+  ])
+  // the two works ran side by side: the sounds were running before the graphics were done
+  const states = flow.events.flatMap((event) => (event.type === "post-plan" && (event.work === "graphics" || event.work === "sounds") ? [`${event.work} ${event.state.state}`] : []))
+  expect(states.indexOf("sounds running")).toBeLessThan(states.indexOf("graphics done"))
+  expect(flow.told("sounds")).toEqual(["waiting", "running", "running", "running", "running", "running", "done"])
+  // the rocket's sound is fresh with the picture it scores
+  expect((await flow.preview("heavy")).composed.map((shown) => [shown.written, shown.stale])).toEqual([
+    [true, null],
+    [true, null],
+    [false, null],
+  ])
 })
 
 test("a graphic gone stale is written again through a run of its own: the screen is told how far it has got, the new fragment is stored, and the write lays it", async () => {
@@ -534,17 +737,17 @@ test("a graphic the plan wrote takes the place of its point's highlight text, in
   // "ขึ้นไป" and "อวกาศ", both key, each with text; the graphic goes on "อวกาศ"
   claude.replies.set(EMPHASIS_PROMPT.system, { points: [answer(1, "ขึ้นไป", "key", "action"), answer(1, "อวกาศ", "key", "place")] })
   claude.replies.set(HIGHLIGHT_PROMPT.system, { style: "headline", groups: [{ point: 1, lines: lines(["ขึ้นไป", "ขึ้นไป"]), ...PLAIN }, { point: 2, lines: lines(["อวกาศ", "อวกาศ!"]), ...PLAIN }] })
-  claude.replies.set(MOTION_PLAN_PROMPT.system, { graphics: [{ ...MOTION_REPLY, point: 2 }] })
+  // over the text of "อวกาศ"
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(2, { box: OVER })] })
   claude.replies.set(MOTION_CONTRACT, FRAGMENT)
   const asked = requestAt("medium")
   const ran = await post.plan(folder, { ...asked, view: { ...asked.view, flair: { ...ALL_ON, zoom: false, insert: false, sound: false } } })
   // the text work counts both groups: it looks without the graphics, which are not planned yet
   expect(ran.states).toMatchObject({ emphasis: done(2), text: done(2), graphics: done(1) })
-  // the graphics were planned knowing each point's own text, which a graphic on the point takes the place of
-  const planning = claude.requests.find((request) => request.system === MOTION_PLAN_PROMPT.system)!
-  const pointLines = planning.content.flatMap((part) => (part.type === "text" ? part.text.split("\n") : [])).filter((line) => /^\[\d\] /.test(line))
-  expect(pointLines).toHaveLength(2)
-  for (const line of pointLines) expect(line).toMatch(/\(ข้อความเด่นของจุดนี้ \[[\d.]+, [\d.]+\]/)
+  // the graphics were planned knowing each point's own text, which a graphic of the point drawn over it takes the place of
+  const planning = claude.requests.find((request) => request.system === FREE_PLAN_PROMPT.system)!
+  const textLines = planning.content.flatMap((part) => (part.type === "text" ? part.text.split("\n") : [])).filter((line) => / จุด \d แถบ /.test(line))
+  expect(textLines).toEqual([expect.stringMatching(/ จุด 1 แถบ \[[\d.]+, [\d.]+\] “ขึ้นไป”$/), expect.stringMatching(/ จุด 2 แถบ \[[\d.]+, [\d.]+\] “อวกาศ!”$/)])
 
   /** Which groups the preview lists as replaced, and what a write of what it shows draws and lays. */
   const state = async () => {
@@ -593,7 +796,7 @@ test("with the lines under the text hidden, the subtitles say the words of a poi
   const { folder, claude, post, deps } = flow
   claude.replies.set(EMPHASIS_PROMPT.system, { points: [answer(1, "ขึ้นไป", "key", "action"), answer(1, "อวกาศ", "key", "place")] })
   claude.replies.set(HIGHLIGHT_PROMPT.system, { style: "headline", groups: [{ point: 1, lines: lines(["ขึ้นไป", "ขึ้นไป"]), ...PLAIN }, { point: 2, lines: lines(["อวกาศ", "อวกาศ!"]), ...PLAIN }] })
-  claude.replies.set(MOTION_PLAN_PROMPT.system, { graphics: [{ ...MOTION_REPLY, point: 2 }] })
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(2, { box: OVER })] })
   claude.replies.set(MOTION_CONTRACT, FRAGMENT)
   // the screen saves what it shows: the lines are read under the saved settings
   const flairOn = { ...ALL_ON, zoom: false, insert: false, sound: false }
@@ -628,7 +831,8 @@ test("a graphic edited through a run of its own and taken one step back plays as
   const flow = await withFlow()
   const { folder, claude, post } = flow
   claude.replies.set(EMPHASIS_PROMPT.system, { points: [answer(1, "อวกาศ", "key", "place")] })
-  claude.replies.set(MOTION_PLAN_PROMPT.system, { graphics: [{ ...MOTION_REPLY, point: 1 }] })
+  // with the text off, on no point, on อวกาศ
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [{ ...MOTION_REPLY, word: 4 }] })
   claude.replies.set(MOTION_CONTRACT, FRAGMENT)
   // only the points and the graphics are on
   const asked = requestAt("medium")
@@ -662,7 +866,7 @@ test("a graphic edited through a run of its own and taken one step back plays as
   expect(claude.requests).toHaveLength(calls)
   expect(flow.events).toHaveLength(told)
   const back = await flow.preview()
-  expect(back.graphics).toEqual([{ ...planned, spec: { ...planned!.spec, previous: { html: MENDED, seconds: planned!.spec.seconds, words: planned!.spec.words, version: MOTION_VERSION, instruction: "ตัวหนังสือใหญ่ขึ้น" } }, canUndo: true }])
+  expect(back.graphics).toEqual([{ ...planned, spec: { ...planned!.spec, previous: { html: MENDED, seconds: planned!.spec.seconds, words: planned!.spec.words, version: MOTION_VERSION, instruction: "ตัวหนังสือใหญ่ขึ้น", replacesText: false } }, canUndo: true }])
   // the write lays the file made for it before the edit: the renderer was not asked to make another
   expect(await previewEqualsWrite(flow, "medium")).toMatchObject({ graphics: 1 })
   expect(flow.renderer.made.size).toBe(2)

@@ -147,6 +147,19 @@ test("a scene the group never reaches is not dodged", () => {
   expect(placementOf(placed("v1", 0, 5_000_000), clips, "auto", false)).toEqual({ kind: "auto", keepClear: { fromY: 0.6, toY: 0.9 }, keepSubtitleRoom: false })
 })
 
+test("a face band, where one is known, stands in for the scenes' bands; where none is, they are dodged as before", () => {
+  const clips = [clipWith("v1", [[0, 5_000_000, [0.6, 0.9]]])]
+  const group = placed("v1", 0, 1_000_000)
+  const asked: PlacedGroup[] = []
+  const zoomed = (one: PlacedGroup) => (asked.push(one), { fromY: 0.5, toY: 0.95 })
+  expect(placementOf(group, clips, "auto", false, zoomed)).toEqual({ kind: "auto", keepClear: { fromY: 0.5, toY: 0.95 }, keepSubtitleRoom: false })
+  expect(asked).toEqual([group])
+  expect(placementOf(group, clips, "auto", false, () => null)).toEqual({ kind: "auto", keepClear: { fromY: 0.6, toY: 0.9 }, keepSubtitleRoom: false })
+  // a pinned position asks nothing
+  expect(placementOf(group, clips, "top", false, zoomed)).toEqual({ kind: "fixed", position: "top" })
+  expect(asked).toHaveLength(1)
+})
+
 test("a pinned position needs no picture at all", () => {
   expect(placementOf(placed("v1", 0, 1), [], "bottom", true)).toEqual({ kind: "fixed", position: "bottom" })
 })

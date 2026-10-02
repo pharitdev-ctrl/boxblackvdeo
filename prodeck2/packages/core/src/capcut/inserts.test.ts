@@ -197,3 +197,25 @@ test("a card is smaller than the frame and sits where the video leaves room", as
   expect(clip.scale.x).toBeCloseTo(0.62, 5)
   expect(clip.transform).toEqual({ x: 0, y: -0.48 })
 })
+
+test("a cutaway with poses moves over its own framing from its first frame; one without has no keyframes", async () => {
+  const poses = [
+    { s: 0, scale: 1, x: 0, y: 0, rot: 0, ease: "line" as const },
+    { s: 1, scale: 1.1, x: 0.05, y: -0.02, rot: 2, ease: "line" as const },
+  ]
+  const card: TimelineInsert = { ...clip, fit: "card", keepClear: { fromY: 0, toY: 0.5 }, poses }
+  const out = addInsertTrack(await roughCut(), [photo, card]).info
+  const [still] = overlays(out)[0]!.segments
+  expect(still!.common_keyframes).toEqual([])
+
+  const moved = overlays(out)[0]!.segments[1]!
+  const framing = moved.clip as { scale: { x: number }; transform: { x: number; y: number } }
+  const of = (property: string) => moved.common_keyframes!.find((entry) => entry.property_type === property)!.keyframe_list
+  expect(moved.common_keyframes!.map((entry) => entry.property_type)).toEqual(["KFTypeScaleX", "KFTypePositionX", "KFTypePositionY", "KFTypeRotation"])
+  // timed from the segment's start in its file, which is the file's start
+  expect(of("KFTypeScaleX").map((entry) => entry.time_offset)).toEqual([0, 1_000_000])
+  expect(of("KFTypeScaleX").map((entry) => entry.values[0])).toEqual([framing.scale.x, framing.scale.x * 1.1])
+  expect(of("KFTypePositionX").map((entry) => entry.values[0])).toEqual([framing.transform.x || 0, framing.transform.x + 0.05])
+  expect(of("KFTypePositionY").map((entry) => entry.values[0])).toEqual([framing.transform.y, framing.transform.y - 0.02])
+  expect(of("KFTypeRotation").map((entry) => entry.values[0])).toEqual([0, 2])
+})

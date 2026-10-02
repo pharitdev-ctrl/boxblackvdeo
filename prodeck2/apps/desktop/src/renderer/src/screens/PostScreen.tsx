@@ -5,12 +5,13 @@ import { BeatPanel } from "../edit/BeatPanel.tsx"
 import { BeatSidebar, type BeatCounts, type SidebarBeat } from "../edit/BeatSidebar.tsx"
 import { byBeat, emptyFlair, wholeClip, type BeatFlair } from "../edit/byBeat.ts"
 import { EmphasisTab } from "../edit/EmphasisTab.tsx"
-import { GraphicsTab } from "../edit/GraphicsTab.tsx"
+import { GraphicTab } from "../edit/GraphicTab.tsx"
 import { PlanStrip } from "../edit/PlanStrip.tsx"
 import { tabRuns, type PostTab } from "../edit/postTabs.ts"
 import { SoundTab } from "../edit/SoundTab.tsx"
 import { SpeechTab } from "../edit/SpeechTab.tsx"
 import { SubtitleTab } from "../edit/SubtitleTab.tsx"
+import { TechniquesTab } from "../edit/TechniquesTab.tsx"
 import { RulesSettings, SubtitleSettings } from "../edit/TabSettings.tsx"
 import { FailedReads, WriteButton, WriteReason } from "../edit/WriteButton.tsx"
 import { t } from "../i18n.ts"
@@ -30,8 +31,8 @@ const NOTHING = emptyFlair()
 const wordRange = (from: number, to: number): number[] => Array.from({ length: to - from }, (_, index) => from + index)
 
 /**
- * The post-production page: the whole clip and the beats on the left, five tabs on the right, the
- * plan button at the end of the cut tab, and on the app's bar the AI menu and the write button. It
+ * The post-production page: the whole clip and the beats on the left, six tabs on the right, and on
+ * the app's bar the AI menu (whose first item runs the whole plan) and the write button. It
  * holds only what it shows, the beat and the tab; everything else is the room's.
  */
 export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
@@ -87,14 +88,23 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
   // what the last run of the points could not use of them; a rethink of another work keeps that state
   const pointsRun = run.states.emphasis
   const droppedPoints = pointsRun?.state === "done" ? pointsRun.dropped : 0
-  const canPlan = !writing && !run.running && !empty && preview !== null && room.request() !== null
 
   // what stops an AI item: a write that took everything already, a run going, or settings not read yet
   const aiBlocked = writing ? t("edit.ai.writing") : run.running ? t("post.planRunning") : preview === null || room.request() === null ? t("edit.busy") : undefined
   // works 2 and 4 stand on the points: with none placed there is nothing to plan them on
-  const needsPoints = (emphasis?.points.length ?? 0) === 0 ? t("post.ai.planFirst") : undefined
+  const needsPoints = (emphasis?.points.length ?? 0) === 0 ? t("post.ai.planFirstHere") : undefined
   const items: AiItem[] = [
+    // the whole plan places the points itself, so it never waits for them; a cut that keeps nothing leaves it nothing to plan
+    {
+      id: "all",
+      label: `✦ ${t("post.planAll")}`,
+      hint: t("post.planHint"),
+      lead: true,
+      disabled: aiBlocked ?? (empty ? t("timeline.empty") : undefined),
+      onRun: () => void room.planPost(),
+    },
     { id: "emphasis", label: t("post.ai.rethink.emphasis"), disabled: aiBlocked, onRun: () => void room.rethink("emphasis") },
+    { id: "techniques", label: t("post.ai.rethink.techniques"), disabled: aiBlocked ?? needsPoints, onRun: () => void room.rethink("techniques") },
     { id: "graphics", label: t("post.ai.rethink.graphics"), disabled: aiBlocked ?? needsPoints, onRun: () => void room.rethink("graphics") },
     { id: "sounds", label: t("post.ai.rethink.sounds"), disabled: aiBlocked ?? needsPoints, onRun: () => void room.rethink("sounds") },
     { id: "subtitles", label: t("post.ai.rethink.subtitles"), disabled: aiBlocked, onRun: () => void room.rethink("subtitles") },
@@ -136,7 +146,8 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
             onTab={setTab}
             counts={{
               emphasis: shownCounts.emphasis,
-              graphics: shownCounts.text + shownCounts.zoom + shownCounts.insert + shownCounts.graphic,
+              techniques: shownCounts.text + shownCounts.zoom + shownCounts.insert,
+              graphics: shownCounts.graphic,
               sound: shownCounts.sound,
               ...(subtitlesOn ? { subtitles: shownCounts.subtitles } : {}),
             }}
@@ -156,12 +167,6 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
                         <SpeechTab folder={folder} cut={cut} busy={busy} onToggle={(videoId, change) => void room.decide(videoId, change)} />
                       </div>
                     ))}
-                    <div className="plan-cta">
-                      <p className="hint">{t("post.planHint")}</p>
-                      <Button variant="ai" disabled={!canPlan} title={writing ? t("edit.ai.writing") : undefined} onClick={() => void room.planPost()}>
-                        {run.running ? t("post.planRunning") : `✦ ${t("post.plan")}`}
-                      </Button>
-                    </div>
                   </>
                 )}
               </>
@@ -175,8 +180,6 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
                   points={shown.points}
                   sentences={inView(emphasis.sentences)}
                   scenes={inView(emphasis.scenes)}
-                  level={flair.level}
-                  onLevel={(level) => room.changeFlair({ ...flair, level })}
                   hidden={emphasis.hidden}
                   dropped={droppedPoints}
                   busy={busy || room.placing}
@@ -205,9 +208,11 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
               ) : (
                 <p className="hint">{t("edit.busy")}</p>
               ))}
+            {tab === "techniques" &&
+              (preview ? <TechniquesTab flair={shown} beatId={chosen?.beatId ?? null} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
             {tab === "graphics" &&
-              (preview ? <GraphicsTab flair={shown} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
-            {tab === "sound" && (preview ? <SoundTab flair={shown} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
+              (preview ? <GraphicTab flair={shown} beatId={chosen?.beatId ?? null} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
+            {tab === "sound" && (preview ? <SoundTab flair={shown} beatId={chosen?.beatId ?? null} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
             {tab === "subtitles" && subtitles && highlights && (
               <>
                 <SubtitleSettings
@@ -232,7 +237,13 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
         createPortal(
           <>
             <WriteReason />
-            <AiMenu items={items} running={run.running ? t("post.planRunning") : null} onStop={() => void api.cancelAi()} />
+            <AiMenu
+              items={items}
+              running={run.running ? t("post.planRunning") : null}
+              onStop={() => void api.cancelAi()}
+              // the level heads the menu once the settings are read; like every setting it is shut only while a write runs
+              level={flair ? { value: flair.level, onChange: (level) => room.changeFlair({ ...flair, level }), disabled: writing } : undefined}
+            />
             <WriteButton />
           </>,
           slot,

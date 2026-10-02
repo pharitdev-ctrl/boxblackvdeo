@@ -1,0 +1,25 @@
+caught     FlairTab.tsx             field: sent untrimmed
+caught     FlairTab.tsx             field: 301 allowed
+caught     FlairTab.tsx             field: empty sendable
+caught     FlairTab.tsx             field: send not held
+caught     FlairTab.tsx             field: composing Escape closes
+caught     FlairTab.tsx             field: Escape ignored
+caught     FlairTab.tsx             field: key never let go
+caught     FlairTab.tsx             row: edit on unwritten
+caught     FlairTab.tsx             row: undo always shown
+caught     FlairTab.tsx             row: edit not held during a run
+caught     FlairTab.tsx             row: undo not held during a run
+caught     FlairTab.tsx             row: an edit reads as writing
+caught     FlairTab.tsx             row: no last edit line
+caught     FlairTab.tsx             row: edit failure shown while rewritten
+caught     FlairTab.tsx             row: edit failure never shown
+caught     FlairTab.tsx             row: sending keeps the field open
+caught     ClipRoom.tsx             room: undo reads nothing again
+caught     ClipRoom.tsx             room: undo holds nothing
+caught     ClipRoom.tsx             room: undo refusal untranslated
+caught     ClipRoom.tsx             room: edit marked as a redo
+caught     ClipRoom.tsx             room: refused rewrite keeps its mark
+caught     ClipRoom.tsx             room: hold is a boolean again
+caught     postTabs.ts              words: not written untranslated
+caught     postTabs.ts              words: nothing back untranslated
+24/24 caught

@@ -98,8 +98,6 @@ async function withFlair(sounds = SOUNDS, pictures = PICTURES, beats?: Beat[], e
     timeline: base.service,
     llm: claude.llm,
     sounds: library,
-    // read from settings, as the app wires it
-    pro: async () => (await base.deps.settings.read()).capcut.pro,
     media,
     descriptions,
     frames: () => {
@@ -990,6 +988,26 @@ test("a graphic with no fragment kept, one that is not there and one of no kind 
   await expect(flair.undoGraphic(folder, { ...speech(s(22.62)), beatId: "beat-1" })).rejects.toThrow(nothing)
   await expect(flair.undoGraphic(folder, card.anchor)).rejects.toThrow(nothing)
   expect(await graphicsNow()).toEqual([plain, card])
+})
+
+test("a fragment kept for a step back that is no fragment, as a file may hold, is nothing to go back to, and the graphic is left as it was", async () => {
+  for (const previous of [null, {}, "x"]) {
+    const cue: GraphicCue = { ...graphicAt(s(18.08), false), spec: { ...SPEC, editFailed: "timed out", previous } as unknown as MotionSpec }
+    const { flair, folder, graphicsNow } = await withGraphics([cue])
+    await expect(flair.undoGraphic(folder, cue.anchor), JSON.stringify(previous)).rejects.toThrow(/^this graphic has nothing to go back to$/)
+    expect(await graphicsNow()).toEqual([cue])
+  }
+})
+
+test("going back from a fragment whose change is stored as no text, as a file edited by hand may hold, keeps that fragment to come back to, with no change on it", async () => {
+  const handEdited: GraphicCue = {
+    ...graphicAt(s(18.08), false),
+    spec: { ...SPEC, html: EDITED_HTML, instruction: null, previous: { html: SPEC.html!, seconds: 2, words: [], version: MOTION_VERSION } } as unknown as MotionSpec,
+  }
+  const { flair, folder, graphicsNow } = await withGraphics([handEdited])
+  await flair.undoGraphic(folder, handEdited.anchor)
+  expect((await graphicsNow())[0]!.spec).toEqual({ ...SPEC, previous: { html: EDITED_HTML, seconds: 2, words: [], version: MOTION_VERSION } })
+  expect(Object.keys((await graphicsNow())[0]!.spec.previous!)).not.toContain("instruction")
 })
 
 test("a retry forgets the failed render of the job the post-production page shows for that graphic", async () => {

@@ -1,19 +1,21 @@
 import type { CutRules } from "@boxblack/core/cut"
 import { EMPTY_EMPHASIS } from "@boxblack/core/emphasis/types"
 import type { CueAnchor } from "@boxblack/core/flair/plan"
-import { POST_WORKS, type AppEvent, type PostRequest, type PostRunView, type PostWork, type PostWorkState, type RethinkWork } from "../shared/api.ts"
+import { isComposed } from "@boxblack/core/sound/spec"
+import { POST_WORKS, type AppEvent, type MoveAnchor, type PostRequest, type PostRunView, type PostWork, type PostWorkState, type RethinkWork } from "../shared/api.ts"
 import { CANCELLED } from "./ai-calls.ts"
 import type { EmphasisService } from "./emphasis.ts"
 import type { FlairService } from "./flair.ts"
 import type { HighlightService } from "./highlights.ts"
 import type { OutlineStore } from "./planner.ts"
+import { samePlace } from "./sound-cues.ts"
 import type { TimelineService } from "./timeline.ts"
 
 export interface PostPlanDeps {
   outlines: OutlineStore
   emphasis: Pick<EmphasisService, "plan" | "placedCount">
   highlights: Pick<HighlightService, "pick">
-  flair: Pick<FlairService, "planTechniques" | "planGraphics" | "planSounds" | "redoGraphic" | "editGraphic" | "undoGraphic">
+  flair: Pick<FlairService, "planTechniques" | "planGraphics" | "planSounds" | "redoGraphic" | "editGraphic" | "undoGraphic" | "redoMove" | "editMove" | "undoMove" | "soundsAfterGraphic" | "redoSound" | "editSound" | "undoSound">
   timeline: Pick<TimelineService, "polishStored">
   send?: (event: AppEvent) => void
   /** the signal the next stop of the editing room's Claude calls aborts, read as a run starts: a stop pressed between two works ends the run too */
@@ -24,7 +26,11 @@ export interface PostPlanDeps {
 type Counted = { count: number; dropped: number; skipped?: "no-canvas" }
 
 /** The works each rethink runs; the points go through emphasisOnly. */
-const RETHOUGHT: Record<RethinkWork, readonly PostWork[]> = { graphics: ["text", "techniques", "graphics"], sounds: ["sounds"], subtitles: ["subtitles"] }
+const RETHOUGHT: Record<RethinkWork, readonly PostWork[]> = { techniques: ["techniques", "text"], graphics: ["graphics"], sounds: ["sounds"], subtitles: ["subtitles"] }
+
+/** The two parts of work 2 a run may think: the moves and cutaways with the text (2b and 2a), and the graphics (2c). */
+type WorkTwoParts = { techniques: boolean; graphics: boolean }
+const ALL_OF_TWO: WorkTwoParts = { techniques: true, graphics: true }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -35,10 +41,17 @@ export function createPostPlanService(deps: PostPlanDeps) {
   const send = deps.send ?? (() => {})
   /** each project's run as it stands, or as the last one ended, since the app started */
   const runs = new Map<string, PostRunView>()
+  /** the projects a step back is being stored on now */
+  const undoing = new Set<string>()
+  /** the projects a graphic's run is being readied on now: the works it will touch are being read from the outline */
+  const readying = new Set<string>()
 
-  /** Refuses what may not happen while a run goes on the project: another run, or a graphic taken a step back. */
+  /**
+   * Refuses what may not happen while a run goes on the project, or while a step back is being stored on it: a run,
+   * or a step back. A run begun during a step back would write over the fragment going back and keep the wrong one.
+   */
   function refuseWhileRunning(folder: string): void {
-    if (runs.get(folder)?.running) throw new Error("a plan for this project is already running")
+    if (runs.get(folder)?.running || undoing.has(folder) || readying.has(folder)) throw new Error("a plan for this project is already running")
   }
 
   /**
@@ -93,8 +106,8 @@ export function createPostPlanService(deps: PostPlanDeps) {
       },
       /**
        * How a work that goes through its things one by one says how far it has got (the graphics work, as each
-       * graphic's writing ends): kept on its running state, and the screen told. A report that comes when the work
-       * is not running, before it began or once it is over, is not taken.
+       * graphic's writing ends; the sounds work, as each sound's composing ends): kept on its running state, and the
+       * screen told. A report that comes when the work is not running, before it began or once it is over, is not taken.
        */
       progress:
         (work: PostWork) =>
@@ -130,14 +143,19 @@ export function createPostPlanService(deps: PostPlanDeps) {
 
   /**
    * Notes that a work planned on this version of the points, so the "จุดเน้นเปลี่ยน" banner goes; one that
-   * cannot be noted leaves the banner up. Null says the work is behind whatever it planned on.
+   * cannot be noted leaves the banner up. Null says the work is behind whatever it planned on. On an outline from
+   * before 0.7.0, which noted the text and techniques with the graphics, that note is kept for them first, so noting
+   * another work leaves their banner as it was.
    */
-  async function plannedOn(folder: string, work: "graphics" | "sounds", version: number | null): Promise<void> {
+  async function plannedOn(folder: string, work: "techniques" | "graphics" | "sounds", version: number | null): Promise<void> {
     await deps.outlines
       .update(folder, (latest) => {
         if (!latest) throw new Error("this project has no outline yet")
         const emphasis = latest.emphasis ?? EMPTY_EMPHASIS
-        return { ...latest, emphasis: { ...emphasis, plannedOn: { ...emphasis.plannedOn, [work]: version } } }
+        const was = emphasis.plannedOn
+        // an outline from before 0.7.0 noted the text and techniques with the graphics: that note is theirs from now on
+        const carried = { ...was, techniques: was.techniques === undefined ? was.graphics : was.techniques }
+        return { ...latest, emphasis: { ...emphasis, plannedOn: { ...carried, [work]: version } } }
       })
       .catch(() => {})
   }
@@ -155,40 +173,65 @@ export function createPostPlanService(deps: PostPlanDeps) {
   }
 
   /**
-   * Work 2 in its three calls, in order: the text (2a), zooms and cutaways (2b), then graphics (2c),
-   * which keep clear of the text just placed. A call switched off is skipped; with no point, all are; when
+   * Work 2 in its three calls, in order: the moves and cutaways (2b), then the text (2a), which keeps off the faces
+   * where the moves take them, then graphics (2c), which keep clear of the text just placed; `parts` says which of
+   * them this run thinks, the techniques with the text, the graphics, or all three. A call switched off is skipped; with no point, all are; when
    * the points on the cut could not be read, each fails with why. With points on the cut, the version the
-   * points had when it started is noted as planned on when none of the calls that ran failed or was
-   * stopped — also when all three are off, since there is then nothing to think again and the
+   * points had when it started is noted as planned on, for each part the run thinks, when none of that part's calls
+   * that ran failed or was stopped, also when all are off, since there is then nothing to think again and the
    * "จุดเน้นเปลี่ยน" banner must be able to go (a call switched off is never one a stop kept from running).
-   * `afterText` is told once the text is over, however it ended. Answers whether any call ended done, so
+   * `afterText` is told once the text is over, however it ended; `graphicsStored` once the graphics are planned and
+   * stored, before they are written, when the graphics work gets that far. Answers whether any call ended done, so
    * put down or replaced what was there.
    */
-  async function workTwo(folder: string, request: PostRequest, run: Run, cut: OnCut, afterText: () => void = () => {}): Promise<boolean> {
+  async function workTwo(
+    folder: string,
+    request: PostRequest,
+    run: Run,
+    cut: OnCut,
+    parts: WorkTwoParts,
+    afterText: () => void = () => {},
+    graphicsStored?: () => void,
+  ): Promise<boolean> {
     const { view } = request
     const version = await versionNow(folder)
     const points = "points" in cut && cut.points
-    const results: boolean[] = []
+    // how each call that ran ended, by the part of work 2 it belongs to
+    const results: Record<"techniques" | "graphics", boolean[]> = { techniques: [], graphics: [] }
     const step = async (work: PostWork, on: boolean, body: () => Promise<Counted>) => {
+      const part = work === "graphics" ? results.graphics : results.techniques
       if (!on) return run.skip(work, "off")
-      if ("error" in cut) return void results.push(run.fail(work, cut.error))
+      if ("error" in cut) return void part.push(run.fail(work, cut.error))
       if (!points) return run.skip(work, "no-emphasis")
-      results.push(await run.run(work, body))
+      part.push(await run.run(work, body))
     }
-    // the text is picked without the graphics: reading them would start renders work 2c is about to replace
-    await step("text", view.highlightsOn, async () => {
-      const { preview, dropped } = await deps.highlights.pick(folder, request.rules, { ...view, flair: { ...view.flair, graphic: false } }, run.signal)
-      return { count: preview.groups.length, dropped }
-    })
-    afterText()
-    await step("techniques", view.flair.zoom || view.flair.insert, () => deps.flair.planTechniques(folder, request, run.signal))
-    await step("graphics", view.flair.graphic, () => deps.flair.planGraphics(folder, request, run.signal, run.progress("graphics")))
-    if (points && results.every(Boolean)) await plannedOn(folder, "graphics", version)
-    return run.done("text") || run.done("techniques") || run.done("graphics")
+    if (parts.techniques) {
+      await step("techniques", view.flair.zoom || view.flair.insert, () => deps.flair.planTechniques(folder, request, run.signal))
+      // the text is picked without the graphics: reading them would start renders work 2c is about to replace
+      await step("text", view.highlightsOn, async () => {
+        const { preview, dropped } = await deps.highlights.pick(folder, request.rules, { ...view, flair: { ...view.flair, graphic: false } }, run.signal)
+        return { count: preview.groups.length, dropped }
+      })
+      afterText()
+    }
+    if (parts.graphics) {
+      const graphics = () =>
+        graphicsStored
+          ? deps.flair.planGraphics(folder, request, run.signal, run.progress("graphics"), graphicsStored)
+          : deps.flair.planGraphics(folder, request, run.signal, run.progress("graphics"))
+      await step("graphics", view.flair.graphic, graphics)
+    }
+    if (points && parts.techniques && results.techniques.every(Boolean)) await plannedOn(folder, "techniques", version)
+    if (points && parts.graphics && results.graphics.every(Boolean)) await plannedOn(folder, "graphics", version)
+    return (parts.techniques && (run.done("text") || run.done("techniques"))) || (parts.graphics && run.done("graphics"))
   }
 
-  /** Work 4: the sounds, on the slots of what work 2 put down; noted as planned on as work 2 is, the sounds switched off included. */
-  async function workFour(folder: string, request: PostRequest, run: Run, cut: OnCut): Promise<void> {
+  /**
+   * Work 4: the sounds, planned on what work 2 put down and composed one by one, saying how far the composing has got;
+   * noted as planned on as work 2 is, the sounds switched off included. `drawing` is the graphics' writing when work 4
+   * runs beside it, which the sounds tied to a graphic not written yet wait for.
+   */
+  async function workFour(folder: string, request: PostRequest, run: Run, cut: OnCut, drawing?: Promise<void>): Promise<void> {
     const version = await versionNow(folder)
     const points = "points" in cut && cut.points
     if (!request.view.flair.sound) {
@@ -199,7 +242,9 @@ export function createPostPlanService(deps: PostPlanDeps) {
     }
     if ("error" in cut) return void run.fail("sounds", cut.error)
     if (!points) return run.skip("sounds", "no-emphasis")
-    if (await run.run("sounds", () => deps.flair.planSounds(folder, request, run.signal))) await plannedOn(folder, "sounds", version)
+    const sounds = () =>
+      drawing ? deps.flair.planSounds(folder, request, run.signal, run.progress("sounds"), drawing) : deps.flair.planSounds(folder, request, run.signal, run.progress("sounds"))
+    if (await run.run("sounds", sounds)) await plannedOn(folder, "sounds", version)
   }
 
   /** Work 5: the subtitles' polish, when subtitles are on and the polish is asked for. */
@@ -216,37 +261,123 @@ export function createPostPlanService(deps: PostPlanDeps) {
     })
   }
 
+  /**
+   * The works of a run that writes the graphic at `anchor` again or edits it: the graphics work, and the sounds work
+   * too when the sounds are on and the stored outline has a composed sound tied to that graphic, which the run then
+   * composes again. Otherwise the sounds work is not touched and keeps how it stood. An outline that cannot be read
+   * ties no sound. It is refused as a run is, and while it reads the project is held as a run would hold it, so
+   * nothing slips in before the run begins.
+   */
+  async function graphicWorks(folder: string, anchor: CueAnchor, request: PostRequest): Promise<readonly PostWork[]> {
+    refuseWhileRunning(folder)
+    if (!request.view.flair.sound) return ["graphics"]
+    readying.add(folder)
+    try {
+      const stored = await deps.outlines.get(folder).catch(() => null)
+      const tied = (stored?.flair?.composed ?? []).some((sound) => isComposed(sound) && sound.graphic !== undefined && samePlace(sound.graphic, anchor))
+      return tied ? ["graphics", "sounds"] : ["graphics"]
+    } finally {
+      readying.delete(folder)
+    }
+  }
+
+  /**
+   * The graphics work of a graphic written again or edited, then, when the run has it (`graphicWorks`), the sounds work
+   * on the sounds tied to it (spec §11): once the graphic is stored written, each sound tied to it is composed again to
+   * its new fragment, saying how far that has got. A graphic whose writing failed, or that could not be written,
+   * touches no sound: the sounds work then ends with nothing done. After a stop the sounds work is skipped as stopped.
+   */
+  async function graphicThenSounds(folder: string, anchor: CueAnchor, request: PostRequest, works: readonly PostWork[], write: (run: Run) => Promise<Counted>): Promise<PostRunView> {
+    const run = begin(folder, works)
+    try {
+      let written = false
+      await run.run("graphics", async () => {
+        const counted = await write(run)
+        written = counted.count > 0
+        return counted
+      })
+      if (works.includes("sounds")) await run.run("sounds", async () => (written ? deps.flair.soundsAfterGraphic(folder, anchor, request, run.signal, run.progress("sounds")) : { count: 0, dropped: 0 }))
+    } finally {
+      run.end()
+    }
+    return stateOf(folder)!
+  }
+
+  /**
+   * A step back taken on the project, which asks no Claude and is no run: refused while a run goes on the project,
+   * whose writing would store over it or keep what it swapped away; and while it is being stored, no run of the
+   * project begins and no second step back, of a graphic or a sound, is taken. The project is let go once it is
+   * stored, or has failed.
+   */
+  async function steppingBack(folder: string, step: () => Promise<void>): Promise<void> {
+    refuseWhileRunning(folder)
+    undoing.add(folder)
+    try {
+      await step()
+    } finally {
+      undoing.delete(folder)
+    }
+  }
+
   return {
-    /** The run behind the one button (spec §5.1): emphasis; then text, techniques, graphics; then sounds; the subtitles' polish alongside. */
+    /**
+     * The run behind the one button (spec §5.1): emphasis; then techniques, text, graphics; then sounds; the subtitles'
+     * polish alongside. The sounds start as soon as the graphics are planned and stored, and are planned and composed
+     * while the graphics are written, the two works running side by side; with the graphics off, or a graphics work
+     * that ends before it stores any, they start once it is over, as before.
+     */
     async plan(folder: string, request: PostRequest): Promise<PostRunView> {
       const run = begin(folder, POST_WORKS)
+      // the works started beside another, which the run waits for before it is over, however the rest ended
+      let polishing: Promise<unknown> | null = null
+      let sounding: Promise<void> | null = null
       try {
         // the polish needs no one, unless the lines under the text are hidden: then it waits for the text. With
         // graphics on too it waits for the graphics work instead: a graphic written takes its point's text away,
         // which puts that text's words back in the lines, so the lines are not settled until the graphics are
         const waitsForText = request.subtitles?.hideUnderHighlights === true && request.view.highlightsOn
         const waitsForGraphics = waitsForText && request.view.flair.graphic
-        let polishing: Promise<unknown> | null = waitsForText ? null : workFive(folder, request, run)
+        if (!waitsForText) polishing = workFive(folder, request, run)
         const emphasis = await run.run("emphasis", () => deps.emphasis.plan(folder, request.rules, run.signal))
         // the points failed or there are none on the cut: works 2 and 4 do not start
         const cut: OnCut = emphasis ? await onCut(folder, request) : { points: false }
-        await workTwo(folder, request, run, cut, () => {
-          if (!waitsForGraphics) polishing ??= workFive(folder, request, run)
-        })
+        // the graphics' writing, which the sounds started beside it wait on: it settles once work 2 is over
+        let drawn!: () => void
+        const drawing = new Promise<void>((resolve) => (drawn = resolve))
+        try {
+          await workTwo(
+            folder,
+            request,
+            run,
+            cut,
+            ALL_OF_TWO,
+            () => {
+              if (!waitsForGraphics) polishing ??= workFive(folder, request, run)
+            },
+            () => {
+              sounding = workFour(folder, request, run, cut, drawing)
+              // awaited below; held here so that it does not fail unheard meanwhile
+              sounding.catch(() => {})
+            },
+          )
+        } finally {
+          drawn()
+        }
         // work 2 is over, its graphics with it, however they ended
         polishing ??= workFive(folder, request, run)
-        await workFour(folder, request, run, cut)
+        await ((sounding as Promise<void> | null) ?? workFour(folder, request, run, cut))
         await polishing
       } finally {
+        await Promise.allSettled([sounding as Promise<void> | null, polishing as Promise<unknown> | null].filter((work) => work !== null))
         run.end()
       }
       return stateOf(folder)!
     },
 
     /**
-     * One work again on the points as they are ("graphics" runs text, techniques and graphics); the user's
-     * own stays. Work 2 thought again may replace what the sounds sat on, so when any of its calls ended
-     * done the sounds are behind: their banner asks for them to be thought again too.
+     * One work again on the points as they are ("techniques" runs the moves and cutaways and then the text, "graphics" the
+     * graphics alone); the user's own stays. Work 2 thought again may replace what the sounds sat on, so when any of
+     * its calls ended done the sounds are behind: their banner asks for them to be thought again too.
      */
     async rethink(folder: string, work: RethinkWork, request: PostRequest): Promise<PostRunView> {
       const run = begin(folder, RETHOUGHT[work])
@@ -255,7 +386,7 @@ export function createPostPlanService(deps: PostPlanDeps) {
         else {
           const cut = await onCut(folder, request)
           if (work === "sounds") await workFour(folder, request, run, cut)
-          else if (await workTwo(folder, request, run, cut)) await plannedOn(folder, "sounds", null)
+          else if (await workTwo(folder, request, run, cut, { techniques: work === "techniques", graphics: work === "graphics" })) await plannedOn(folder, "sounds", null)
         }
       } finally {
         run.end()
@@ -264,45 +395,99 @@ export function createPostPlanService(deps: PostPlanDeps) {
     },
 
     /**
-     * One motion graphic written again, as a run of the graphics work alone: refused while another run goes on the
-     * project, stopped by the user's stop, and told to the screen as any work is, with how far it has got. Nothing
-     * is planned, so the points are noted as planned on no more than they were, and the other works keep how they
-     * stood. A graphic that cannot be written again (it has no place on the rough cut now) fails the work with why.
+     * One motion graphic written again, as a run of the graphics work, then the sounds tied to it composed again to
+     * what it now draws when it has any (`graphicWorks`, `graphicThenSounds`): refused while another run goes on the project, stopped by the user's
+     * stop, and told to the screen as any work is, with how far it has got. Nothing is planned, so the points are
+     * noted as planned on no more than they were, and the other works keep how they stood. A graphic that cannot be
+     * written again (it has no place on the rough cut now) fails the graphics work with why.
      */
     async redoGraphic(folder: string, anchor: CueAnchor, request: PostRequest): Promise<PostRunView> {
-      const run = begin(folder, ["graphics"])
-      try {
-        await run.run("graphics", () => deps.flair.redoGraphic(folder, anchor, request, run.signal, run.progress("graphics")))
-      } finally {
-        run.end()
-      }
-      return stateOf(folder)!
+      const works = await graphicWorks(folder, anchor, request)
+      return graphicThenSounds(folder, anchor, request, works, (run) => deps.flair.redoGraphic(folder, anchor, request, run.signal, run.progress("graphics")))
     },
 
     /**
-     * One written motion graphic changed as the user asks (`instruction`), as a run of the graphics work alone, as a
-     * graphic written again is: refused while another run goes on the project, stopped by the user's stop, and told
-     * to the screen with how far it has got. Nothing is planned and the other works keep how they stood. A graphic
-     * that cannot be edited (no place on the rough cut now, or no fragment yet) fails the work with why.
+     * One written motion graphic changed as the user asks (`instruction`), as a run of the graphics work and then the
+     * sounds tied to it, as a graphic written again is: refused while another run goes on the project, stopped by the
+     * user's stop, and told to the screen with how far it has got. Nothing is planned and the other works keep how
+     * they stood. A graphic that cannot be edited (no place on the rough cut now, or no fragment yet) fails the
+     * graphics work with why; an edit that failed keeps the fragment it had, and touches no sound.
      */
     async editGraphic(folder: string, anchor: CueAnchor, instruction: string, request: PostRequest): Promise<PostRunView> {
-      const run = begin(folder, ["graphics"])
-      try {
-        await run.run("graphics", () => deps.flair.editGraphic(folder, anchor, instruction, request, run.signal, run.progress("graphics")))
-      } finally {
-        run.end()
-      }
-      return stateOf(folder)!
+      const works = await graphicWorks(folder, anchor, request)
+      return graphicThenSounds(folder, anchor, request, works, (run) => deps.flair.editGraphic(folder, anchor, instruction, request, run.signal, run.progress("graphics")))
     },
 
     /**
      * One step back on a graphic. It asks no Claude and is no run, so the screen is told nothing, but it is refused
-     * while a run goes on the project, whose writing would store over it or keep what it swapped away.
+     * while a run goes on the project, whose writing would store over it or keep what it swapped away; and while it is
+     * being stored, no run of the project begins and no second step back is taken. The project is let go once it is
+     * stored, or has failed.
      */
-    async undoGraphic(folder: string, anchor: CueAnchor): Promise<void> {
-      refuseWhileRunning(folder)
-      await deps.flair.undoGraphic(folder, anchor)
+    undoGraphic: (folder: string, anchor: CueAnchor): Promise<void> => steppingBack(folder, () => deps.flair.undoGraphic(folder, anchor)),
+
+    /**
+     * One move of the picture designed again by Claude, as a run of the techniques work alone: refused while another
+     * run goes on the project, stopped by the user's stop, and told to the screen as any work is, with how far it has
+     * got. The text is not placed again and nothing is planned, so the points are noted as planned on no more than
+     * they were, and the other works keep how they stood. A move with no place on the rough cut now fails the work.
+     */
+    async redoMove(folder: string, anchor: MoveAnchor, request: PostRequest): Promise<PostRunView> {
+      const run = begin(folder, ["techniques"])
+      try {
+        await run.run("techniques", () => deps.flair.redoMove(folder, anchor, request, run.signal, run.progress("techniques")))
+      } finally {
+        run.end()
+      }
+      return stateOf(folder)!
     },
+
+    /** One move of the picture changed by Claude as the user asks (`instruction`), as a run of the techniques work alone, as a move designed again is. */
+    async editMove(folder: string, anchor: MoveAnchor, instruction: string, request: PostRequest): Promise<PostRunView> {
+      const run = begin(folder, ["techniques"])
+      try {
+        await run.run("techniques", () => deps.flair.editMove(folder, anchor, instruction, request, run.signal, run.progress("techniques")))
+      } finally {
+        run.end()
+      }
+      return stateOf(folder)!
+    },
+
+    /** One step back on a move, held as a graphic's is (`steppingBack`): no run, and the screen is told nothing. */
+    undoMove: (folder: string, anchor: MoveAnchor): Promise<void> => steppingBack(folder, () => deps.flair.undoMove(folder, anchor)),
+
+    /**
+     * One composed sound composed again, as a run of the sounds work alone: refused while another run goes on the
+     * project, stopped by the user's stop, and told to the screen with how far it has got. Nothing is planned and the
+     * other works keep how they stood. A sound that cannot be composed again (no place on the rough cut now) fails the
+     * work with why.
+     */
+    async redoSound(folder: string, anchor: CueAnchor, request: PostRequest): Promise<PostRunView> {
+      const run = begin(folder, ["sounds"])
+      try {
+        await run.run("sounds", () => deps.flair.redoSound(folder, anchor, request, run.signal, run.progress("sounds")))
+      } finally {
+        run.end()
+      }
+      return stateOf(folder)!
+    },
+
+    /**
+     * One written composed sound changed as the user asks (`instruction`), as a run of the sounds work alone, as a
+     * sound composed again is. A sound that cannot be edited (no place now, or not written yet) fails the work with why.
+     */
+    async editSound(folder: string, anchor: CueAnchor, instruction: string, request: PostRequest): Promise<PostRunView> {
+      const run = begin(folder, ["sounds"])
+      try {
+        await run.run("sounds", () => deps.flair.editSound(folder, anchor, instruction, request, run.signal, run.progress("sounds")))
+      } finally {
+        run.end()
+      }
+      return stateOf(folder)!
+    },
+
+    /** One step back on a composed sound, held as a graphic's is (`steppingBack`): no run, and the screen is told nothing. */
+    undoSound: (folder: string, anchor: CueAnchor): Promise<void> => steppingBack(folder, () => deps.flair.undoSound(folder, anchor)),
 
     /** The points alone, with the same events (the planEmphasis API); a failure is thrown once the events are sent. */
     async emphasisOnly(folder: string, rules: CutRules): Promise<Counted> {

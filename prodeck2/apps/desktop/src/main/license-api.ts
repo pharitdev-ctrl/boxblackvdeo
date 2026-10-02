@@ -4,6 +4,7 @@ import type { LicenseService } from "./license.ts"
 /** Methods that do the paid-for work. Browsing projects, settings and restoring backups stay open without a license. */
 export const LICENSED_METHODS = [
   "startAnalysis",
+  "locateObjects",
   "planOutline",
   "regenerateOutline",
   "reviseOutline",
@@ -14,6 +15,10 @@ export const LICENSED_METHODS = [
   "rethinkPost",
   "redoGraphic",
   "editGraphic",
+  "redoMove",
+  "editMove",
+  "redoSound",
+  "editSound",
   "planEmphasis",
   "writeTimeline",
 ] as const satisfies readonly (keyof DesktopApi)[]

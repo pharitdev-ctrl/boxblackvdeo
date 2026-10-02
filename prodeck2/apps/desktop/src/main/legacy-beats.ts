@@ -1,4 +1,5 @@
 import type { CueAnchor, PieceAnchor } from "@boxblack/core/flair/plan"
+import { isComposed } from "@boxblack/core/sound/spec"
 import type { StoredOutline } from "../shared/api.ts"
 
 /** The beat each kind of thing plays in on the rough cut as it is now; none when its place is gone. */
@@ -8,13 +9,18 @@ export interface BeatFinders {
   zoom: (anchor: PieceAnchor) => string | undefined
 }
 
-/** A join, a moment of speech or a piece saved before they knew their beat. */
+/** A join, a moment of speech (a move's among them) or a piece saved before they knew their beat. */
 const beatless = (anchor: CueAnchor | PieceAnchor) => ("kind" in anchor ? anchor.kind === "cut" || anchor.kind === "speech" : true) && !("beatId" in anchor && anchor.beatId !== undefined)
 
-/** Whether anything in the outline was saved before it knew its beat. */
+/**
+ * Whether anything in the outline was saved before it knew its beat: a composed sound by its own moment, or by its
+ * graphic's. A stored composed entry that is no sound (`isComposed`) is passed over.
+ */
 export function hasBeatless(stored: StoredOutline): boolean {
   const flair = stored.flair
-  return [...(flair?.cues ?? []), ...(flair?.inserts ?? []), ...(flair?.zooms ?? []), ...(flair?.graphics ?? [])].some((item) => beatless(item.anchor))
+  const composed = (flair?.composed ?? []).filter(isComposed)
+  const tied = composed.flatMap((sound) => (sound.graphic ? [{ anchor: sound.graphic }] : []))
+  return [...(flair?.cues ?? []), ...(flair?.inserts ?? []), ...(flair?.zooms ?? []), ...(flair?.moves ?? []), ...(flair?.graphics ?? []), ...composed, ...tied].some((item) => beatless(item.anchor))
 }
 
 /**
@@ -37,8 +43,19 @@ export function withBeats(stored: StoredOutline, find: BeatFinders): StoredOutli
   const cues = settle(flair.cues, find.cue)
   const inserts = settle(flair.inserts, find.insert)
   const zooms = settle(flair.zooms, find.zoom)
-  // a graphic sits on a moment of speech as a cutaway does, so its beat is found the same way
+  // a graphic sits on a moment of speech as a cutaway does, so its beat is found the same way, and so does a move,
+  // on its word or on its cutaway's moment
   const graphics = settle(flair.graphics, find.insert)
+  const moves = settle(flair.moves, find.insert)
+  // and so does a composed sound, and the moment it names the graphic it scores by; an entry that is no sound is left as it is
+  const composed = flair.composed?.map((sound) => {
+    if (!isComposed(sound)) return sound
+    const [settled] = settle([sound], find.insert)!
+    return settled!.graphic ? { ...settled!, graphic: settle([{ anchor: settled!.graphic }], find.insert)![0]!.anchor } : settled!
+  })
   if (!changed) return stored
-  return { ...stored, flair: { ...flair, ...(cues ? { cues } : {}), ...(inserts ? { inserts } : {}), ...(zooms ? { zooms } : {}), ...(graphics ? { graphics } : {}) } }
+  return {
+    ...stored,
+    flair: { ...flair, ...(cues ? { cues } : {}), ...(inserts ? { inserts } : {}), ...(zooms ? { zooms } : {}), ...(moves ? { moves } : {}), ...(graphics ? { graphics } : {}), ...(composed ? { composed } : {}) },
+  }
 }

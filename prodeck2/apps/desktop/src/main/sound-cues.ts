@@ -1,11 +1,9 @@
 import type { CutPlan } from "@boxblack/core/cut"
-import type { PlacedPoint, PointFilter } from "@boxblack/core/emphasis"
+import type { PointFilter } from "@boxblack/core/emphasis"
 import type { CueSlot } from "@boxblack/core/flair/direct"
-import { enforceCues, type CueAnchor, type PlacedCue, type PlacedInsert, type SoundCue, type ZoomCue } from "@boxblack/core/flair/plan"
-import type { SoundSlot } from "@boxblack/core/flair/sound-plan"
+import { enforceCues, type CueAnchor, type PlacedCue, type SoundCue, type ZoomCue } from "@boxblack/core/flair/plan"
 import type { SoundEffect } from "@boxblack/core/flair/sounds"
 import type { FlairOptions } from "@boxblack/core/flair/catalogue"
-import type { PlacedGraphic } from "@boxblack/core/graphics/plan"
 import type { TimedGroup } from "@boxblack/core/highlights"
 import type { Place } from "./insert-media.ts"
 
@@ -39,7 +37,7 @@ export function samePlace(a: CueAnchor, b: CueAnchor): boolean {
 export type SlotOf = { at: CueAnchor; pointId?: string }
 
 /**
- * Where a zoom had a sound slot of its own (soundSlotsFor): a punch's piece start. A punch that lands on a line
+ * Where a zoom had a sound slot of its own when Claude picked CapCut sounds: a punch's piece start. A punch that lands on a line
  * of text shares that line's moment, where the line's slot takes it and keeps its sound; a drift has no slot.
  */
 export const punchMoment = (zoom: ZoomCue): SlotOf | null =>
@@ -150,86 +148,6 @@ export function slotsFor(input: {
     if (!byTime.has(entry.slot.atUs)) byTime.set(entry.slot.atUs, entry)
   }
   return [...byTime.values()].map((entry) => entry.slot).sort((a, b) => a.atUs - b.atUs)
-}
-
-/**
- * The places Claude is offered a sound at (spec §5.6): the start of every highlight line, graphic and
- * cutaway that plays, the moment each punch lands, and every placed point nothing else sits on — each
- * with its point's importance and type. Beat edges and joins are not offered (slotsFor still lists them
- * for the user's own picks). Two places at the same moment are one slot, and the one that says most
- * about the moment wins: a highlight line, then a graphic, a cutaway, a punch, and a bare point last.
- * An item on a point that is not in `points` (its words cut for now, or the point gone) plays at no
- * level, so it is no place for a sound; an item made for no point is offered with no point.
- */
-export function soundSlotsFor(input: {
-  plan: CutPlan
-  /** the text that plays, each group with the point it was made for */
-  groups: TimedGroup[]
-  points: PlacedPoint[]
-  zooms: { atUs: number; anchor: CueAnchor; pointId?: string }[]
-  inserts: PlacedInsert[]
-  graphics: PlacedGraphic[]
-  beatNames: Map<string, string>
-  /** where a source time of a kept piece plays on the rough cut */
-  at: (cut: number, sourceUs: number) => number
-}): SoundSlot[] {
-  const byId = new Map(input.points.map((placed) => [placed.point.id, placed.point]))
-  // an item on a point that is not placed here is hidden at every level: a sound on it would never play with it
-  const unplaced = (pointId: string | undefined): boolean => pointId !== undefined && !byId.has(pointId)
-  // the point an item was made for; an item made for none names none
-  const of = (pointId: string | undefined): Pick<SoundSlot, "pointId" | "importance" | "type"> => {
-    const point = pointId === undefined ? undefined : byId.get(pointId)
-    return point ? { pointId: point.id, importance: point.importance, type: point.type } : { pointId: null, importance: null, type: null }
-  }
-  // which beat plays at a moment of the rough cut, for the items whose anchor may name none
-  const beatOfCut = input.plan.beats.flatMap((beat) => beat.pieces.map(() => beat.beatId))
-  const beatAt = (atUs: number): string => {
-    const index = input.plan.cuts.findIndex((cut, i) => {
-      const start = input.at(i, cut.sourceStartUs)
-      return atUs >= start && atUs < start + cut.sourceDurationUs
-    })
-    return beatOfCut[index] ?? beatOfCut.at(-1) ?? ""
-  }
-
-  // found in the order that says most about a moment, so the first at a time is the one kept
-  const found: SoundSlot[] = []
-  for (const group of input.groups) {
-    if (unplaced(group.pointId)) continue
-    group.lines.forEach((line, index) => {
-      found.push({ anchor: { kind: "highlight", groupId: group.groupId, line: line.lineIndex }, atUs: line.startUs, what: `ข้อความเด่น "${line.text}" บรรทัด ${index + 1}`, beatId: group.beatId, ...of(group.pointId) })
-    })
-  }
-  for (const graphic of input.graphics) {
-    if (unplaced(graphic.cue.pointId)) continue
-    // a graphic is named by its idea, so the sound can suit what comes up
-    found.push({ anchor: graphic.cue.anchor, atUs: graphic.atUs, what: `กราฟิกขึ้น: ${graphic.cue.spec.idea}`, beatId: beatAt(graphic.atUs), ...of(graphic.cue.pointId) })
-  }
-  for (const insert of input.inserts) {
-    if (unplaced(insert.cue.pointId)) continue
-    const what = `ภาพตัดไป${insert.media.kind === "video" ? "คลิป" : "รูป"} ${insert.media.name}`
-    found.push({ anchor: insert.cue.anchor, atUs: insert.atUs, what, beatId: beatAt(insert.atUs), ...of(insert.cue.pointId) })
-  }
-  for (const zoom of input.zooms) {
-    if (unplaced(zoom.pointId)) continue
-    found.push({ anchor: zoom.anchor, atUs: zoom.atUs, what: "ภาพซูมกระแทก", beatId: beatAt(zoom.atUs), ...of(zoom.pointId) })
-  }
-  // a point that carries nothing yet is a place of its own
-  const carried = new Set(found.flatMap((slot) => (slot.pointId === null ? [] : [slot.pointId])))
-  for (const placed of input.points) {
-    if (carried.has(placed.point.id)) continue
-    const name = input.beatNames.get(placed.beatId) ?? placed.beatId
-    found.push({
-      anchor: { kind: "speech", videoId: placed.videoId, sourceUs: placed.sourceUs, beatId: placed.beatId },
-      atUs: placed.atUs,
-      what: `จุดเน้นในช่วง "${name}"${placed.point.reason ? ` — ${placed.point.reason}` : ""}`,
-      beatId: placed.beatId,
-      ...of(placed.point.id),
-    })
-  }
-
-  const byTime = new Map<number, SoundSlot>()
-  for (const slot of found) if (!byTime.has(slot.atUs)) byTime.set(slot.atUs, slot)
-  return [...byTime.values()].sort((a, b) => a.atUs - b.atUs)
 }
 
 /**

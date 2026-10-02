@@ -143,9 +143,20 @@ export function withoutOverlaps(groups: HighlightGroup[], kept: HighlightGroup[]
 /**
  * Where a group goes: the position the user pinned, or the band every scene it plays over wants
  * kept clear. A video with no pictures analysed has no band, so the text falls back to the top.
+ * `faceBand`, where given, says where the faces and shown things are while the group plays once the
+ * picture has moved (spec §6), and that band is kept clear instead; where it knows of none (null), the
+ * scenes' bands are, as before.
  */
-export function placementOf(group: PlacedGroup, clips: CutClip[], position: HighlightPosition, keepSubtitleRoom: boolean): HighlightPlacement {
+export function placementOf(
+  group: PlacedGroup,
+  clips: CutClip[],
+  position: HighlightPosition,
+  keepSubtitleRoom: boolean,
+  faceBand?: (group: PlacedGroup) => { fromY: number; toY: number } | null,
+): HighlightPlacement {
   if (position !== "auto") return { kind: "fixed", position }
+  const zoomed = faceBand?.(group) ?? null
+  if (zoomed) return { kind: "auto", keepClear: zoomed, keepSubtitleRoom }
   const scenes = clips.find((clip) => clip.id === group.videoId)?.insight?.scenes ?? []
   const from = group.lines[0]!.sourceUs
   const to = group.end.sourceUs

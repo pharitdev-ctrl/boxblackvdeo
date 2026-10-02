@@ -1,4 +1,5 @@
 import type { MediaFit, SubjectBox } from "../flair/look-at.ts"
+import type { Pose } from "../flair/moves.ts"
 import { cardFraming, coverFraming } from "./framing.ts"
 import { addOverlayTracks } from "./overlays.ts"
 import { usToFrame } from "./time.ts"
@@ -23,6 +24,8 @@ export interface TimelineInsert {
   subject?: SubjectBox | null
   /** the band of the video underneath that must stay clear, for a card to dodge */
   keepClear?: { fromY: number; toY: number } | null
+  /** how the picture moves on top of its framing, from the cutaway's first frame */
+  poses?: Pose[]
 }
 
 export { coverScale } from "./framing.ts"
@@ -61,6 +64,7 @@ export function addInsertTrack(info: DraftInfo, inserts: TimelineInsert[]): Writ
     // a photo is written as a photo, a clip as a video
     type: insert.kind,
     place: insert.fit === "card" ? cardFraming(insert, canvas, insert.keepClear ?? null) : coverFraming(insert, canvas, insert.subject ?? null),
+    poses: insert.poses,
   }))
   return { info: addOverlayTracks(info, pieces, RENDER_INDEX_BASE), kept: kept.length, dropped: inserts.length - kept.length }
 }

@@ -23,7 +23,7 @@ const DRIFT_SCALE = 1.08
 const PUNCH_US = 350_000
 
 /** One point of a keyframed property, as CapCut 9.4 writes it (0815). */
-const point = (timeOffset: number, value: number) => ({
+export const point = (timeOffset: number, value: number) => ({
   id: newId(),
   curveType: "Line",
   time_offset: timeOffset,
@@ -34,7 +34,7 @@ const point = (timeOffset: number, value: number) => ({
   graphID: "",
 })
 
-const track = (propertyType: string, points: ReturnType<typeof point>[]) => ({
+export const track = (propertyType: string, points: ReturnType<typeof point>[]) => ({
   id: newId(),
   material_id: "",
   property_type: propertyType,
@@ -65,7 +65,7 @@ function framesOf(zoom: TimelineZoom): { at: number; scale: number }[] {
  * into a piece whose file starts at 1.8 s landed 1.35 s into it, and pieces starting later in their file stayed
  * zoomed throughout). A piece played faster goes through its file faster.
  */
-function sourceTime(segment: Segment, atUs: number): number {
+export function sourceTime(segment: Segment, atUs: number): number {
   const speed = typeof segment.speed === "number" && segment.speed > 0 ? segment.speed : 1
   return (segment.source_timerange?.start ?? 0) + Math.round(atUs * speed)
 }

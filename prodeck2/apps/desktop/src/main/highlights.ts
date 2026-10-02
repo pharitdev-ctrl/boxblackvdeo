@@ -12,6 +12,7 @@ import {
   beatsKey,
   currentGroups,
   heldExits,
+  everyPointShown,
   isLandscape,
   looksInForce,
   missingPictures,
@@ -30,14 +31,17 @@ import {
   type ShowRules,
 } from "./highlight-state.ts"
 import { emphasisView, offGoneLines } from "./emphasis.ts"
-import type { PlacedPoint, PointFilter } from "@boxblack/core/emphasis"
+import { pointFilter, type PlacedPoint, type PointFilter } from "@boxblack/core/emphasis"
 import { cuesInForce, samePlace, slotFinder, slotsFor } from "./sound-cues.ts"
 import { pieceFinder, pieceKey, zoomSlotsFor, zoomsInForce } from "./zoom-cues.ts"
+import { legacyZoomsBeside, moveViews, movesOnCut, type PlacedMove } from "./move-cues.ts"
 import { hasBeatless, withBeats, type BeatFinders } from "./legacy-beats.ts"
 import { insertsInForce, itemPlaceOf, placeOf, type SpareMedia } from "./insert-media.ts"
-import { graphicJob, graphicsInForce, graphicViews, isReplaced, keepClearsIn, replacedPoints, sentenceOf, textBands, textBandsIn, wordsSaidFrom } from "./graphics-cues.ts"
+import { graphicJob, graphicsInForce, graphicViews, isReplaced, keepClearsIn, ownBandsIn, ownGroupsCovered, replacedPoints, sentenceOf, textBands, textBandsIn, textGroupsIn, wordsSaidFrom, zoomedFaces, type GroupBand } from "./graphics-cues.ts"
+import { composedInForce, composedViews, soundJobOf, wordsOnCut, wordsWithin, type PlacedComposed, type SoundStatus } from "./composed-cues.ts"
+import { hashOf as soundHashOf, type SoundRenderer } from "./sound-render.ts"
 import type { GraphicsRenderer, RenderJob } from "./graphics-render.ts"
-import { spokenSentences, wordsIn } from "./spoken.ts"
+import { spokenSentences, wordsIn, type SpokenSentence } from "./spoken.ts"
 import type { MediaLook } from "@boxblack/core/flair/look-at"
 import type { BinMedia } from "@boxblack/core/flair/media"
 import type { SoundLibrary } from "./sound-library.ts"
@@ -45,7 +49,7 @@ import { exitsFor, type FlairOptions } from "@boxblack/core/flair/catalogue"
 import type { SoundEffect } from "@boxblack/core/flair/sounds"
 import { soundNeedsPro, usableSounds } from "@boxblack/core/flair/sound-catalogue"
 import type { SoundCue } from "@boxblack/core/flair/plan"
-import type { GraphicCue, MotionSpec, PlacedGraphic } from "@boxblack/core/graphics/plan"
+import { isFree, type GraphicCue, type MotionSpec, type PlacedGraphic } from "@boxblack/core/graphics/plan"
 import type { OutlineStore } from "./planner.ts"
 import type { TimelineService } from "./timeline.ts"
 
@@ -67,6 +71,10 @@ export interface HighlightDeps {
   graphicsReady?: () => Promise<boolean>
   /** the highlight style in force, custom palette included, for the graphics' colours */
   styleOf?: (stored: StoredOutline) => Promise<HighlightStyle>
+  /** what the sound renderer has made of a composed sound's file; without it every sound waits */
+  soundStatus?: SoundStatus
+  /** the sound renderer, which the preview asks in the background for the files of the sounds that wait for one, and what it found wrong with the machine */
+  soundRenderer?: Pick<SoundRenderer, "ensure" | "environmentProblem">
   newId?: () => string
 }
 
@@ -152,6 +160,32 @@ export function createHighlightService(deps: HighlightDeps) {
     return stored
   }
 
+  /** the files of composed sounds the preview asked for and whose render is not over yet, by their job's hash */
+  const soundsRendering = new Set<string>()
+
+  /**
+   * Starts, in the background, the renders of the composed sounds that play as they were composed (written, fresh,
+   * switched on) and wait for their file, as the graphics' preview starts theirs: a sound made or failed already is
+   * not asked for, nor is one this service asked for whose render is not over, so a preview shown again asks
+   * nothing twice. Nothing is asked without a renderer, or without a status to tell what waits.
+   */
+  function startSounds(kept: PlacedComposed[]): void {
+    const renderer = deps.soundRenderer
+    const status = deps.soundStatus
+    if (!renderer || !status) return
+    const jobs = kept
+      .filter((placed) => placed.sound.code !== null && placed.stale === null && status(placed).state === "pending")
+      .map(soundJobOf)
+      .filter((job) => !soundsRendering.has(soundHashOf(job)))
+    if (jobs.length === 0) return
+    const hashes = jobs.map(soundHashOf)
+    for (const hash of hashes) soundsRendering.add(hash)
+    // the renderer's ensure never rejects; the preview does not wait for it
+    void renderer.ensure(jobs).finally(() => {
+      for (const hash of hashes) soundsRendering.delete(hash)
+    })
+  }
+
   async function view(
     stored: StoredOutline,
     plan: CutPlan,
@@ -173,24 +207,34 @@ export function createHighlightService(deps: HighlightDeps) {
     const show = showRulesOver(points, options)
     const placed = placeStored(stored, plan, clips, show)
     const timed = timeHighlights(placed, timelineOf(plan), plan.durationUs)
+    // the moves of the picture, placed once, with the cutaways in force they may move: a legacy zoom on a piece a move
+    // plays on gives way to it. With the zooms off, or no frame to move in, none plays
+    const moved = movesAt(stored, plan, clips, canvas, options.flair, show, points, pictures)
     const sources = new Map((highlights?.groups ?? []).map((group) => [group.id, group.source]))
     const byId = new Map(placed.map((group) => [group.groupId, group]))
     // the graphics, worked out once, against the text of every group shown and before the groups are listed: the
     // groups of a point whose graphic plays are replaced. With graphics off, or no frame to draw on, none plays
-    const inForce = options.flair.graphic && canvas ? graphicsOn(stored, plan, clips, canvas, options, show, points) : null
+    const inForce = options.flair.graphic && canvas ? graphicsOn(stored, plan, clips, canvas, options, show, points, { drawn: moved?.kept ?? [], loudest: loudestMoves(stored, plan, clips, canvas, options.flair, show, points, pictures) }) : null
     const replaced = replacedPoints(inForce ?? { kept: [] })
+    // the composed sounds, against the graphics as they play here: a sound tied to a graphic goes where it goes. They are
+    // placed by the groups timed above and the sentences said, worked out once here
+    const sentences = spokenSentences({ plan, wordsOf: wordsIn(clips), beatNames: new Map(stored.outline.beats.map((beat) => [beat.id, beat.name])), at: timelineOf(plan) })
+    const composed = composedOn(stored, plan, options, show, points, inForce, { timed, sentences })
+    startSounds(composed.kept)
     // the custom style draws in bold-white's font, so its palette is beside the point here
     const font = styleFor(styleInForce(highlights), DEFAULT_HIGHLIGHT_OPTIONS.custom).font
     const frame = canvas ?? { width: 1080, height: 1920 }
     const looks = looksInForce(stored, shownLines(timed), options.flair, canvas, pro)
     // the exits the groups shown keep stored but that are not written without Pro
     const held = heldExits(stored, timed.map((group) => group.groupId), options.flair, pro)
+    // the text keeps off the faces where the moves put them while it is on screen
+    const faceBand = canvas ? zoomedFaces({ moves: moved?.kept ?? [], plan, clips, canvas, at: timelineOf(plan) }).bandIn : undefined
     const dodgeOf = (group: TimedGroup) =>
       layoutGroup(
         group.lines.map((line) => line.text.trim()),
         font,
         frame,
-        placementOf(byId.get(group.groupId)!, clips, options.position, options.subtitlesOn),
+        placementOf(byId.get(group.groupId)!, clips, options.position, options.subtitlesOn, faceBand && (() => faceBand({ startUs: group.startUs, endUs: group.endUs }))),
         looks[group.groupId]?.pattern,
       ).dodge
     // the sounds, worked out once: what they hold back for want of Pro is counted below with the exits
@@ -220,7 +264,13 @@ export function createHighlightService(deps: HighlightDeps) {
       needsPictures: options.position === "auto" && missingPictures(clips),
       landscape: isLandscape(canvas),
       ...sounded,
-      ...zoomView(stored, plan, timed, clips, options.flair, show.passes),
+      // a composed sound with no place is counted with the CapCut sounds that have none
+      unusedSounds: { ...sounded.unusedSounds, unplaced: sounded.unusedSounds.unplaced + composed.unplaced },
+      composed: composedViews(composed, deps.soundStatus),
+      // what a render found wrong with the machine holds every sound back, and says nothing while the sounds are off
+      soundsProblem: options.flair.sound ? (deps.soundRenderer?.environmentProblem() ?? null) : null,
+      ...zoomView(stored, plan, timed, clips, options.flair, show.passes, moved),
+      moves: moved ? moveViews(moved) : [],
       ...insertView(stored, plan, timed, clips, pictures, said, options.flair, show.passes, points),
       ...(await graphicView(stored, canvas, fps, inForce, folder)),
       maxChars: maxHighlightChars(frame),
@@ -231,8 +281,8 @@ export function createHighlightService(deps: HighlightDeps) {
     }
     return {
       ...preview,
-      // what plays on each point, as the lists above show it: a switched-off graphic plays nothing. A replaced group
-      // still counts as its point's text: the point has it, so the emphasis tab offers to make no second one
+      // what plays on each point, as the lists above show it: a switched-off graphic or composed sound plays nothing. A
+      // replaced group still counts as its point's text: the point has it, so the emphasis tab offers to make no second one
       emphasis: emphasisView({
         stored,
         plan,
@@ -243,7 +293,7 @@ export function createHighlightService(deps: HighlightDeps) {
           zoom: preview.zooms.map((zoom) => zoom.pointId),
           insert: preview.inserts.map((insert) => insert.pointId),
           graphic: preview.graphics.filter((graphic) => !graphic.off).map((graphic) => graphic.pointId),
-          sound: preview.cues.map((cue) => cue.pointId),
+          sound: [...preview.cues.map((cue) => cue.pointId), ...preview.composed.filter((sound) => !sound.off).map((sound) => sound.pointId)],
         },
       }),
     }
@@ -263,9 +313,23 @@ export function createHighlightService(deps: HighlightDeps) {
    * group the rules show; the graphics are placed against those groups' text, each less its own point's;
    * and only then are the points whose graphic plays read from the graphics kept (`replacedPoints`), and
    * their groups not drawn. So a graphic also keeps off another point's text that turns out replaced.
+   * A free graphic is not moved but judged where it was planned, against the same text and the things the picture
+   * keeps (`keepBoxesIn`), and plays from its own level whenever its point is on the cut at all. Whether it covers its
+   * own point's text is judged with every point shown (`everyPointShown`), as it was planned, whatever the level. That
+   * text is laid out only when a stored graphic is free, and at the loudest level it is the text already laid out.
+   * `coveredText` is the text of the groups of a placed graphic's own point that its box covers while it plays, their
+   * lines joined by spaces, which a free graphic's writing is told of; undefined when it covers none.
+   *
+   * `moves` are the moves of the picture kept (`movesOnCut`): `drawn` those under these options, which the text drawn
+   * here keeps off (`zoomedFaces`), and `loudest` those at the loudest level with every point shown, as graphics are
+   * planned on them, which the text with every point shown keeps off and a free graphic keeps off the faces and things
+   * shown of, so the level never changes a free graphic's room. A legacy graphic keeps off the scenes' plain bands, as
+   * it always has.
    */
-  function graphicsOn(stored: StoredOutline, plan: CutPlan, clips: CutClip[], canvas: Canvas, options: HighlightViewOptions, show: ShowRules, points: PlacedPoint[]) {
+  function graphicsOn(stored: StoredOutline, plan: CutPlan, clips: CutClip[], canvas: Canvas, options: HighlightViewOptions, show: ShowRules, points: PlacedPoint[], moves: { drawn: PlacedMove[]; loudest: PlacedMove[] }) {
     const at = timelineOf(plan)
+    const faces = zoomedFaces({ moves: moves.drawn, plan, clips, canvas, at })
+    const loudFaces = zoomedFaces({ moves: moves.loudest, plan, clips, canvas, at })
     const placed = placeStored(stored, plan, clips, show)
     const timed = timeHighlights(placed, at, plan.durationUs)
     const beatNames = new Map(stored.outline.beats.map((beat) => [beat.id, beat.name]))
@@ -274,7 +338,19 @@ export function createHighlightService(deps: HighlightDeps) {
     // the custom style draws in bold-white's font, so its palette is beside the point here
     const font = styleFor(styleInForce(stored.highlights), DEFAULT_HIGHLIGHT_OPTIONS.custom).font
     const looks = looksInForce(stored, shownLines(timed), options.flair, canvas)
-    const bands = textBands({ placed, timed, clips, canvas, font, looks, position: options.position, subtitlesOn: options.subtitlesOn })
+    const bands = textBands({ placed, timed, clips, canvas, font, looks, position: options.position, subtitlesOn: options.subtitlesOn, faceBand: faces.bandIn })
+    // the text as it plays with every point shown, as graphics are planned on it: what a free graphic's covering of its
+    // own point's text is judged by, so the level, which may hide that text, never changes it. Laid out once, and only
+    // when asked: a legacy graphic never asks. It keeps off the faces where the moves at the loudest level put them
+    let every: { timed: TimedGroup[]; bands: GroupBand[] } | null = null
+    const everyShown = (): { timed: TimedGroup[]; bands: GroupBand[] } => {
+      if (every) return every
+      const everyPlaced = placeStored(stored, plan, clips, everyPointShown(points, show.text))
+      const everyTimed = timeHighlights(everyPlaced, at, plan.durationUs)
+      const everyLooks = looksInForce(stored, shownLines(everyTimed), options.flair, canvas)
+      every = { timed: everyTimed, bands: textBands({ placed: everyPlaced, timed: everyTimed, clips, canvas, font, looks: everyLooks, position: options.position, subtitlesOn: options.subtitlesOn, faceBand: loudFaces.bandIn }) }
+      return every
+    }
     const { kept, off } = graphicsInForce({
       graphics: stored.flair?.graphics ?? [],
       place,
@@ -284,11 +360,61 @@ export function createHighlightService(deps: HighlightDeps) {
       pieceEndOf: (anchor) => sentenceOf(sentences, anchor)?.pieceEndUs ?? null,
       keepClearIn: (span) => keepClearsIn(plan, clips, span),
       textIn: (span, pointId) => textBandsIn(bands, span, pointId),
+      // a free graphic is judged against the same text, where it is drawn, and the boxes of the things to keep in the picture
+      room: {
+        textIn: (span) => textGroupsIn(bands, span),
+        ownTextIn: (span, pointId) => ownBandsIn(everyShown().bands, span, pointId),
+        keepIn: loudFaces.keepIn,
+      },
+      // a free graphic's point need only be on the cut: it plays by a level of its own
+      pointPlaced: pointFilter(points, "heavy"),
       wordsFrom: wordsSaidFrom({ sentences, clips }),
       // the room highlights/layout.ts keeps highlight text above while subtitles are on
       captionsFromY: options.subtitlesOn ? SUBTITLE_ROOM_FROM_Y : null,
     })
-    return { kept, off, place }
+    const coveredText = (graphic: PlacedGraphic): string | undefined => {
+      if (graphic.cue.pointId === undefined) return undefined
+      const shown = everyShown()
+      const span = { startUs: graphic.atUs, endUs: graphic.atUs + graphic.durationUs }
+      const covered = new Set(ownGroupsCovered(shown.bands, span, graphic.cue.pointId, graphic.cue.spec.box).map((entry) => entry.groupId))
+      const lines = shown.timed.filter((group) => covered.has(group.groupId)).flatMap((group) => group.lines.map((line) => line.text.trim()))
+      return lines.length > 0 ? lines.join(" ") : undefined
+    }
+    return { kept, off, place, coveredText }
+  }
+
+  /**
+   * The composed sounds on this rough cut (composedInForce), each on a moment of speech placed with its point as a
+   * graphic is (itemPlaceOf over `points`), lasting by the sentence there and hearing the words said on the rough cut
+   * now; one tied to a graphic goes with it as `graphics` placed it, null while graphics are not shown (switched off,
+   * or no frame to draw on), when it is left out. With the sounds off there are none. `said` are the groups timed under
+   * `show` and the sentences the rough cut plays, which the caller has worked out. The preview, and whoever writes or
+   * composes them, take them from here.
+   */
+  function composedOn(
+    stored: StoredOutline,
+    plan: CutPlan,
+    options: HighlightViewOptions,
+    show: ShowRules,
+    points: PlacedPoint[],
+    graphics: { kept: PlacedGraphic[]; off: PlacedGraphic[] } | null,
+    said: { timed: TimedGroup[]; sentences: SpokenSentence[] },
+  ): { kept: PlacedComposed[]; off: PlacedComposed[]; unplaced: number } {
+    if (!options.flair.sound) return { kept: [], off: [], unplaced: 0 }
+    const at = timelineOf(plan)
+    const beatNames = new Map(stored.outline.beats.map((beat) => [beat.id, beat.name]))
+    const { timed, sentences } = said
+    const words = wordsOnCut(sentences)
+    return composedInForce({
+      sounds: stored.flair?.composed ?? [],
+      place: itemPlaceOf(placeOf({ slots: slotsFor({ plan, groups: timed, beatNames, at }), sentences, plan, at }), points),
+      graphics,
+      flair: options.flair,
+      durationUs: plan.durationUs,
+      passes: show.passes,
+      pieceEndOf: (anchor) => sentenceOf(sentences, anchor)?.pieceEndUs ?? null,
+      wordsAt: (atUs, seconds) => wordsWithin(words, atUs, seconds),
+    })
   }
 
   /**
@@ -301,6 +427,28 @@ export function createHighlightService(deps: HighlightDeps) {
     if (!deps.styleOf) throw new Error("the graphics cannot be drawn: there is no highlight style to draw them in")
     const style = await deps.styleOf(stored)
     return kept.map((graphic) => graphicJob(graphic, { canvas, fps, style }))
+  }
+
+  /**
+   * The moves of the picture under `flair`, placed as the preview places them (`movesOnCut`, over the groups timed
+   * under `show` and the project's spare pictures `pictures`): null with the zooms off, or no frame to move in.
+   */
+  function movesAt(stored: StoredOutline, plan: CutPlan, clips: CutClip[], canvas: Canvas | null, flair: FlairOptions, show: ShowRules, points: PlacedPoint[], pictures: BinMedia[]) {
+    if (!flair.zoom || !canvas) return null
+    const at = timelineOf(plan)
+    const groups = timeHighlights(placeStored(stored, plan, clips, show), at, plan.durationUs)
+    return movesOnCut({ stored, plan, clips, canvas, flair, points, groups, pictures, passes: show.passes, at })
+  }
+
+  /** The moves kept at the loudest level with every point shown (the text on or off as `show` has it), as graphics are planned on them. */
+  const loudestMoves = (stored: StoredOutline, plan: CutPlan, clips: CutClip[], canvas: Canvas | null, flair: FlairOptions, show: ShowRules, points: PlacedPoint[], pictures: BinMedia[]): PlacedMove[] =>
+    movesAt(stored, plan, clips, canvas, { ...flair, level: "heavy" }, everyPointShown(points, show.text), points, pictures)?.kept ?? []
+
+  /** The moves `graphicsOn` is handed under these options: those drawn at their level, and those at the loudest. */
+  async function movesUnder(stored: StoredOutline, plan: CutPlan, clips: CutClip[], canvas: Canvas | null, options: HighlightViewOptions, show: ShowRules, points: PlacedPoint[], folder: string): Promise<{ drawn: PlacedMove[]; loudest: PlacedMove[] }> {
+    if (!options.flair.zoom || !canvas) return { drawn: [], loudest: [] }
+    const pictures = await spare(stored, options.flair, folder)
+    return { drawn: movesAt(stored, plan, clips, canvas, options.flair, show, points, pictures)?.kept ?? [], loudest: loudestMoves(stored, plan, clips, canvas, options.flair, show, points, pictures) }
   }
 
   /**
@@ -347,14 +495,28 @@ export function createHighlightService(deps: HighlightDeps) {
    * The graphics in force under these rules and options, with their render jobs; the plan starts them, the write waits
    * for them. `jobs[i]` is the job of `kept[i]`, or null when it has none (a graphic not written yet, or stale):
    * whoever hands the jobs to the renderer leaves the nulls out. `off` are the switched-off ones still on the cut,
-   * placed as the list shows them, which have no job: one of them may still be written again.
+   * placed as the list shows them, which have no job: one of them may still be written again. A free graphic tied to a
+   * point, kept or off, carries the text of that point's groups its box covers while it plays, with every point
+   * shown (`coveredText`), as `pointText`, which its writing is
+   * told of when it takes that text's place.
    */
-  async function graphicJobs(folder: string, rules: CutRules, options: HighlightViewOptions): Promise<{ kept: PlacedGraphic[]; off: PlacedGraphic[]; jobs: (RenderJob | null)[] }> {
+  async function graphicJobs(
+    folder: string,
+    rules: CutRules,
+    options: HighlightViewOptions,
+  ): Promise<{ kept: (PlacedGraphic & { pointText?: string })[]; off: (PlacedGraphic & { pointText?: string })[]; jobs: (RenderJob | null)[] }> {
     const { stored, plan, clips, canvas, fps } = await deps.timeline.compiled(folder, rules)
     if (!canvas) return { kept: [], off: [], jobs: [] }
     const points = placedPoints(stored, plan, clips)
-    const { kept, off } = graphicsOn(stored, plan, clips, canvas, options, showRulesOver(points, options), points)
-    return { kept, off, jobs: await jobsOf(stored, kept, canvas, fps) }
+    const show = showRulesOver(points, options)
+    const moves = await movesUnder(stored, plan, clips, canvas, options, show, points, folder)
+    const { kept, off, coveredText } = graphicsOn(stored, plan, clips, canvas, options, show, points, moves)
+    // a free graphic tied to a point carries that point's text, which its writing is told of
+    const withText = (graphic: PlacedGraphic): PlacedGraphic & { pointText?: string } => {
+      const text = isFree(graphic.cue) ? coveredText(graphic) : undefined
+      return text === undefined ? graphic : { ...graphic, pointText: text }
+    }
+    return { kept: kept.map(withText), off: off.map(withText), jobs: await jobsOf(stored, kept, canvas, fps) }
   }
 
   /**
@@ -363,7 +525,7 @@ export function createHighlightService(deps: HighlightDeps) {
    * needs it neither plays nor is offered, and is counted apart; it stays stored.
    */
   function soundView(stored: StoredOutline, plan: CutPlan, timed: TimedGroup[], clips: CutClip[], sounds: SoundEffect[], flair: FlairOptions, current: HighlightGroup[], show: ShowRules, points: PlacedPoint[], pro: boolean) {
-    if (!flair.sound) return { cues: [], slots: [], sounds: [], unusedSounds: { unplaced: 0, missing: 0, lost: 0, pro: 0 } }
+    if (!flair.sound) return { cues: [], ownSounds: [], slots: [], sounds: [], unusedSounds: { unplaced: 0, missing: 0, lost: 0, pro: 0 } }
     const at = timelineOf(plan)
     const beatNames = new Map(stored.outline.beats.map((beat) => [beat.id, beat.name]))
     const slots = slotsFor({ plan, groups: timed, beatNames, at })
@@ -390,19 +552,22 @@ export function createHighlightService(deps: HighlightDeps) {
     })
     const lost = cues.filter(lostCue).length
     const slotOf = slotFinder(slots)
+    // each cue is shown on the place it plays at, so the screen finds it there even when the cut moved its join
+    const views = kept.map((placed) => ({
+      // a moment of speech (a point's start, a graphic's) has no slot: it is shown by its own anchor
+      anchor: slotOf(placed.cue.anchor)?.anchor ?? placed.cue.anchor,
+      atUs: placed.atUs,
+      what: place(placed.cue.anchor, placed.cue.pointId)!.what,
+      beatId: place(placed.cue.anchor, placed.cue.pointId)!.beatId,
+      effectId: placed.cue.effectId,
+      soundName: placed.sound.use ?? placed.sound.name,
+      edited: placed.cue.edited,
+      ...(placed.cue.pointId !== undefined ? { pointId: placed.cue.pointId } : {}),
+    }))
     return {
-      // each cue is shown on the place it plays at, so the screen finds it there even when the cut moved its join
-      cues: kept.map((placed) => ({
-        // a moment of speech (a point's start, a graphic's) has no slot: it is shown by its own anchor
-        anchor: slotOf(placed.cue.anchor)?.anchor ?? placed.cue.anchor,
-        atUs: placed.atUs,
-        what: place(placed.cue.anchor, placed.cue.pointId)!.what,
-        beatId: place(placed.cue.anchor, placed.cue.pointId)!.beatId,
-        effectId: placed.cue.effectId,
-        soundName: placed.sound.use ?? placed.sound.name,
-        edited: placed.cue.edited,
-        ...(placed.cue.pointId !== undefined ? { pointId: placed.cue.pointId } : {}),
-      })),
+      cues: views,
+      // the ones the user chose by hand, which can only be taken off now; Claude's still play until a sound plan replaces them
+      ownSounds: views.filter((cue) => cue.edited).map((cue) => ({ anchor: cue.anchor, atUs: cue.atUs, name: cue.soundName })),
       slots: slots.map((slot) => ({ anchor: slot.anchor, atUs: slot.atUs, what: slot.what, beatId: slot.beatId })),
       // what a sound is for reads better than CapCut's catalogue titles, which are often Japanese or Chinese
       sounds: usableSounds(sounds, pro).map((sound) => ({ effectId: sound.effectId, name: sound.use ?? sound.name })),
@@ -441,11 +606,16 @@ export function createHighlightService(deps: HighlightDeps) {
     }
   }
 
-  /** The zooms that will play, every piece one could go on, and how many stored zooms lost their piece. */
-  function zoomView(stored: StoredOutline, plan: CutPlan, timed: TimedGroup[], clips: CutClip[], flair: FlairOptions, passes: PointFilter) {
+  /**
+   * The legacy zooms that will play, every piece one could go on, and how many stored zooms lost their piece. One on a
+   * piece one of the moves kept (`moves`) plays on is left out: the move replaces it there (`legacyZoomsBeside`).
+   */
+  /** `moved` are the moves of the picture in force: a legacy zoom on a piece one plays on gives way to it, and the moves with no place are counted with the zooms whose piece is gone. */
+  function zoomView(stored: StoredOutline, plan: CutPlan, timed: TimedGroup[], clips: CutClip[], flair: FlairOptions, passes: PointFilter, moved: { kept: PlacedMove[]; lost: number } | null) {
     if (!flair.zoom) return { zooms: [], pieces: [], zoomsLost: 0 }
     const slots = zoomSlotsFor({ plan, groups: timed, beatNames: new Map(stored.outline.beats.map((beat) => [beat.id, beat.name])), at: timelineOf(plan) })
-    const { kept, lost } = zoomsInForce({ zooms: stored.flair?.zooms ?? [], slots, flair, durationUs: plan.durationUs, passes })
+    const { kept: placed, lost } = zoomsInForce({ zooms: stored.flair?.zooms ?? [], slots, flair, durationUs: plan.durationUs, passes })
+    const kept = legacyZoomsBeside(placed, moved?.kept ?? [], slots).inForce
     const byAnchor = new Map(slots.map((slot) => [pieceKey(slot.anchor), slot]))
     return {
       zooms: kept.map((placed) => ({
@@ -459,7 +629,7 @@ export function createHighlightService(deps: HighlightDeps) {
         ...(placed.cue.pointId !== undefined ? { pointId: placed.cue.pointId } : {}),
       })),
       pieces: slots.map((slot) => ({ anchor: slot.anchor, atUs: slot.atUs, durationUs: slot.durationUs, what: slot.what, beatId: slot.beatId })),
-      zoomsLost: lost,
+      zoomsLost: lost + (moved?.lost ?? 0),
     }
   }
 
@@ -520,6 +690,23 @@ export function createHighlightService(deps: HighlightDeps) {
     },
 
     graphicJobs,
+
+    /**
+     * The composed sounds under these rules and options, as the preview places them: those that play, the switched-off
+     * ones, and how many have no place, with the graphics they score placed as `graphicJobs` places them. Whoever writes
+     * them, or composes them for the room they have, takes them from here; planning asks at the loudest level, where
+     * every sound and every point shows, as the graphics' planning does.
+     */
+    async composedSounds(folder: string, rules: CutRules, options: HighlightViewOptions): Promise<{ kept: PlacedComposed[]; off: PlacedComposed[]; unplaced: number }> {
+      const { stored, plan, clips, canvas } = await deps.timeline.compiled(folder, rules)
+      const points = placedPoints(stored, plan, clips)
+      const show = showRulesOver(points, options)
+      const graphics = options.flair.graphic && canvas ? graphicsOn(stored, plan, clips, canvas, options, show, points, await movesUnder(stored, plan, clips, canvas, options, show, points, folder)) : null
+      const at = timelineOf(plan)
+      const timed = timeHighlights(placeStored(stored, plan, clips, show), at, plan.durationUs)
+      const sentences = spokenSentences({ plan, wordsOf: wordsIn(clips), beatNames: new Map(stored.outline.beats.map((beat) => [beat.id, beat.name])), at })
+      return composedOn(stored, plan, options, show, points, graphics, { timed, sentences })
+    },
 
     /**
      * One stored graphic's render job as the post-production page shows it, for a retry: the page previews
