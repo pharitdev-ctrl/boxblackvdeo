@@ -157,22 +157,26 @@ const GRAPHIC = {
   what: "ที่ “ลด 50%”", beatId: "b5", why: "ย้ำราคาให้จำง่าย", summary: IDEA,
   spec: { kind: "motion", version: MOTION_VERSION, box: { x0: .1, y0: .55, x1: .9, y1: .75 }, seconds: 3, why: "ย้ำราคาให้จำง่าย", idea: IDEA, words: [{ text: "ลด", atS: .2 }, { text: "50%", atS: .7 }], html: "<div>495</div>" },
   written: true, stale: false, writeFailed: null, instruction: null, editFailed: null, canUndo: false, render: "ready", poster: null, error: null, edited: false, off: false,
+  pointId: "p3", from: "medium", replaces: false, coversKeep: false,
 }
+const MOVES = [
+  { anchor: { kind: "beat", beatId: "b1", edge: "start" }, insert: false, atUs: 0, durationUs: 3_000_000, beatId: "b1", about: "ค่อยๆ ดันกล้องเข้าหาขวด แล้วหมุนนิดเดียวตอนจบ", from: "light", pointId: "p0", edited: false, off: false, instruction: null, editFailed: null, canUndo: false },
+  { anchor: { kind: "speech", videoId: "a", sourceUs: 4_100_000, beatId: "b2" }, insert: false, atUs: 4_000_000, durationUs: 1_200_000, beatId: "b2", about: "กระแทกเข้าหน้าเร็วๆ ตรงคำว่า ผิวแห้ง", from: "medium", pointId: "p1", edited: false, off: false, instruction: null, editFailed: null, canUndo: false },
+  { anchor: { kind: "speech", videoId: "a", sourceUs: 230_600_000, beatId: "b5" }, insert: false, atUs: 23_600_000, durationUs: 1_500_000, beatId: "b5", about: "ซูมเข้าเร็วแล้วสั่นเบาๆ ตอนบอกราคา", from: "medium", pointId: "p3", edited: false, off: false, instruction: null, editFailed: null, canUndo: false },
+]
+const snd = (beatId: string, atUs: number, role: string, pointId: string, graphic: any = null) => ({ anchor: { kind: "speech", videoId: "a", sourceUs: atUs, beatId }, atUs, durationUs: 900_000, beatId, role, from: "medium", loudness: "normal", pointId, graphic, written: true, stale: null, writeFailed: null, instruction: null, editFailed: null, canUndo: false, off: false, render: "ready", error: null })
+const COMPOSED = [
+  snd("b1", 300_000, "วูชนุ่มๆ ตอนกล้องดันเข้าหาขวด", "p0"),
+  snd("b2", 4_000_000, "ตุ้บหนักๆ ย้ำคำว่า ผิวแห้ง", "p1"),
+  snd("b4", 18_400_000, "ประกายใสๆ ตอนพูดว่า ผิวฉ่ำทันที", "p2"),
+  { ...snd("b5", 23_700_000, "กริ๊งเครื่องคิดเงิน ตอนราคาเด้งเป็น ฿495", "p3", { summary: "ป้ายราคา ฿990 ถูกขีดฆ่า แล้ว ฿495 เด้งขึ้น" }), anchor: { kind: "speech", videoId: "a", sourceUs: 230_500_000, beatId: "b5" } },
+]
 const preview = () => planned ? highlightPreview({
   style: "headline", styleByAi: "headline", groups: GROUPS as any,
-  sounds: [{ effectId: "s1", name: "ปัง" }, { effectId: "s2", name: "ฟิ้ว" }, { effectId: "s3", name: "กริ๊ง" }] as any,
-  cues: [
-    { anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 4_000_000, what: 'ข้อความเด่น "ผิวแห้ง"', beatId: "b2", effectId: "s1", soundName: "ปัง", edited: false, pointId: "p1" },
-    { anchor: { kind: "highlight", groupId: "g2", line: 0 }, atUs: 18_400_000, what: 'ข้อความเด่น "ผิวฉ่ำทันที"', beatId: "b4", effectId: "s2", soundName: "ฟิ้ว", edited: false, pointId: "p2" },
-    { anchor: { kind: "highlight", groupId: "g3", line: 0 }, atUs: 23_600_000, what: 'ข้อความเด่น "ลด 50%"', beatId: "b5", effectId: "s3", soundName: "กริ๊ง", edited: false, pointId: "p3" },
-  ] as any,
-  slots: [
-    { anchor: { kind: "highlight", groupId: "g1", line: 0 }, atUs: 4_000_000, what: 'ข้อความเด่น "ผิวแห้ง"', beatId: "b2" },
-    { anchor: { kind: "highlight", groupId: "g2", line: 0 }, atUs: 18_400_000, what: 'ข้อความเด่น "ผิวฉ่ำทันที"', beatId: "b4" },
-    { anchor: { kind: "highlight", groupId: "g3", line: 0 }, atUs: 23_600_000, what: 'ข้อความเด่น "ลด 50%"', beatId: "b5" },
-  ] as any,
   media: [{ binId: "m1", name: "ขวดเซรั่ม.PNG", kind: "photo", what: "ขวดเซรั่มสีอำพันบนพื้นขาว" }] as any,
   graphics: [GRAPHIC] as any,
+  moves: MOVES as any,
+  composed: COMPOSED as any,
   emphasis: emphasisView({ points: POINTS as any, sentences: SENTENCES as any, scenes: [{ videoId: "b", beatId: "b1", startUs: 2_000_000, endUs: 6_000_000, atUs: 0, durationUs: 4_000_000, description: "ขวดเซรั่มหมุนช้าๆ บนโต๊ะไม้", pointId: "p0" }] as any, version: 2 }),
 }) : highlightPreview({ emphasis: emphasisView({ sentences: SENTENCES as any }) })
 
@@ -198,7 +202,7 @@ let analysed: string[] = q.has("analysed") || q.has("outlined") || q.has("planne
 if (q.has("outlined") || q.has("planned")) outline = makeStored({ targetSeconds: 30, videoType: "sales", instructions: "เปิดด้วยช็อตสินค้า เน้นโปรโมชั่นตอนท้าย" }, true)
 let backups: any[] = []
 const fresh = q.has("fresh")
-let license: any = fresh ? { state: "unlicensed" } : null
+let license: any = q.has("unlicensed") ? { state: "unlicensed" } : null
 let cc: any = fresh ? { supported: true, path: null, version: null, account: null, busy: null } : null
 const capcut = { running: q.has("capcut") }
 let state: any = null
@@ -256,7 +260,7 @@ const api: any = fakeApi({
     const works = ["emphasis", "text", "techniques", "graphics", "sounds", "subtitles"]
     ;(async () => {
       for (const w of works) api.emit({ type: "post-plan", folder, work: w, state: { state: "waiting" } })
-      const counts: Record<string, number> = { emphasis: 4, text: 3, techniques: 3, graphics: 1, sounds: 3, subtitles: 6 }
+      const counts: Record<string, number> = { emphasis: 4, text: 3, techniques: 4, graphics: 1, sounds: 4, subtitles: 6 }
       for (const w of works) {
         api.emit({ type: "post-plan", folder, work: w, state: { state: "running" } }); await sleep(w === "graphics" ? 900 : 550)
         api.emit({ type: "post-plan", folder, work: w, state: { state: "done", count: counts[w], dropped: 0 } })
@@ -271,7 +275,7 @@ const api: any = fakeApi({
     const backup = backupInfo("รีวิวเซรั่ม-2026-09-30T10-15-00-000Z", "2026-09-30T10:15:00.000Z", { durationUs: 0, segmentCount: 0 })
     backups = [backup]
     const result = { backup, durationUs: CUT.durationUs, segmentCount: 6, captionCount: 6, highlightCount: 3, soundCount: 3, zoomCount: 3, insertCount: 1, graphicCount: 1,
-      dropped: { sounds: 0, zooms: 0, inserts: 0, graphics: 0 }, zoomsLost: 0, graphicsSkipped: 0, emphasisCount: 4, proLeftOut: { exits: 0, sounds: 0 } }
+      composedCount: 4, dropped: { sounds: 0, zooms: 0, inserts: 0, graphics: 0, moves: 0 }, zoomsLost: 0, graphicsSkipped: 0, composedLeftOut: { unwritten: 0, stale: 0, failed: 0 }, emphasisCount: 4, proLeftOut: { exits: 0, sounds: 0 } }
     api.emit({ type: "timeline-write", folder, state: "done", result })
     return result
   },

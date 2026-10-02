@@ -1,56 +1,12 @@
 {
- "act": {
-  "file": "shots/act.jpg",
-  "boxes": {
-   "input": [
-    28,
-    228,
-    504,
-    35
-   ],
-   "submit": [
-    28,
-    271,
-    77,
-    27
-   ]
-  }
- },
- "act_key": {
-  "file": "shots/act_key.jpg",
-  "boxes": {
-   "input": [
-    28,
-    228,
-    504,
-    35
-   ],
-   "submit": [
-    28,
-    271,
-    77,
-    27
-   ]
-  }
- },
- "act_wait": {
-  "file": "shots/act_wait.jpg",
-  "boxes": {}
- },
- "act_done": {
-  "file": "shots/act_done.jpg",
+ "start": {
+  "file": "shots/start.jpg",
   "boxes": {
    "settings": [
     1366,
     9,
     58,
     30
-   ],
-   "grid": [
-    0,
-    48,
-    1440,
-    852
    ]
   }
  },
@@ -277,17 +233,6 @@
    ]
   }
  },
- "set_license": {
-  "file": "shots/set_license.jpg",
-  "boxes": {
-   "card": [
-    0,
-    48,
-    1440,
-    852
-   ]
-  }
- },
  "gate": {
   "file": "shots/gate.jpg",
   "boxes": {
@@ -308,7 +253,7 @@
   "boxes": {
    "card": [
     28,
-    137,
+    150,
     182,
     427
    ],
@@ -631,10 +576,21 @@
     1116,
     19
    ],
-   "plan": [
-    296,
-    623,
-    269,
+   "menu": [
+    1044,
+    9,
+    102,
+    30
+   ]
+  }
+ },
+ "plan_menu": {
+  "file": "shots/plan_menu.jpg",
+  "boxes": {
+   "menu": [
+    821,
+    159,
+    310,
     30
    ]
   }
@@ -721,38 +677,38 @@
   "boxes": {
    "point": [
     296,
-    319,
+    210,
     1116,
     112
    ],
-   "level": [
+   "level": null
+  }
+ },
+ "tab_tech": {
+  "file": "shots/tab_tech.jpg",
+  "boxes": {
+   "group": [
     296,
-    186,
+    572,
     1116,
-    19
+    94
+   ],
+   "moves": [
+    296,
+    666,
+    1116,
+    18
    ]
   }
  },
  "tab_gfx": {
   "file": "shots/tab_gfx.jpg",
   "boxes": {
-   "group": [
-    296,
-    622,
-    1116,
-    94
-   ],
    "graphic": [
     296,
-    799,
+    281,
     1116,
-    76
-   ],
-   "switches": [
-    296,
-    186,
-    1116,
-    689
+    111
    ]
   }
  },
@@ -763,7 +719,7 @@
     296,
     262,
     1116,
-    44
+    91
    ]
   }
  },
@@ -775,17 +731,6 @@
     388,
     1050,
     32
-   ]
-  }
- },
- "ai_menu": {
-  "file": "shots/ai_menu.jpg",
-  "boxes": {
-   "menu": [
-    821,
-    60,
-    310,
-    30
    ]
   }
  },
