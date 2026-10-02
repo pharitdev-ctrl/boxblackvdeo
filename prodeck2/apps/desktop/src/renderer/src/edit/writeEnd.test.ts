@@ -15,9 +15,11 @@ const written = (extra: Partial<WriteResult> = {}): WriteResult => ({
   zoomCount: 1,
   insertCount: 1,
   graphicCount: 0,
-  dropped: { sounds: 0, zooms: 0, inserts: 0, graphics: 0 },
+  composedCount: 0,
+  dropped: { sounds: 0, zooms: 0, inserts: 0, graphics: 0, moves: 0 },
   zoomsLost: 0,
   graphicsSkipped: 0,
+  composedLeftOut: { unwritten: 0, stale: 0, failed: 0 },
   emphasisCount: 6,
   proLeftOut: { exits: 0, sounds: 0 },
   ...extra,
@@ -28,6 +30,13 @@ const NONE_DROPPED = written().dropped
 
 test("DROPPED_NAMES names every kind a result drops by", () => {
   expect(Object.keys(DROPPED_NAMES).sort()).toEqual(Object.keys(written().dropped).sort())
+})
+
+test("moves the checks turned down have a note of their own, which says why: the frame would show its edge or lose the face", () => {
+  expect(doneNotes(written({ dropped: { ...NONE_DROPPED, moves: 2 } }))).toEqual(["ท่าเคลื่อนภาพ 2 ท่าไม่ได้ใส่ เพราะภาพจะเห็นขอบหรือหน้าหลุดจอ"])
+  // not the reason the other kinds are dropped for
+  expect(doneNotes(written({ dropped: { ...NONE_DROPPED, moves: 2 } }))[0]).not.toContain("เหลือไม่ถึงหนึ่งเฟรม")
+  expect(toldIsLong(written({ dropped: { ...NONE_DROPPED, moves: 1 } }))).toBe(true)
 })
 
 /* doneNotes */
@@ -45,11 +54,15 @@ test.each([
   expect(doneNotes(written({ dropped: { ...NONE_DROPPED, [kind]: 3 } }))).toEqual([t("write.resultDropped", { what: t(name), count: 3 })])
 })
 
-test("every kind above zero has its own note, in the order sounds, zooms, inserts, graphics, and a kind at zero has none", () => {
-  expect(doneNotes(written({ dropped: { sounds: 1, zooms: 0, inserts: 3, graphics: 4 } }))).toEqual([
+test("every kind above zero has its own note, in the order sounds, zooms, inserts, graphics, moves, and a kind at zero has none", () => {
+  expect(doneNotes(written({ dropped: { sounds: 1, zooms: 0, inserts: 3, graphics: 4, moves: 0 } }))).toEqual([
     t("write.resultDropped", { what: t("flair.sound"), count: 1 }),
     t("write.resultDropped", { what: t("flair.insert"), count: 3 }),
     t("write.resultDropped", { what: t("flair.graphic"), count: 4 }),
+  ])
+  expect(doneNotes(written({ dropped: { sounds: 0, zooms: 1, inserts: 0, graphics: 0, moves: 2 } }))).toEqual([
+    t("write.resultDropped", { what: t("flair.zoom"), count: 1 }),
+    t("write.movesDropped", { count: 2 }),
   ])
 })
 
@@ -65,7 +78,7 @@ test("what was left out for want of CapCut Pro is a note whether it is only exit
 })
 
 test("the notes come in the order dropped kinds, zooms lost, then Pro left out", () => {
-  const all = written({ dropped: { sounds: 1, zooms: 0, inserts: 0, graphics: 2 }, zoomsLost: 3, proLeftOut: { exits: 1, sounds: 1 } })
+  const all = written({ dropped: { sounds: 1, zooms: 0, inserts: 0, graphics: 2, moves: 0 }, zoomsLost: 3, proLeftOut: { exits: 1, sounds: 1 } })
   expect(doneNotes(all)).toEqual([
     t("write.resultDropped", { what: t("flair.sound"), count: 1 }),
     t("write.resultDropped", { what: t("flair.graphic"), count: 2 }),
@@ -82,10 +95,10 @@ test("graphics left out for a failed render are said by the message itself, not 
 
 test("graphics left out are told with every reason one may be: not written yet, to be done again, or a render that failed, and where to look", () => {
   expect(doneMessage(written({ graphicCount: 2, graphicsSkipped: 1 }))).toBe(
-    "เขียนแล้ว · 5 ชิ้น 0:12 · กราฟิก 2 ชิ้น · กราฟิกอีก 1 ชิ้นไม่ได้ใส่ (ยังไม่ได้เขียน ต้องทำใหม่ หรือเรนเดอร์ไม่สำเร็จ) ดูได้ในแท็บกราฟิกและเทคนิค",
+    "เขียนแล้ว · 5 ชิ้น 0:12 · กราฟิก 2 ชิ้น · กราฟิกอีก 1 ชิ้นไม่ได้ใส่ (ยังไม่ได้เขียน ต้องทำใหม่ หรือเรนเดอร์ไม่สำเร็จ) ดูได้ในแท็บกราฟิก",
   )
   // none placed: the count of graphics written is left out
-  expect(doneMessage(written({ graphicsSkipped: 3 }))).toBe("เขียนแล้ว · 5 ชิ้น 0:12 · กราฟิก 3 ชิ้นไม่ได้ใส่ (ยังไม่ได้เขียน ต้องทำใหม่ หรือเรนเดอร์ไม่สำเร็จ) ดูได้ในแท็บกราฟิกและเทคนิค")
+  expect(doneMessage(written({ graphicsSkipped: 3 }))).toBe("เขียนแล้ว · 5 ชิ้น 0:12 · กราฟิก 3 ชิ้นไม่ได้ใส่ (ยังไม่ได้เขียน ต้องทำใหม่ หรือเรนเดอร์ไม่สำเร็จ) ดูได้ในแท็บกราฟิก")
 })
 
 /* toldMessage */

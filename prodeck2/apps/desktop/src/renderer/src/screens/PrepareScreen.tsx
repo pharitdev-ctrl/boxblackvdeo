@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { estimateVision, VISION_SAMPLING, visionSampling, type RetakeLoad } from "@boxblack/core/vision/estimate"
-import type { ProjectDetail, ReadinessProblem, RendererApi, VideoStatus, VisionStatus } from "../../../shared/api.ts"
+import type { AppEvent, ProjectDetail, ReadinessProblem, RendererApi, VideoStatus, VisionStatus } from "../../../shared/api.ts"
+import { mainText } from "../edit/postTabs.ts"
 import { VideoRow } from "../prepare/VideoRow.tsx"
-import { formatDuration, formatResolution } from "../format.ts"
+import { formatDuration, formatResolution, lastLines } from "../format.ts"
 import { t, type MessageKey } from "../i18n.ts"
 import { Button } from "../ui/Button.tsx"
 import { Empty } from "../ui/Empty.tsx"
@@ -14,6 +15,12 @@ type Phase =
   | { kind: "running" }
   | { kind: "finished"; outcome: "done" | "cancelled" }
   | { kind: "failed"; message: string }
+
+type ObjectsStatus = Extract<AppEvent, { type: "objects" }>["status"]
+
+/** Why finding objects failed, in the user's words: the one-run lock as this page says it, main's known words, else the last lines. */
+const objectsText = (error: string) =>
+  /(?:^|: )an analysis is already running$/.test(error) ? t("prepare.busyElsewhere") : lastLines(mainText(error))
 
 interface Props {
   api: RendererApi
@@ -51,6 +58,21 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
   const [starting, setStarting] = useState(false)
   // another project's run is going; one runs at a time, so this one waits
   const [elsewhere, setElsewhere] = useState(false)
+  // the analysed videos whose objects were never found, which can be found on their own
+  const [withoutObjects, setWithoutObjects] = useState<string[]>([])
+  // how finding the objects of each video stands, from a run of objects alone or from the end of an analysis
+  const [objects, setObjects] = useState<Record<string, ObjectsStatus>>({})
+  // the videos this page asked to find the objects of, from the click until that run ends
+  const [locating, setLocating] = useState<string[] | null>(null)
+  // why a run of objects was refused or failed as a whole, which no video's event tells
+  const [objectsError, setObjectsError] = useState<string | null>(null)
+  // whether the run going in this project only finds objects: its end is then no analysis of this page's.
+  // Such a run is in no job the main side keeps, so a page that comes back to it knows it only from its events
+  const objectsOnly = useRef(false)
+  const phaseNow = useRef(phase)
+  useLayoutEffect(() => {
+    phaseNow.current = phase
+  }, [phase])
 
   useEffect(() => {
     let alive = true
@@ -82,6 +104,10 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
       (view) => alive && setSampling(visionSampling(view.vision.frameEveryS)),
       () => {},
     )
+    api.videosWithoutObjects(folder).then(
+      (ids) => alive && setWithoutObjects(ids),
+      () => {},
+    )
     return () => {
       alive = false
     }
@@ -100,6 +126,9 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
         }
         setAudio({})
         setPictures({})
+        setObjects({})
+        setObjectsError(null)
+        objectsOnly.current = false
         setRunning(videoIds)
         setPhase({ kind: "running" })
         await api.startAnalysis(folder, videoIds)
@@ -112,6 +141,24 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
     [api, folder],
   )
 
+  const locate = useCallback(
+    async (videoIds: string[]) => {
+      setObjects({})
+      setObjectsError(null)
+      setLocating(videoIds)
+      objectsOnly.current = true
+      try {
+        await api.locateObjects(folder, videoIds)
+      } catch (e) {
+        // refused before anything ran (another run, the machine, the folder): no event will follow
+        objectsOnly.current = false
+        setLocating(null)
+        setObjectsError((e as Error).message)
+      }
+    },
+    [api, folder],
+  )
+
   useEffect(() => {
     let alive = true
     const stop = api.onEvent((event) => {
@@ -119,11 +166,29 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
         setAudio((current) => ({ ...current, [event.videoId]: event.status }))
       } else if (event.type === "vision" && event.folder === folder) {
         setPictures((current) => ({ ...current, [event.videoId]: event.status }))
+      } else if (event.type === "objects" && event.folder === folder) {
+        // objects found while no analysis of this page's is going belong to a run of objects alone
+        if (phaseNow.current.kind !== "running") objectsOnly.current = true
+        setObjects((current) => ({ ...current, [event.videoId]: event.status }))
       } else if (event.type === "analysis-finished" && event.folder === folder) {
-        setPhase(event.outcome === "failed" ? { kind: "failed", message: event.error } : { kind: "finished", outcome: event.outcome })
+        if (objectsOnly.current) {
+          // the end of finding objects, which leaves the analysis where it stood
+          objectsOnly.current = false
+          setLocating(null)
+          if (event.outcome === "failed") setObjectsError(event.error)
+        } else {
+          setPhase(event.outcome === "failed" ? { kind: "failed", message: event.error } : { kind: "finished", outcome: event.outcome })
+        }
+        // a cancel leaves the video it stopped on at running with nothing after it; only a failure is still worth saying
+        setObjects((current) => Object.fromEntries(Object.entries(current).filter(([, status]) => status.state === "failed")))
+        // whatever ended, some videos may have their objects now, or still be without them after a cancel
+        api.videosWithoutObjects(folder).then(
+          (ids) => alive && setWithoutObjects(ids),
+          () => {},
+        )
       } else if (event.type === "analysis-finished") {
         setElsewhere(false)
-      } else if (event.type === "transcription" || event.type === "vision") {
+      } else if (event.type === "transcription" || event.type === "vision" || event.type === "objects") {
         setElsewhere(true)
       }
     })
@@ -138,6 +203,7 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
       setAudio(state.transcription)
       setPictures(state.vision)
       setRunning(Object.keys(state.transcription))
+      if (state.running) objectsOnly.current = false
       if (state.running) setPhase({ kind: "running" })
       else if (state.outcome === "failed") setPhase({ kind: "failed", message: state.error ?? "" })
       else if (state.outcome) setPhase({ kind: "finished", outcome: state.outcome })
@@ -164,9 +230,19 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
   const failedCount = running.filter((id) => audio[id]?.state === "failed" || pictures[id]?.state === "failed").length
   const doneCount = running.filter((id) => audio[id]?.state === "done" && pictures[id]?.state === "done").length
   const clean = phase.kind === "finished" && phase.outcome === "done" && failedCount === 0
-  const canStart = capcutRunning === false && chosen.length > 0 && !elsewhere && !starting
+  // a run of objects alone holds the one-run lock as an analysis does
+  const objectsGoing = locating !== null || Object.values(objects).some((status) => status.state === "running")
+  const canStart = capcutRunning === false && chosen.length > 0 && !elsewhere && !starting && !objectsGoing
   // read by an earlier run or by this one: either way there is nothing left to read for it
   const read = new Set([...analysed, ...running.filter((id) => audio[id]?.state === "done" && pictures[id]?.state === "done")])
+  // the ticked videos read already whose objects were never found
+  const objectsToFind = chosen.filter((video) => read.has(video.id) && withoutObjects.includes(video.id)).map((video) => video.id)
+  const objectsIdle = phase.kind !== "running" && phase.kind !== "loading" && !starting && !objectsGoing
+  // the videos the pass in hand is about: those asked for here, or those an analysis has read in full (the only ones
+  // it finds the objects of), and any an event names besides
+  const objectsScope = [...new Set([...(locating ?? (phase.kind === "running" ? running.filter((id) => audio[id]?.state === "done" && pictures[id]?.state === "done") : [])), ...Object.keys(objects)])]
+  const objectsSettled = objectsScope.filter((id) => objects[id]?.state === "done" || objects[id]?.state === "failed").length
+  const objectsFailure = objectsError ?? Object.values(objects).flatMap((status) => (status.state === "failed" ? [status.error] : []))[0] ?? null
   // everything ticked has been read, so there is nothing to do but go on
   const ready = chosen.length > 0 && chosen.every((video) => read.has(video.id))
 
@@ -213,6 +289,22 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
               <Empty title={t("detail.noVideos")} />
             ) : (
               <>
+                {Object.values(objects).some((status) => status.state === "running") && (
+                  <p className="notice objects-line">{t("prepare.objectsGoing", { done: objectsSettled, total: objectsScope.length })}</p>
+                )}
+                {objectsFailure !== null && (
+                  <p className="notice error objects-line" title={objectsFailure}>
+                    {t("prepare.objectsFailed", { error: objectsText(objectsFailure) })}
+                  </p>
+                )}
+                {objectsIdle && objectsToFind.length > 0 && (
+                  <div className="notice objects-line objects-offer">
+                    <span>{t("prepare.objects", { count: objectsToFind.length })}</span>
+                    <Button disabled={capcutRunning !== false || writing || planning || elsewhere} onClick={() => void locate(objectsToFind)}>
+                      {t("prepare.objectsRun")}
+                    </Button>
+                  </div>
+                )}
                 <div className="section-head">
                   <h2>{t("prepare.videosTitle")}</h2>
                   <span className="hint">{t("detail.videosHint")}</span>
@@ -267,7 +359,8 @@ export function PrepareScreen({ api, folder, capcutRunning, onOpenSettings, onNe
             {!started && !ready && capcutRunning === true && <span className="warn-text">{t("gate.startBlocked")}</span>}
             {phase.kind !== "running" && !ready && elsewhere && <span className="warn-text">{t("prepare.busyElsewhere")}</span>}
             {phase.kind !== "running" && phase.kind !== "loading" && ready && (writing || planning) && <span className="warn-text">{t(writing ? "edit.ai.writing" : "edit.ai.planning")}</span>}
-            {phase.kind === "running" && <Button onClick={() => void api.cancelAnalysis()}>{t("prepare.cancel")}</Button>}
+            {/* a run of objects alone stops as an analysis does, and its end is told the same way */}
+            {(phase.kind === "running" || objectsGoing) && <Button onClick={() => void api.cancelAnalysis()}>{t("prepare.cancel")}</Button>}
             {phase.kind !== "running" &&
               phase.kind !== "loading" &&
               (ready ? (

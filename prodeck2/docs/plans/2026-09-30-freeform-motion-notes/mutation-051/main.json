@@ -1,0 +1,419 @@
+[
+ {
+  "file": "packages/core/src/graphics/motion/write.ts",
+  "name": "editBrief: white space not made single",
+  "find": "args.instruction.replace(/\\s+/g, \" \").trim()",
+  "replace": "args.instruction.trim()",
+  "tests": [
+   "packages/core/src/graphics/motion/write.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "writePiece: first brief ignored",
+  "find": "const brief = firstBrief ?? motionBrief(piece)",
+  "replace": "const brief = motionBrief(piece)",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/motion-write.ts",
+  "name": "writePiece: repair built from motionBrief",
+  "find": "repairBrief({ brief, html: first.html",
+  "replace": "repairBrief({ brief: motionBrief(piece), html: first.html",
+  "tests": [
+   "apps/desktop/src/main/motion-write.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/plan.ts",
+  "name": "isPrevious: words not checked",
+  "find": " && Array.isArray(words)",
+  "replace": "",
+  "tests": [
+   "packages/core/src/graphics/plan.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/plan.ts",
+  "name": "isPrevious: any instruction",
+  "find": "(instruction === undefined || typeof instruction === \"string\")",
+  "replace": "true",
+  "tests": [
+   "packages/core/src/graphics/plan.test.ts",
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ },
+ {
+  "file": "packages/core/src/graphics/plan.ts",
+  "name": "instructionLength: not trimmed",
+  "find": "graphemes.segment(text.trim())",
+  "replace": "graphemes.segment(text)",
+  "tests": [
+   "packages/core/src/graphics/plan.test.ts",
+   "apps/desktop/src/main/highlight-api.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/highlight-api.ts",
+  "name": "api: unit cap one higher",
+  "find": "value.length > MAX_INSTRUCTION_UNITS)",
+  "replace": "value.length > MAX_INSTRUCTION_UNITS + 1)",
+  "tests": [
+   "apps/desktop/src/main/highlight-api.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/highlight-api.ts",
+  "name": "api: 301 graphemes allowed",
+  "find": "length > INSTRUCTION_MAX ? null",
+  "replace": "length > INSTRUCTION_MAX + 1 ? null",
+  "tests": [
+   "apps/desktop/src/main/highlight-api.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/highlight-api.ts",
+  "name": "api: empty allowed",
+  "find": "length === 0 || length >",
+  "replace": "length >",
+  "tests": [
+   "apps/desktop/src/main/highlight-api.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/highlight-api.ts",
+  "name": "api: passed on untrimmed",
+  "find": ": value.trim()\n}",
+  "replace": ": value\n}",
+  "tests": [
+   "apps/desktop/src/main/highlight-api.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/license-api.ts",
+  "name": "licence: editGraphic not licensed",
+  "find": "  \"editGraphic\",\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/main/license-api.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "view: canUndo by presence",
+  "find": "canUndo: isPrevious(spec.previous)",
+  "replace": "canUndo: spec.previous !== undefined",
+  "tests": [
+   "apps/desktop/src/main/highlights.test.ts",
+   "apps/desktop/src/main/graphics-cues.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "view: instruction always null",
+  "find": "instruction: spec.instruction ?? null,",
+  "replace": "instruction: null,",
+  "tests": [
+   "apps/desktop/src/main/highlights.test.ts",
+   "apps/desktop/src/main/graphics-cues.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "view: editFailed always null",
+  "find": "editFailed: spec.editFailed ?? null,",
+  "replace": "editFailed: null,",
+  "tests": [
+   "apps/desktop/src/main/highlights.test.ts",
+   "apps/desktop/src/main/graphics-cues.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-plan.ts",
+  "name": "undo: not refused during a run",
+  "find": "refuseWhileRunning(folder)\n      undoing.add(folder)",
+  "replace": "undoing.add(folder)",
+  "tests": [
+   "apps/desktop/src/main/post-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-plan.ts",
+  "name": "undo: mark not checked by runs",
+  "find": "runs.get(folder)?.running || undoing.has(folder)",
+  "replace": "runs.get(folder)?.running",
+  "tests": [
+   "apps/desktop/src/main/post-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-plan.ts",
+  "name": "undo: refusal inside the try",
+  "find": "refuseWhileRunning(folder)\n      undoing.add(folder)\n      try {\n",
+  "replace": "try {\n        refuseWhileRunning(folder)\n        undoing.add(folder)\n",
+  "tests": [
+   "apps/desktop/src/main/post-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/post-plan.ts",
+  "name": "undo: mark never released",
+  "find": "      } finally {\n        undoing.delete(folder)\n      }",
+  "replace": "      } finally {\n      }",
+  "tests": [
+   "apps/desktop/src/main/post-plan.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "fragmentHeld: instruction dropped",
+  "find": "...(typeof spec.instruction === \"string\" ? { instruction: spec.instruction } : {}) }\n}",
+  "replace": " }\n}",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "keptBefore: no fallback to kept",
+  "find": "fragmentHeld(spec) ?? spec.previous",
+  "replace": "fragmentHeld(spec)",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterWriting: instruction kept",
+  "find": "instruction: _instruction, editFailed: _editFailed, previous: _previous, ...rest } = spec\n  const kept",
+  "replace": "editFailed: _editFailed, previous: _previous, ...rest } = spec\n  const kept",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterWriting: editFailed kept",
+  "find": "const { failed: _failed, instruction: _instruction, editFailed: _editFailed, previous: _previous, ...rest } = spec\n  const kept",
+  "replace": "const { failed: _failed, instruction: _instruction, previous: _previous, ...rest } = spec\n  const kept",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterWriting: failed redo keeps nothing",
+  "find": ": { ...rest, html: null, failed: written.failed, ...kept }",
+  "replace": ": { ...rest, html: null, failed: written.failed }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterEdit: failure not said",
+  "find": "if (!(\"html\" in written)) return { ...spec, editFailed: written.failed }",
+  "replace": "if (!(\"html\" in written)) return { ...spec }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterEdit: failure drops the fragment",
+  "find": "if (!(\"html\" in written)) return { ...spec, editFailed: written.failed }",
+  "replace": "if (!(\"html\" in written)) return { ...spec, html: null, editFailed: written.failed }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterEdit: editFailed kept on success",
+  "find": "const { failed: _failed, editFailed: _editFailed, previous: _previous, ...rest } = spec\n  return",
+  "replace": "const { failed: _failed, previous: _previous, ...rest } = spec\n  return",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterEdit: instruction not stored",
+  "find": "words: writtenFor.words, instruction, ...keptBefore(spec) }",
+  "replace": "words: writtenFor.words, ...keptBefore(spec) }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterEdit: old length and words kept (stays stale)",
+  "find": "html: written.html, seconds: writtenFor.seconds, words: writtenFor.words, instruction,",
+  "replace": "html: written.html, instruction,",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "afterEdit: nothing kept for a step back",
+  "find": "words: writtenFor.words, instruction, ...keptBefore(spec) }",
+  "replace": "words: writtenFor.words, instruction }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "steppedBack: current instruction stays",
+  "find": "const { failed: _failed, editFailed: _editFailed, instruction: _instruction, previous: _previous, ...rest } = spec\n  const now",
+  "replace": "const { failed: _failed, editFailed: _editFailed, previous: _previous, ...rest } = spec\n  const now",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "steppedBack: current not kept",
+  "find": "    ...(now ? { previous: now } : {}),\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "steppedBack: length not restored",
+  "find": "    seconds: previous.seconds,\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "steppedBack: version not restored",
+  "find": "    version: previous.version,\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "steppedBack: failed kept",
+  "find": "const { failed: _failed, editFailed: _editFailed, instruction: _instruction, previous: _previous, ...rest } = spec\n  const now",
+  "replace": "const { editFailed: _editFailed, instruction: _instruction, previous: _previous, ...rest } = spec\n  const now",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "edit: editBrief not used",
+  "find": "const firstBrief = edit ? editBrief(",
+  "replace": "const firstBrief = false ? editBrief(",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "edit: instruction untrimmed",
+  "find": "{ instruction: instruction.trim(), html }",
+  "replace": "{ instruction, html }",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "edit: unwritten not refused",
+  "find": "      if (html === null) throw new Error(\"this graphic has not been written yet\")\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "edit: machine fault not forgotten",
+  "find": "      deps.graphics?.forgetMachine()\n      const ended = await writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), signal }, placed, { instruction",
+  "replace": "      const ended = await writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), signal }, placed, { instruction",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "undo: junk kept fragment used",
+  "find": "if (!found || !isPrevious(previous))",
+  "replace": "if (!found || !previous)",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/flair.ts",
+  "name": "edit: progress not started",
+  "find": "      progress?.(0, 1)\n      // a fault a render found on this machine may have been mended since: the writing looks again\n      deps.graphics?.forgetMachine()\n      const ended = await writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), signal }, placed, { instruction",
+  "replace": "      // a fault a render found on this machine may have been mended since: the writing looks again\n      deps.graphics?.forgetMachine()\n      const ended = await writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), signal }, placed, { instruction",
+  "tests": [
+   "apps/desktop/src/main/flair-plan.test.ts",
+   "apps/desktop/src/main/flair.test.ts",
+   "apps/desktop/src/main/post-flow.test.ts"
+  ]
+ }
+]

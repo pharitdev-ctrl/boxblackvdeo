@@ -24,6 +24,8 @@ type SettingsApi = Pick<
   | "analysisState"
   | "analysedVideos"
   | "knownRetakes"
+  | "videosWithoutObjects"
+  | "locateObjects"
   | "retryUnfetchableSounds"
 >
 
@@ -129,6 +131,12 @@ export function createSettingsApi(deps: {
     },
     async knownRetakes(folder) {
       return analysis.retakes(folder)
+    },
+    async videosWithoutObjects(folder) {
+      return analysis.withoutObjects(folder)
+    },
+    async locateObjects(folder, videoIds) {
+      await analysis.locateObjects(folder, videoIds)
     },
     async retryUnfetchableSounds() {
       await deps.sounds?.retry()

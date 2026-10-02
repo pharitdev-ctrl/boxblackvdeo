@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { formatBytes, formatDate, formatDay, formatDuration, formatResolution, formatTimestamp, playedSeconds } from "./format.ts"
+import { formatBytes, formatDate, formatDay, formatDuration, formatResolution, formatTimestamp, lastLines, playedSeconds } from "./format.ts"
 
 test("formatDuration shows minutes and seconds for clips under an hour", () => {
   expect(formatDuration(0)).toBe("0:00")
@@ -39,4 +39,9 @@ test("playedSeconds shows how long a graphic plays to the tenth of a second belo
   expect(playedSeconds(2_160_000)).toBe("2.1")
   expect(playedSeconds(2_199_999)).toBe("2.1")
   expect(playedSeconds(1_500_000)).toBe("1.5")
+})
+
+test("lastLines keeps the last three lines that say something, on one line, where a tool says what went wrong", () => {
+  expect(lastLines("Error: exited with code 1\nat render (render.js:10)\n\nChrome crashed\nframe 12 of 90\nout of memory\n")).toBe("Chrome crashed frame 12 of 90 out of memory")
+  expect(lastLines("Claude is busy")).toBe("Claude is busy")
 })

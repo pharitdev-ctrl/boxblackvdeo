@@ -4,7 +4,9 @@ import { formatDuration } from "../format.ts"
 import { t, type MessageKey } from "../i18n.ts"
 import { useClipRoom, type ClipRoomValue, type RoomRead } from "../room/ClipRoom.tsx"
 import { Button } from "../ui/Button.tsx"
+import { Mascot } from "../ui/Mascot.tsx"
 import { Sheet } from "../ui/Sheet.tsx"
+import { cueKey } from "./FlairTab.tsx"
 import { FAILED_READ_WORDS, writeHold } from "./writeHold.ts"
 
 const LEVEL_NAMES: Record<FlairLevel, MessageKey> = { light: "flair.level.light", medium: "flair.level.medium", heavy: "flair.level.heavy" }
@@ -15,14 +17,24 @@ export const WRITE_REASON_ID = "write-reason"
 /** The words of why the write cannot start now, or none when it can. A write that runs is not a hold: the button says it is writing. */
 const whyHeld = (room: ClipRoomValue): MessageKey | null => (room.writing ? null : writeHold(room))
 
+/** Whether the reason is said beside the button. A plan run is not: the AI menu's button already says it on the bar, and the write button's title still does. */
+const saidBeside = (why: MessageKey | null): why is MessageKey => why !== null && why !== "write.check.planning"
+
 /**
- * Why the write button is off, in a line beside it. It is drawn before the AI menu, at the left of what the
- * page puts on the bar, so that it comes and goes without moving the buttons after it.
+ * Why the write button is off, in a line beside it, or the mascot at work while a write runs. It is drawn before
+ * the AI menu, at the left of what the page puts on the bar, so that it comes and goes without moving the buttons after it.
  */
 export function WriteReason(): ReactElement | null {
   const room = useClipRoom()
+  // while a write runs there is no reason to give, and the mascot stands in its place, at work
+  if (room.writing)
+    return (
+      <span className="write-mascot">
+        <Mascot pose="work" />
+      </span>
+    )
   const why = whyHeld(room)
-  if (!why) return null
+  if (!saidBeside(why)) return null
   return (
     <span id={WRITE_REASON_ID} className="write-reason warn-text" title={t(why)}>
       {t(why)}
@@ -55,6 +67,22 @@ export function WriteButton(): ReactElement {
   const levelName = flair ? t(LEVEL_NAMES[flair.level]) : ""
   const off = (what: MessageKey) => t("write.off", { what: t(what) })
   const targetUs = stored.brief.targetSeconds === null ? null : stored.brief.targetSeconds * 1_000_000
+  // the composed sounds a write lays, and the ones it leaves out by why, as main sorts them when it writes: one not
+  // composed yet, or whose composing failed, has no code; a stale one waits to be composed again, and so does one tied
+  // to a graphic the write does not lay (it has the graphic's place, and is never laid without it); a failed render is left out
+  const composedOn = flair?.sound ? (preview?.composed.filter((sound) => !sound.off) ?? []) : []
+  const laidGraphics = playing.filter((graphic) => graphic.render !== "failed").map((graphic) => cueKey(graphic.anchor))
+  const composedLeftOut = { unwritten: 0, stale: 0, failed: 0 }
+  for (const sound of composedOn) {
+    if (!sound.written) composedLeftOut[sound.writeFailed !== null ? "failed" : "unwritten"]++
+    else if (sound.stale !== null || (sound.graphic !== null && !laidGraphics.includes(cueKey(sound.anchor)))) composedLeftOut.stale++
+    else if (sound.render === "failed") composedLeftOut.failed++
+  }
+  const composedOut = composedLeftOut.unwritten + composedLeftOut.stale + composedLeftOut.failed
+  const composedWhy = (Object.keys(composedLeftOut) as (keyof typeof composedLeftOut)[])
+    .filter((kind) => composedLeftOut[kind] > 0)
+    .map((kind) => t(`write.composedWhy.${kind}` as MessageKey, { count: composedLeftOut[kind] }))
+    .join(" · ")
 
   const write = () => {
     if (!canWrite || !rules || !highlights || !flair || !preview) return
@@ -74,7 +102,7 @@ export function WriteButton(): ReactElement {
   return (
     <>
       {/* the title says the reason whole where the bar is too narrow to; the reason itself is WriteReason, before the AI menu */}
-      <Button variant="primary" disabled={!canWrite} title={why ? t(why) : undefined} aria-describedby={why ? WRITE_REASON_ID : undefined} onClick={() => setAsking(true)}>
+      <Button variant="primary" disabled={!canWrite} title={why ? t(why) : undefined} aria-describedby={saidBeside(why) ? WRITE_REASON_ID : undefined} onClick={() => setAsking(true)}>
         {writing ? t("write.writing") : state.kind === "written" ? t("write.again") : t("timeline.write")}
       </Button>
       <Sheet
@@ -100,9 +128,14 @@ export function WriteButton(): ReactElement {
             {highlightsOn ? t("write.text", { groups: drawnGroups.length, lines: drawnGroups.reduce((sum, group) => sum + group.lines.length, 0) }) : off("highlights.title")}
           </li>
           <li>{graphicsOn ? t("write.graphics", { count: playing.length - failedRenders }) : off("flair.graphic")}</li>
-          <li>{flair?.zoom ? t("write.zooms", { count: preview?.zooms.length ?? 0 }) : off("flair.zoom")}</li>
+          {/* the moves that play and the legacy zooms in force, as the techniques tab counts them */}
+          <li>{flair?.zoom ? t("write.zooms", { count: (preview?.moves.filter((move) => !move.off).length ?? 0) + (preview?.zooms.length ?? 0) }) : off("flair.zoom")}</li>
           <li>{flair?.insert ? t("write.inserts", { count: preview?.inserts.length ?? 0 }) : off("flair.insert")}</li>
-          <li>{flair?.sound ? t("write.sounds", { count: preview?.cues.length ?? 0 }) : off("flair.sound")}</li>
+          {!flair?.sound && <li>{off("flair.sound")}</li>}
+          {/* the user's own CapCut sounds, kept from before 0.6.0: a line only while some are left */}
+          {flair?.sound && (preview?.cues.length ?? 0) > 0 && <li>{t("write.sounds", { count: preview!.cues.length })}</li>}
+          {flair?.sound && <li>{t("write.composed", { count: composedOn.length - composedOut })}</li>}
+          {composedOut > 0 && <li className="warn-text">{t("write.composedLeftOut", { count: composedOut, why: composedWhy })}</li>}
           <li>{subtitlesOn ? t("write.subtitles", { count: texts.filter((text) => text.trim()).length }) : off("subtitles.title")}</li>
           {(preview?.zoomsLost ?? 0) > 0 && <li className="warn-text">{t("write.zoomsLost", { count: preview!.zoomsLost })}</li>}
           {preview && preview.proLeftOut.exits + preview.proLeftOut.sounds > 0 && (

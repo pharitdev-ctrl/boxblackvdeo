@@ -150,6 +150,19 @@
   font-weight: 700;
 }
 
+/* six tabs, one of them two words long, at the narrowest window (900 px, less the beats): their labels and
+   counts need about 620 px at the usual spacing, so a narrow window draws them closer so the six fit; a label
+   may wrap but is never clipped */
+@media (max-width: 1000px) {
+  .beat-panel .tabs {
+    gap: 2px;
+  }
+
+  .beat-panel .tab {
+    padding-inline: 9px;
+  }
+}
+
 .beat-panel-body {
   flex: 1;
   min-height: 0;
@@ -430,8 +443,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* a graphic's row is taller than the rest: its poster, then what it is, why, and how it stands */
-.flair-row.graphic {
+/* a graphic's row is taller than the rest: its poster, then what it is, why, and how it stands. A composed sound's row
+   and a move's are built the same way, without the poster */
+.flair-row.graphic,
+.flair-row.sound,
+.flair-row.move {
   align-items: flex-start;
 }
 
@@ -440,7 +456,21 @@
 .flair-row.graphic.off .graphic-poster,
 .flair-row.graphic.off .graphic-poster-none,
 .flair-row.graphic.off .flair-what,
+.flair-row.graphic.off .graphic-last-edit,
 .flair-row.graphic.off .graphic-why,
+.flair-row.graphic.off .graphic-point,
+.flair-row.graphic.off .graphic-from,
+.flair-row.graphic.off .graphic-replaces,
+.flair-row.graphic.off .graphic-covers,
+.flair-row.sound.off .flair-what,
+.flair-row.sound.off .graphic-last-edit,
+.flair-row.sound.off .sound-of-graphic,
+.flair-row.sound.off .sound-from,
+.flair-row.move.off .flair-what,
+.flair-row.move.off .graphic-last-edit,
+.flair-row.move.off .from-point,
+.flair-row.move.off .move-from,
+.flair-row.move.off .move-insert,
 .highlight-group.off .highlight-lines {
   opacity: 0.55;
 }
@@ -473,8 +503,10 @@
   overflow-wrap: anywhere;
 }
 
-/* a motion graphic's idea can run to several sentences: two lines of it show, and the whole is in its title */
-.graphic-body .flair-what {
+/* a motion graphic's idea can run to several sentences: two lines of it show, and the whole is in its title. The
+   change the user last asked of it is held the same way */
+.graphic-body .flair-what,
+.graphic-last-edit {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   display: -webkit-box;
@@ -482,14 +514,20 @@
   white-space: normal;
 }
 
-.graphic-state {
+.graphic-last-edit {
+  overflow: hidden;
+}
+
+.graphic-state,
+.graphic-edit-failed {
   color: var(--sub);
   font-size: 12px;
 }
 
 /* the whole error is in its title; three lines are enough to say what went wrong */
 .graphic-state.failed,
-.graphic-state.warn-text {
+.graphic-state.warn-text,
+.graphic-edit-failed {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   display: -webkit-box;
@@ -500,18 +538,57 @@
   color: var(--danger);
 }
 
-/* a writing that failed is put right by asking for it again: it warns, which a state's own grey would otherwise hide */
-.graphic-state.warn-text {
+/* a writing that failed is put right by asking for it again: it warns, which a state's own grey would otherwise hide.
+   So does an edit that failed, which leaves the fragment before it standing */
+.graphic-state.warn-text,
+.graphic-edit-failed.warn-text {
   color: var(--warn);
+}
+
+/* the graphic a sound follows is named by its idea, which can be long: one line of it shows, the whole in its title.
+   So is the point a free graphic tells the story of, by its words */
+.sound-of-graphic,
+.graphic-point {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .graphic-state.ready {
   color: var(--ok);
 }
 
+/* a row can carry six buttons, which at the narrowest window would squeeze the idea down to a few letters: they take
+   at most two fifths of the row and fold among themselves, against its right edge. Held to that, they also stay on
+   the row's first line when the edit field opens under it */
 .graphic-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 40%;
+}
+
+/* the change the user asks of a graphic, a sound or a move is typed under its row, across the whole of it, as the outline's revise field is */
+.flair-row.graphic.field-open,
+.flair-row.sound.field-open,
+.flair-row.move.field-open {
+  flex-wrap: wrap;
+}
+
+.graphic-edit {
+  display: grid;
+  flex: 0 0 100%;
+  gap: 8px;
+  justify-items: start;
+}
+
+.graphic-edit .field {
+  justify-self: stretch;
+}
+
+.graphic-edit-actions {
+  display: flex;
   gap: 6px;
 }
 
@@ -554,9 +631,19 @@
 
 /* the AI menu, and the list of what a write is about to write */
 
+/* the menu's button and, while a run goes, the stop after it: one row that keeps its width, so the stop never drops under the button */
 .ai-menu {
   position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
   -webkit-app-region: no-drag;
+}
+
+.ai-note {
+  margin: 0 0 8px;
 }
 
 .ai-items {
@@ -575,6 +662,37 @@
 .ai-items .btn {
   justify-content: flex-start;
   width: 100%;
+}
+
+/* the whole plan heads the menu, set apart from the single works by a line */
+.ai-items .btn.lead {
+  font-weight: 600;
+}
+
+/* why an item is off: small and quiet, set in line with the items' own text (a ghost button's border and padding) */
+.ai-reason,
+.ai-foot {
+  padding-left: 13px;
+  font-size: 11.5px;
+}
+
+.ai-foot {
+  margin: 4px 0 0;
+}
+
+.ai-line {
+  margin: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+/* the level heads the menu as a field like any other; its segments share the popover's width and fold rather than spill.
+   The line under it stands in the popover's own gap, so it needs no margin of its own */
+.ai-level {
+  min-width: 0;
+}
+
+.popover > .ai-line {
+  margin: 0;
 }
 
 .write-list {
@@ -601,10 +719,22 @@
   white-space: nowrap;
 }
 
+/* the mascot at work in the reason's place while a write runs: it gives way as the reason does, so the bar
+   neither grows nor moves its buttons, and where the bar is full it is not drawn at all (the button says กำลังเขียน…) */
+.write-mascot {
+  display: flex;
+  flex: 0 1000 auto;
+  min-width: 0;
+  /* room for its small bob, which the clip would otherwise cut */
+  padding: 2px 0;
+  overflow: hidden;
+}
+
 /* where the bar is full (the stage chips give up their names here too) there is no room left to say it in:
    the button's title and its description (this element, hidden but still named by aria-describedby) say it */
 @media (max-width: 1060px) {
-  .write-reason {
+  .write-reason,
+  .write-mascot {
     display: none;
   }
 }
@@ -639,19 +769,22 @@
   border-bottom: 1px solid var(--line);
 }
 
-.plan-cta {
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
 .plan-strip {
   display: grid;
   gap: 6px;
   padding-top: 8px;
+}
+
+/* the mascot, when there is one, before the strip's lines */
+.plan-said {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-said > .plan-lines {
+  flex: 1;
+  min-width: 0;
 }
 
 .plan-lines {

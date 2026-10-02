@@ -50,7 +50,7 @@ DesktopApi: + editGraphic(folder: string, anchor: CueAnchor, instruction: string
 
 ---
 
-### Task 1: Core — the edit brief and the fields
+### Task 1: Core: the edit brief and the fields
 
 **Files:**
 - Modify: `packages/core/src/graphics/plan.ts`, `plan.test.ts`
@@ -78,7 +78,7 @@ export function editBrief(args: { brief: string; html: string; instruction: stri
 - [ ] **Step 3: The fields** of `MotionSpec` and `PreviousFragment`, `INSTRUCTION_MAX = 300`, as in "Names shared across tasks". Export them from the package where `MotionSpec` is exported. A test in `plan.test.ts` that an outline of 0.5.0 (no new fields) is still a valid motion spec to `isMotion`.
 - [ ] **Step 4:** `npm test` and `npm run typecheck`.
 
-### Task 2: Main — the edit run, the step back, the views, the api
+### Task 2: Main: the edit run, the step back, the views, the api
 
 **Files:**
 - Modify: `apps/desktop/src/main/motion-write.ts`, `motion-write.test.ts`
@@ -102,7 +102,7 @@ export function editBrief(args: { brief: string; html: string; instruction: stri
 - [ ] **Step 7: The view** (`graphicViews`): `instruction` (the spec's, or null), `editFailed` (or null), `canUndo` (a `previous` is there). Tests in `highlights.test.ts`.
 - [ ] **Step 8:** `npm test` and `npm run typecheck`.
 
-### Task 3: Renderer — edit, undo, the lines of a row
+### Task 3: Renderer: edit, undo, the lines of a row
 
 **Files:**
 - Modify: `apps/desktop/src/renderer/src/edit/FlairTab.tsx`, `edit/GraphicsTab.tsx`, `room/ClipRoom.tsx`, `i18n.ts`, `styles/edit.css`

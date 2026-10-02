@@ -375,6 +375,15 @@ test("shows the rendered graphic files with their total size", async () => {
   expect(await screen.findByText(t("settings.graphicFiles", { count: 3, size: formatBytes(40_000_000) }))).toBeTruthy()
 })
 
+test("the rendered files are the graphics' and the composed sounds', and the row, its hint and its busy refusal say so", async () => {
+  renderWith([settingsView({ graphicFiles: { count: 3, bytes: 40_000_000 } })])
+  expect(await screen.findByText(`ไฟล์กราฟิกและเสียงที่เรนเดอร์ไว้ 3 ไฟล์ (${formatBytes(40_000_000)})`)).toBeTruthy()
+  const hint = screen.getByText(t("settings.graphicFilesHint")).textContent!
+  expect(hint).toContain("~/Movies/CapCut/BOXBLACK/graphics")
+  expect(hint).toContain("~/Movies/CapCut/BOXBLACK/sounds")
+  expect(t("settings.graphicFilesBlockedBusy")).toContain("กำลังเรนเดอร์กราฟิกหรือเสียงอยู่")
+})
+
 test("the result is announced through a status region that stays empty until a clean has run", async () => {
   renderWith([settingsView({ graphicFiles: { count: 3, bytes: 40_000_000 } })])
   await screen.findByText(t("settings.graphicFilesHint"))

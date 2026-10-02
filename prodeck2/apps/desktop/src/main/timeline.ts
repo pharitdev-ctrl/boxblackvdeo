@@ -45,21 +45,27 @@ import { buildCaptions, captionLimits, polishSubtitles, SUBTITLE_POLISH_PROMPT, 
 import type { AppEvent, BackupInfo, HighlightRequest, HighlightViewOptions, StoredOutline, SubtitleLine, SubtitleRequest, WriteResult } from "../shared/api.ts"
 import { loadFootage, transcriptFingerprint, type FootageDeps } from "./footage.ts"
 import type { HighlightAssets } from "./highlight-assets.ts"
-import { isReplaced, replacedPoints } from "./graphics-cues.ts"
+import { isReplaced, replacedPoints, zoomedFaces } from "./graphics-cues.ts"
 import { heldExits, hiddenWords, looksInForce, placedPoints, placementOf, placeStored, SHOW_ALL, showRulesOf, showRulesOver, styleInForce, timelineOf, type ShowRules } from "./highlight-state.ts"
-import { cuesInForce, slotsFor } from "./sound-cues.ts"
-import { insertsInForce, itemPlaceOf, keepClearAt, placeOf, type SpareMedia } from "./insert-media.ts"
+import { cuesInForce, samePlace, slotsFor } from "./sound-cues.ts"
+import { itemPlaceOf, keepClearAt, placeOf, type SpareMedia } from "./insert-media.ts"
 import { spokenSentences, wordsIn } from "./spoken.ts"
 import { addInsertTrack, type TimelineInsert } from "@boxblack/core/capcut/inserts"
 import { faceYOf, pieceKey, punchAtUs, zoomSlotsFor, zoomsInForce } from "./zoom-cues.ts"
 import { addZooms, type TimelineZoom } from "@boxblack/core/capcut/zoom"
+import { addMoves, zoomsBesideMoves, type TimelineMove } from "@boxblack/core/capcut/moves"
+import type { PlacedInsert } from "@boxblack/core/flair/plan"
+import { movesOnCut, type PlacedMove } from "./move-cues.ts"
 import type { SoundLibrary } from "./sound-library.ts"
 import { addSoundTrack, type TimelineSoundCue } from "@boxblack/core/capcut/sounds"
 import type { FlairOptions } from "@boxblack/core/flair/catalogue"
 import { soundNeedsPro } from "@boxblack/core/flair/sound-catalogue"
 import type { PlacedPoint, PointFilter } from "@boxblack/core/emphasis"
 import { addGraphicTrack, type TimelineGraphic } from "@boxblack/core/capcut/graphics"
-import { addBinItems, binIdOf, graphicBinItem, pruneBinItems } from "@boxblack/core/capcut/bin"
+import { addBinItems, binIdOf, graphicBinItem, pruneBinItems, soundBinItem } from "@boxblack/core/capcut/bin"
+import { addComposedSoundTrack, type TimelineComposedSound } from "@boxblack/core/capcut/composed-sounds"
+import { soundJobOf, type PlacedComposed } from "./composed-cues.ts"
+import type { SoundRenderer } from "./sound-render.ts"
 import type { PlacedGraphic } from "@boxblack/core/graphics/plan"
 import type { GraphicsRenderer, RenderJob } from "./graphics-render.ts"
 import type { OutlineStore } from "./planner.ts"
@@ -98,6 +104,15 @@ export interface TimelineDeps extends FootageDeps {
   graphicJobs?: (folder: string, rules: CutRules, options: HighlightViewOptions) => Promise<{ kept: PlacedGraphic[]; jobs: (RenderJob | null)[] }>
   /** where the renderer keeps the rendered graphics (~/Movies/CapCut/BOXBLACK/graphics); the bin entries for the ones a write no longer plays are taken out */
   graphicsDir?: string
+  /** the composed sounds' renderer, which the write waits for as it does for the graphics */
+  soundRenderer?: Pick<SoundRenderer, "ensure" | "statusOf" | "fileOf" | "forgetMachine" | "environmentProblem">
+  /**
+   * the composed sounds in force, placed as the preview places them, each tied one with the graphic it scores: the
+   * highlight service's (`composedSounds`), handed in as `graphicJobs` is
+   */
+  composedSounds?: (folder: string, rules: CutRules, options: HighlightViewOptions) => Promise<{ kept: PlacedComposed[]; off: PlacedComposed[]; unplaced: number }>
+  /** where the sound renderer keeps the composed sounds (~/Movies/CapCut/BOXBLACK/sounds); the bin entries for the ones a write no longer plays are taken out */
+  soundsDir?: string
   /** tells the app when a write starts and how it ended */
   send?: (event: AppEvent) => void
 }
@@ -111,24 +126,53 @@ interface Manifest {
 
 const segmentCount = (info: DraftInfo) => info.tracks.reduce((sum, track) => sum + track.segments.length, 0)
 
-/** The kinds of item a writer lays on the rough cut, as the write result counts them. */
-type LaidKind = keyof WriteResult["dropped"]
+/** The kinds of item a writer lays on the rough cut, as the write result counts them: the composed sounds apart from CapCut's. */
+type LaidKind = keyof WriteResult["dropped"] | "composed"
 
 /**
  * The write result's counts of what the writers laid, each read from that writer's own answer: how
  * many items it placed and how many it left out. A kind no writer ran for (nothing was sent to it)
- * placed and left out nothing.
+ * placed and left out nothing. The composed sounds are counted apart from CapCut's sounds, but one
+ * their writer left out is a sound left out like any other.
  */
-export function tally(laid: Partial<Record<LaidKind, { kept: number; dropped: number }>>): Pick<WriteResult, "soundCount" | "zoomCount" | "insertCount" | "graphicCount" | "dropped"> {
+export function tally(laid: Partial<Record<LaidKind, { kept: number; dropped: number }>>): Pick<WriteResult, "soundCount" | "composedCount" | "zoomCount" | "insertCount" | "graphicCount" | "dropped"> {
   const of = (kind: LaidKind) => laid[kind] ?? { kept: 0, dropped: 0 }
   return {
     soundCount: of("sounds").kept,
+    composedCount: of("composed").kept,
     zoomCount: of("zooms").kept,
     insertCount: of("inserts").kept,
     graphicCount: of("graphics").kept,
-    dropped: { sounds: of("sounds").dropped, zooms: of("zooms").dropped, inserts: of("inserts").dropped, graphics: of("graphics").dropped },
+    dropped: {
+      sounds: of("sounds").dropped + of("composed").dropped,
+      zooms: of("zooms").dropped,
+      inserts: of("inserts").dropped,
+      graphics: of("graphics").dropped,
+      moves: of("moves").dropped,
+    },
   }
 }
+
+/** The bytes of one second of a composed sound's file: 16-bit stereo at 48 kHz, as the sound renderer writes them. */
+const WAV_BYTES_PER_SECOND = 4 * 48_000
+
+/**
+ * A composed sound's own length, in whole microseconds, read from its file: the size of its data chunk, found past
+ * whatever chunks ffmpeg put before it, and never more than the file holds. It throws on a file that is not a WAV.
+ */
+export async function wavLengthUs(path: string): Promise<number> {
+  const bytes = await readFile(path)
+  if (bytes.length < 12 || bytes.toString("latin1", 0, 4) !== "RIFF" || bytes.toString("latin1", 8, 12) !== "WAVE") throw new Error(`${basename(path)} is not a WAV file`)
+  let at = 12
+  while (at + 8 <= bytes.length) {
+    const size = bytes.readUInt32LE(at + 4)
+    if (bytes.toString("latin1", at, at + 4) === "data") return Math.floor((Math.min(size, bytes.length - at - 8) * 1_000_000) / WAV_BYTES_PER_SECOND)
+    // a chunk of an odd size is padded to an even one
+    at += 8 + size + (size % 2)
+  }
+  throw new Error(`${basename(path)} has no sound in it`)
+}
+
 
 /** CapCut's bin ids are lower-case UUIDs, unlike its upper-case segment and material ids (read from 0917 on 2026-09-24). */
 const newBinId = () => randomUUID()
@@ -280,44 +324,31 @@ export function createTimelineService(deps: TimelineDeps) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
-  /** The cutaways the preview would have shown, ready for the overlay writer; `points` are the points placed on this rough cut. */
-  async function insertCutaways(
-    stored: StoredOutline,
-    plan: CutPlan,
-    placed: PlacedGroup[],
-    clips: CutClip[],
-    folder: string,
-    flair: FlairOptions,
-    passes: PointFilter,
-    points: PlacedPoint[],
-    onFrames: (rawUs: number) => number,
-  ): Promise<TimelineInsert[]> {
-    if (!flair.insert || !deps.media) return []
-    // chosen exactly as the preview chose them, on the rough cut before rounding
-    const at = timelineOf(plan)
-    const timed = timeHighlights(placed, at, plan.durationUs)
-    const beatNames = new Map(stored.outline.beats.map((beat) => [beat.id, beat.name]))
-    const slots = slotsFor({ plan, groups: timed, beatNames, at })
-    const sentences = spokenSentences({ plan, wordsOf: wordsIn(clips), beatNames, at })
-    const media = await deps.media.list(folder, stored.videoIds)
-    // one whose moment the cut took out plays where its point starts now, as the preview shows it
-    const place = itemPlaceOf(placeOf({ slots, sentences, plan, at }), points)
-    const { kept } = insertsInForce({ inserts: stored.flair?.inserts ?? [], place, media, flair, durationUs: plan.durationUs, passes })
-    return kept.map((insert) => ({
-      // then played where that moment lands once the pieces are on their frames
-      atUs: onFrames(insert.atUs),
-      durationUs: insert.durationUs,
-      fit: insert.cue.fit ?? "cover",
-      subject: insert.cue.subject ?? null,
-      keepClear: keepClearAt(plan, clips, insert.atUs),
-      binId: insert.media.binId,
-      path: insert.media.path,
-      name: insert.media.name,
-      kind: insert.media.kind,
-      width: insert.media.width,
-      height: insert.media.height,
-      durationOfFileUs: insert.media.durationUs,
-    }))
+  /**
+   * The cutaways the preview would have shown, ready for the overlay writer: `kept` are the cutaways in force as the
+   * moves were placed on them (`movesOnCut`), chosen as the preview chose them on the rough cut before rounding, and
+   * each carries the poses of the move kept on it, if any (`moves`).
+   */
+  function insertCutaways(kept: PlacedInsert[], moves: PlacedMove[], plan: CutPlan, clips: CutClip[], onFrames: (rawUs: number) => number): TimelineInsert[] {
+    return kept.map((insert, index) => {
+      const move = moves.find((entry) => entry.insertIndex === index)
+      return {
+        // then played where that moment lands once the pieces are on their frames
+        atUs: onFrames(insert.atUs),
+        durationUs: insert.durationUs,
+        fit: insert.cue.fit ?? "cover",
+        subject: insert.cue.subject ?? null,
+        keepClear: keepClearAt(plan, clips, insert.atUs),
+        binId: insert.media.binId,
+        path: insert.media.path,
+        name: insert.media.name,
+        kind: insert.media.kind,
+        width: insert.media.width,
+        height: insert.media.height,
+        durationOfFileUs: insert.media.durationUs,
+        ...(move ? { poses: move.poses } : {}),
+      }
+    })
   }
 
   /** The zooms the preview would have shown, ready for the keyframe writer, and how many stored zooms lost their piece. */
@@ -431,8 +462,10 @@ export function createTimelineService(deps: TimelineDeps) {
     // would disagree about the text: a render that fails below leaves its point with neither text nor graphic in
     // this write, which counts the graphic as skipped
     let replaced: ReadonlySet<string> = new Set()
-    if (highlights?.flair.graphic && deps.graphicJobs) {
-      const inForce = await deps.graphicJobs(folder, rules, { position: highlights.position, subtitlesOn: subtitles !== null, highlightsOn: highlights.highlightsOn, flair: highlights.flair })
+    // what the request shows, as the preview it was made from showed it
+    const view: HighlightViewOptions | null = highlights && { position: highlights.position, subtitlesOn: subtitles !== null, highlightsOn: highlights.highlightsOn, flair: highlights.flair }
+    if (view?.flair.graphic && deps.graphicJobs) {
+      const inForce = await deps.graphicJobs(folder, rules, view)
       replaced = replacedPoints(inForce)
       // a motion graphic not written yet, or stale, has no job: the write does not wait for it, and it stops nothing
       const withJobs = inForce.kept.flatMap((graphic, i) => {
@@ -463,7 +496,43 @@ export function createTimelineService(deps: TimelineDeps) {
         waitedFor.push(...withJobs)
       }
     }
-    // CapCut may have been opened while the graphics rendered: a write it would refuse must not take a backup first
+
+    // the composed sounds are waited for in the same way, for the same reason. Only the written and fresh ones are
+    // made, and one tied to a graphic only while that graphic has a job: it is never laid without it
+    const soundsWaitedFor: PlacedComposed[] = []
+    const composedLeftOut = { unwritten: 0, stale: 0, failed: 0 }
+    if (view?.flair.sound && deps.composedSounds) {
+      const inForce = await deps.composedSounds(folder, rules, view)
+      for (const placed of inForce.kept) {
+        const { sound, graphic } = placed
+        if (sound.code === null) {
+          if (sound.failed !== undefined) composedLeftOut.failed++
+          else composedLeftOut.unwritten++
+        } else if (placed.stale !== null || (graphic && !waitedFor.some((waited) => samePlace(waited.graphic.cue.anchor, graphic.cue.anchor)))) {
+          composedLeftOut.stale++
+        } else soundsWaitedFor.push(placed)
+      }
+      const jobs = soundsWaitedFor.map(soundJobOf)
+      if (jobs.length > 0) {
+        const renderer = deps.soundRenderer
+        if (!renderer) throw new Error("the sounds cannot be made: there is no sound renderer; the draft was not changed")
+        // a machine an earlier render found unfit may be fit by now (the page restarted, ffmpeg found again): it is tried again
+        renderer.forgetMachine()
+        await renderer.ensure(jobs)
+        // a sound neither made nor failed was stopped (the app is quitting), or the machine was found unfit while it
+        // waited: that is not a sound to leave out
+        const states = await Promise.all(jobs.map((job) => renderer.statusOf(job)))
+        if (states.includes("pending")) {
+          const problem = renderer.environmentProblem()
+          throw new Error(
+            problem === null
+              ? "the sounds were stopped before they were made; the draft was not changed"
+              : `the sounds cannot be made on this machine: ${problem}, or turn sounds off; the draft was not changed`,
+          )
+        }
+      }
+    }
+    // CapCut may have been opened while the graphics and sounds rendered: a write it would refuse must not take a backup first
     await assertCapCutClosed(deps.isCapCutRunning)
 
     const draft = await loadDraft(folder)
@@ -486,6 +555,15 @@ export function createTimelineService(deps: TimelineDeps) {
     // filter the items pass, so the count and what is written cannot disagree
     const emphasisCount = points.filter((where) => show.passes(where.point.id)).length
     const placed = highlights ? placeStored(stored, cutPlan, clips, show) : []
+    const canvas = canvasOf(cutPlan, draft)
+    // the moves of the picture and the cutaways they may move, placed as the preview places them (movesOnCut), on the
+    // rough cut before rounding: the text keeps off the faces where they put them, as the preview showed it
+    const beforeRounding = timelineOf(cutPlan)
+    const timedBefore = timeHighlights(placed, beforeRounding, cutPlan.durationUs)
+    const pictures = highlights?.flair.insert && deps.media ? await deps.media.list(folder, stored.videoIds) : []
+    const moved = highlights
+      ? movesOnCut({ stored, plan: cutPlan, clips, canvas, flair: highlights.flair, points, groups: timedBefore, pictures, passes: show.passes, at: beforeRounding })
+      : { kept: [], off: [], dropped: 0, lost: 0, inserts: [] }
 
     if (subtitles) {
       // with the text off no group is placed, so none hides a word; nor does a replaced group, which is not drawn
@@ -511,12 +589,14 @@ export function createTimelineService(deps: TimelineDeps) {
       }
       // what is drawn as text: not the groups of a point whose graphic plays in their place
       const drawn = groups.filter((group) => !isReplaced(group, replaced))
-      const canvas = canvasOf(cutPlan, draft)
       if (drawn.length > 0 && canvas) {
         if (!deps.highlightAssets) throw new Error("highlight text is not ready: its fonts are missing")
         // the custom style's colours are the user's own, kept in settings
         const style = styleFor(styleInForce(stored.highlights), settings.highlights.custom)
         const byId = new Map(placed.map((group) => [group.groupId, group]))
+        // the faces where the moves put them while each group is on screen, as the preview times it before rounding
+        const faceBand = zoomedFaces({ moves: moved.kept, plan: cutPlan, clips, canvas, at: beforeRounding }).bandIn
+        const onScreen = new Map(timedBefore.map((group) => [group.groupId, { startUs: group.startUs, endUs: group.endUs }]))
         // an exit that needs CapCut Pro the user does not have is written as none; it stays stored
         const looks = looksInForce(
           stored,
@@ -527,7 +607,7 @@ export function createTimelineService(deps: TimelineDeps) {
         )
         exitsHeld = Object.keys(heldExits(stored, drawn.map((group) => group.groupId), highlights.flair, settings.capcut.pro)).length
         const laidOut = drawn.map((group) => {
-          const placement = placementOf(byId.get(group.groupId)!, clips, highlights.position, subtitles !== null)
+          const placement = placementOf(byId.get(group.groupId)!, clips, highlights.position, subtitles !== null, () => faceBand(onScreen.get(group.groupId)!))
           const look = looks[group.groupId] ?? DEFAULT_LOOK
           const { lines } = layoutGroup(group.lines.map((line) => line.text.trim()), style.font, canvas, placement, look.pattern)
           const exit = look.exit === null ? null : (exitById(look.exit) ?? null)
@@ -561,13 +641,20 @@ export function createTimelineService(deps: TimelineDeps) {
       laid[kind] = counts
     }
 
-    // the picture moves before anything is laid on top of it
+    // the picture moves before anything is laid on top of it: Claude's moves on their pieces, and the legacy zooms on
+    // the pieces no move plays on, since a piece has one set of keyframes and the move wins. The moves the checks
+    // turned down are counted with those the writer left out
+    const moves: TimelineMove[] = moved.kept.flatMap((move) => (move.cut !== undefined ? [{ cut: move.cut, startUs: move.startUs, poses: move.poses }] : []))
+    if (moves.length > 0) lay("moves", addMoves(info, moves))
+    laid.moves = { kept: laid.moves?.kept ?? 0, dropped: (laid.moves?.dropped ?? 0) + moved.dropped }
     const zoomed = highlights ? zoomsFor(stored, cutPlan, placed, clips, highlights.flair, show.passes) : { zooms: [], lost: 0 }
-    if (zoomed.zooms.length > 0) lay("zooms", addZooms(info, zoomed.zooms))
+    const beside = zoomsBesideMoves(zoomed.zooms, moves).zooms
+    if (beside.length > 0) lay("zooms", addZooms(info, beside))
 
-    // the cutaways sit over the picture but under the text
+    // the cutaways sit over the picture but under the text, each with the move kept on it
     // timed like the text, on the frames the picture really starts on
-    const inserts = highlights ? await insertCutaways(stored, cutPlan, placed, clips, folder, highlights.flair, show.passes, points, played) : []
+    const inserts = highlights && highlights.flair.insert && deps.media ? insertCutaways(moved.inserts, moved.kept, cutPlan, clips, played) : []
+    // a move on a cutaway the overlay writer leaves out goes with it, counted as that cutaway, not as a move
     if (inserts.length > 0) lay("inserts", addInsertTrack(info, inserts))
 
     // the graphics sit over the cutaways but under the text, timed like the cutaways
@@ -576,6 +663,8 @@ export function createTimelineService(deps: TimelineDeps) {
     const idOfPath = new Map<string, string>()
     // those with nothing to render are left out before any is laid
     let graphicsSkipped = unmade
+    // the graphics laid, which the sounds tied to them need
+    const graphicsLaid: PlacedGraphic[] = []
     for (const { graphic, job } of waitedFor) {
       const file = await deps.graphics!.rendered(job)
       // its render failed, or it was made and its file is gone since
@@ -589,6 +678,7 @@ export function createTimelineService(deps: TimelineDeps) {
       const binId = idOfPath.get(file.path) ?? binIdOf(draft.meta, file.path) ?? newBinId()
       idOfPath.set(file.path, binId)
       binItems.push(graphicBinItem({ id: binId, path: file.path, width: file.width, height: file.height, durationUs: file.durationUs, nowMs: time.getTime() }))
+      graphicsLaid.push(graphic)
       graphics.push({
         atUs: played(graphic.atUs),
         durationUs: graphic.durationUs,
@@ -603,20 +693,49 @@ export function createTimelineService(deps: TimelineDeps) {
     }
     if (graphics.length > 0) lay("graphics", addGraphicTrack(info, graphics))
 
+    // the composed sounds go on above the graphics, each for its file's own length, timed like the graphics; one tied
+    // to a graphic the write left out goes with it, as stale
+    const composed: TimelineComposedSound[] = []
+    for (const placed of soundsWaitedFor) {
+      const { graphic } = placed
+      if (graphic && !graphicsLaid.some((laid) => samePlace(laid.cue.anchor, graphic.cue.anchor))) {
+        composedLeftOut.stale++
+        continue
+      }
+      const job = soundJobOf(placed)
+      const renderer = deps.soundRenderer!
+      // its render failed, or it was made and its file is gone since, cannot be read, or holds no sound
+      const durationUs = (await renderer.statusOf(job)) === "ready" ? await wavLengthUs(renderer.fileOf(job)).catch(() => null) : null
+      if (durationUs === null || durationUs <= 0) {
+        composedLeftOut.failed++
+        continue
+      }
+      const path = renderer.fileOf(job)
+      // as for a graphic: a file in the bin keeps its entry, and two sounds made of the same file share one
+      const binId = idOfPath.get(path) ?? binIdOf(draft.meta, path) ?? newBinId()
+      idOfPath.set(path, binId)
+      binItems.push(soundBinItem({ id: binId, path, durationUs, nowMs: time.getTime() }))
+      composed.push({ atUs: played(placed.atUs), durationUs, path, binId })
+    }
+    if (composed.length > 0) lay("composed", addComposedSoundTrack(info, composed))
+
     // the sound effects go on last, so their track sits above the text
     const sounds = highlights ? await soundCues(stored, cutPlan, placed, clips, highlights.flair, show.passes, points, played, settings.capcut.pro) : { cues: [], pro: 0 }
     if (sounds.cues.length > 0) lay("sounds", addSoundTrack(info, sounds.cues))
 
-    // the bin is brought in line on every write, graphics on or off, so graphics this timeline no longer
-    // plays leave the user's media panel. Only files in BOXBLACK's own graphics folder are ever taken
-    // out, and the write replaces the whole timeline — unless the project holds other timelines, which
-    // share this bin and may still play older graphics
-    const pruneIn = deps.graphicsDir && (await liveTimelines(draft)) <= 1 ? deps.graphicsDir : null
-    const playing = new Set(graphics.map((graphic) => graphic.binId))
+    // the bin is brought in line on every write, graphics and sounds on or off, so graphics and composed sounds this
+    // timeline no longer plays leave the user's media panel. Only files in BOXBLACK's own graphics and sounds folders
+    // are ever taken out, each folder kept to what this timeline plays from it, and the write replaces the whole
+    // timeline — unless the project holds other timelines, which share this bin and may still play older ones
+    const prunes: [dir: string, keep: Set<string>][] = []
+    if ((await liveTimelines(draft)) <= 1) {
+      if (deps.graphicsDir) prunes.push([deps.graphicsDir, new Set(graphics.map((graphic) => graphic.binId))])
+      if (deps.soundsDir) prunes.push([deps.soundsDir, new Set(composed.map((sound) => sound.binId))])
+    }
     const dir = await backupDraft(draft, deps.backupRoot, time)
     await writeDraft(draft, info, {
       isCapCutRunning: deps.isCapCutRunning,
-      bin: (meta) => (pruneIn ? addBinItems(pruneBinItems(meta, pruneIn, playing), binItems) : addBinItems(meta, binItems)),
+      bin: (meta) => addBinItems(prunes.reduce((pruned, [folder, keep]) => pruneBinItems(pruned, folder, keep), meta), binItems),
     })
 
     const { backup } = await describe(basename(dir))
@@ -628,8 +747,10 @@ export function createTimelineService(deps: TimelineDeps) {
       captionCount: textSegments(1),
       highlightCount: textSegments(0),
       ...tally(laid),
-      zoomsLost: zoomed.lost,
+      // the moves with no place on the cut are counted with the zooms whose piece is gone, as the preview counts them
+      zoomsLost: zoomed.lost + moved.lost,
       graphicsSkipped,
+      composedLeftOut,
       emphasisCount,
       proLeftOut: { exits: exitsHeld, sounds: sounds.pro },
     }

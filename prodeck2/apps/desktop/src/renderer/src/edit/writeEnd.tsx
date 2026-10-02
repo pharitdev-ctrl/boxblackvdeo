@@ -8,8 +8,14 @@ import { Toast } from "../ui/Toast.tsx"
 // count (what was dropped, zooms lost, Pro items left out) has more to read, so it stays as long
 export const ACTION_TOAST_MS = 12_000
 
-/** What the writers left out, by kind, named as the switches name them. */
-export const DROPPED_NAMES: Record<keyof WriteResult["dropped"], MessageKey> = { sounds: "flair.sound", zooms: "flair.zoom", inserts: "flair.insert", graphics: "flair.graphic" }
+/** What the writers left out, by kind, named as the switches name them; the moves are under the zoom switch. */
+export const DROPPED_NAMES: Record<keyof WriteResult["dropped"], MessageKey> = { sounds: "flair.sound", zooms: "flair.zoom", inserts: "flair.insert", graphics: "flair.graphic", moves: "flair.zoom" }
+
+/**
+ * The kinds told by a line of their own rather than by their name and "less than a frame left": the moves are
+ * dropped by the checks (an edge would show, or the face would leave the frame), so that reason would be wrong.
+ */
+const OWN_LINES: Partial<Record<keyof WriteResult["dropped"], MessageKey>> = { moves: "write.movesDropped" }
 
 /** What was written; graphics are counted when there were any, and so are the ones left out: not written yet, to be written again, or kept out by a failed render. */
 export function doneMessage(written: WriteResult): string {
@@ -21,8 +27,11 @@ export function doneMessage(written: WriteResult): string {
 /** What the result says beyond the count, one phrase each: what was dropped by kind, zooms lost, Pro items left out. */
 export function doneNotes(written: WriteResult): string[] {
   const notes: string[] = []
-  for (const kind of Object.keys(DROPPED_NAMES) as (keyof WriteResult["dropped"])[]) {
-    if (written.dropped[kind] > 0) notes.push(t("write.resultDropped", { what: t(DROPPED_NAMES[kind]), count: written.dropped[kind] }))
+  for (const kind of Object.keys(DROPPED_NAMES) as (keyof typeof DROPPED_NAMES)[]) {
+    const count = written.dropped[kind]
+    if (count === 0) continue
+    const own = OWN_LINES[kind]
+    notes.push(own ? t(own, { count }) : t("write.resultDropped", { what: t(DROPPED_NAMES[kind]), count }))
   }
   if (written.zoomsLost > 0) notes.push(t("write.zoomsLost", { count: written.zoomsLost }))
   if (written.proLeftOut.exits + written.proLeftOut.sounds > 0) notes.push(t("write.proLeftOut", { exits: written.proLeftOut.exits, sounds: written.proLeftOut.sounds }))
@@ -50,5 +59,5 @@ export function WriteEndToast({ projectName, end, onDone }: { projectName: strin
   // the same words as the room's own toast, and as long: what the write left out is told wherever the user is
   const message = end.state === "done" ? toldMessage(end.result) : t("write.failed", { message: end.error })
   const long = end.state === "failed" || toldIsLong(end.result)
-  return <Toast message={t("write.away", { project: projectName, message })} ms={long ? ACTION_TOAST_MS : undefined} onDone={onDone} />
+  return <Toast message={t("write.away", { project: projectName, message })} ms={long ? ACTION_TOAST_MS : undefined} pose={end.state === "done" ? "done" : "oops"} onDone={onDone} />
 }

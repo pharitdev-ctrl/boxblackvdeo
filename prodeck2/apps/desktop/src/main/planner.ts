@@ -1,5 +1,6 @@
 import { addUnusedPart, planOutline, unusedParts, type Brief, type Outline, type UnusedPart } from "@boxblack/core/planner"
 import type { CueAnchor, PieceAnchor } from "@boxblack/core/flair/plan"
+import { isComposed, type ComposedSound } from "@boxblack/core/sound/spec"
 import type { StoredOutline } from "../shared/api.ts"
 import type { TransportFactories } from "./analysis.ts"
 import { loadFootage, type FootageDeps } from "./footage.ts"
@@ -10,20 +11,27 @@ import { POST_VERSION } from "./post-cleanup.ts"
 import { ProjectFiles } from "./project-files.ts"
 import type { SecretStore } from "./settings.ts"
 
-/** An outline whose beats got new ids: the sounds, zooms, cutaways, graphics, highlight text and emphasis points on them follow. */
+/**
+ * An outline whose beats got new ids: the sounds, zooms, moves, cutaways, graphics, highlight text and emphasis points on them
+ * follow, and a composed sound tied to a graphic names the graphic by its moment on the new beat too.
+ */
 function withBeatsRenamed(stored: StoredOutline, renamed: Map<string, string>): StoredOutline {
   if (renamed.size === 0) return stored
   const onBeat = <T extends { anchor: CueAnchor | PieceAnchor }>(item: T): T => {
     const beatId = "beatId" in item.anchor ? item.anchor.beatId : undefined
     return beatId !== undefined && renamed.has(beatId) ? { ...item, anchor: { ...item.anchor, beatId: renamed.get(beatId)! } } : item
   }
+  const tiedOnBeat = (sound: ComposedSound): ComposedSound => (sound.graphic ? { ...sound, graphic: onBeat({ anchor: sound.graphic }).anchor } : sound)
   const was = stored.flair
   const flair = was && {
     ...was,
     ...(was.cues ? { cues: was.cues.map(onBeat) } : {}),
     ...(was.zooms ? { zooms: was.zooms.map(onBeat) } : {}),
+    ...(was.moves ? { moves: was.moves.map(onBeat) } : {}),
     ...(was.inserts ? { inserts: was.inserts.map(onBeat) } : {}),
     ...(was.graphics ? { graphics: was.graphics.map(onBeat) } : {}),
+    // a stored entry that is no composed sound is left as it is
+    ...(was.composed ? { composed: was.composed.map((sound) => (isComposed(sound) ? tiedOnBeat(onBeat(sound)) : sound)) } : {}),
   }
   const highlights = stored.highlights && {
     ...stored.highlights,
@@ -126,15 +134,19 @@ export function createPlannerService(deps: PlannerDeps) {
             ? { ...item, anchor: { ...item.anchor, beatId: lastNow } }
             : item
         // a beat taken out never comes back, and neither can what sat on its edges, joins, pieces or sentences
-        const kept = <T extends { anchor: CueAnchor | PieceAnchor }>(items: T[]) =>
-          items.map(closing).filter((item) => !("beatId" in item.anchor) || beatIds.includes(item.anchor.beatId!))
+        const onBeatKept = (anchor: CueAnchor | PieceAnchor) => !("beatId" in anchor) || beatIds.includes(anchor.beatId!)
+        const kept = <T extends { anchor: CueAnchor | PieceAnchor }>(items: T[]) => items.map(closing).filter((item) => onBeatKept(item.anchor))
         const was = stored.flair
         const flair = was && {
           ...was,
           ...(was.cues ? { cues: kept(was.cues) } : {}),
           ...(was.zooms ? { zooms: kept(was.zooms) } : {}),
+          ...(was.moves ? { moves: kept(was.moves) } : {}),
           ...(was.inserts ? { inserts: kept(was.inserts) } : {}),
           ...(was.graphics ? { graphics: kept(was.graphics) } : {}),
+          // a composed sound tied to a graphic on a sentence of a beat taken out goes with that graphic
+          // (a stored entry that is no composed sound is left as it is)
+          ...(was.composed ? { composed: was.composed.filter((sound) => !isComposed(sound) || (onBeatKept(sound.anchor) && (sound.graphic === undefined || onBeatKept(sound.graphic)))) } : {}),
         }
         const next: StoredOutline = { ...stored, outline: { ...stored.outline, beats }, confirmed, updatedAt: Date.now(), ...(flair ? { flair } : {}) }
         // highlight text picked in a beat taken out goes too, with its look and sounds

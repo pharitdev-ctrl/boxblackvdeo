@@ -7,7 +7,6 @@ import type {
   EmphasisSceneView,
   EmphasisSentenceView,
   EmphasisType,
-  FlairLevel,
   HighlightPreview,
   Importance,
 } from "../../../shared/api.ts"
@@ -17,7 +16,6 @@ import { Button } from "../ui/Button.tsx"
 import { Empty } from "../ui/Empty.tsx"
 import { Select } from "../ui/Select.tsx"
 import { PicturePicker } from "./PicturePicker.tsx"
-import { LevelControl } from "./TabSettings.tsx"
 
 export interface EmphasisTabProps {
   /** the points of the open beat, or of the whole clip, in playing order */
@@ -26,8 +24,6 @@ export interface EmphasisTabProps {
   sentences: EmphasisSentenceView[]
   /** its kept scenes of picture beats */
   scenes: EmphasisSceneView[]
-  level: FlairLevel
-  onLevel: (level: FlairLevel) => void
   /** stored points not on the cut now */
   hidden: number
   /**
@@ -115,10 +111,10 @@ function ReasonInput({ point, disabled, onChange }: { point: EmphasisPointView; 
 
 /**
  * Work 1: the points the clip stresses, each with its importance, type and reason, and the words and
- * scenes to make new ones from or to move one to. The level set here decides which points get effects.
+ * scenes to make new ones from or to move one to. The level, set in the AI menu, decides which points get effects.
  */
 export function EmphasisTab(props: EmphasisTabProps) {
-  const { points, sentences, scenes, level, onLevel, hidden, dropped, busy, writing, onChange, onAdd, onText, media, onPicture, chosenPicture } = props
+  const { points, sentences, scenes, hidden, dropped, busy, writing, onChange, onAdd, onText, media, onPicture, chosenPicture } = props
   const [picked, setPicked] = useState<Picked | null>(null)
   // the point whose phrase is being moved: the words or the scene picked next become its new place
   const [moving, setMoving] = useState<string | null>(null)
@@ -224,9 +220,6 @@ export function EmphasisTab(props: EmphasisTabProps) {
 
   return (
     <div className="emphasis">
-      <div className="tab-settings">
-        <LevelControl level={level} onLevel={onLevel} disabled={writing} />
-      </div>
       {hidden > 0 && <p className="hint">{t("emphasis.hidden", { count: hidden })}</p>}
       {dropped > 0 && <p className="notice warn-text">{t("emphasis.dropped", { count: dropped })}</p>}
       <h2 className="tab-section" tabIndex={-1} ref={heading}>

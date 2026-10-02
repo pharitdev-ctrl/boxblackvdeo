@@ -17,11 +17,17 @@ const OTHER = "00000000000000aa"
 const NOW = Date.parse("2026-09-25T12:00:00Z")
 const LONG_AGO = new Date("2026-09-20T12:00:00Z")
 
-/** A graphics folder holding `hashes` (each with its poster and meta), a drafts root, and BOXBLACK's backup root. */
-async function setup(hashes: string[]) {
+/**
+ * A graphics folder holding `hashes` (each with its poster and meta), a sounds folder beside it holding the composed
+ * sounds `sounds`, a drafts root, and BOXBLACK's backup root.
+ */
+async function setup(hashes: string[], sounds: string[] = []) {
   const root = await mkdtemp(join(tmpdir(), "gfiles-"))
   temps.push(root)
   const dir = join(root, "graphics")
+  const soundsDir = join(root, "sounds")
+  await mkdir(soundsDir, { recursive: true })
+  for (const hash of sounds) await aged(join(soundsDir, `${hash}.wav`), "w".repeat(300))
   const drafts = join(root, "drafts")
   const backups = join(root, "backups")
   await mkdir(dir, { recursive: true })
@@ -39,8 +45,14 @@ async function setup(hashes: string[]) {
     trashed.push(path)
   }
   const clean = (over: Partial<Parameters<typeof cleanGraphicFiles>[0]> = {}) =>
-    cleanGraphicFiles({ dir, draftsRoot: drafts, backupRoot: backups, trash, busy: () => false, now: () => NOW, ...over })
-  return { dir, drafts, backups, trash, trashed, clean }
+    cleanGraphicFiles({ dir, soundsDir, draftsRoot: drafts, backupRoot: backups, trash, busy: () => false, now: () => NOW, ...over })
+  return { dir, soundsDir, drafts, backups, trash, trashed, clean }
+}
+
+/** A file written long enough ago to be settled. */
+async function aged(path: string, content: string) {
+  await writeFile(path, content)
+  await utimes(path, LONG_AGO, LONG_AGO)
 }
 
 /** A draft folder `where` under `root`: its timeline (null for none) and, unless `meta` is false, its meta. */
@@ -295,4 +307,76 @@ test("a Trash that fails trashes nothing: while the meta stays, so does the file
   }
   expect(await clean({ trash: movFails })).toEqual({ trashed: 0, blockedBy: null, kept: null })
   expect(moved).toEqual([join(dir, `${GONE}.json`)])
+})
+
+/* composed sounds */
+
+test("the count covers the composed sounds too: only their kept files, not a render's temporary ones nor anything else there", async () => {
+  const { dir, soundsDir } = await setup([USED], [GONE, OTHER])
+  await writeFile(join(soundsDir, `${USED}.raw.wav`), "x".repeat(70))
+  await writeFile(join(soundsDir, `${USED}.wav.tmp`), "x".repeat(70))
+  await writeFile(join(soundsDir, "mine.wav"), "x".repeat(70))
+  expect(await graphicFilesInfo(dir, soundsDir)).toEqual({ count: 3, bytes: 1600 })
+  // no sounds folder yet, or none asked about: the graphics alone
+  expect(await graphicFilesInfo(dir, join(soundsDir, "none-yet"))).toEqual({ count: 1, bytes: 1000 })
+  expect(await graphicFilesInfo(dir)).toEqual({ count: 1, bytes: 1000 })
+})
+
+test("a composed sound no draft or backup names goes to the Trash on its own; one a draft or a backup names stays", async () => {
+  const BACKED = "77777777777777aa"
+  const { soundsDir, drafts, backups, trashed, clean } = await setup([], [USED, GONE, BACKED])
+  // not a name the renderer gives a sound: left alone
+  await aged(join(soundsDir, "mine.wav"), "x")
+  // a draft names a sound by its path, under whatever folder and case
+  await draft(drafts, "0917", JSON.stringify({ materials: { audios: [{ path: `/Users/Me/Movies/CapCut/BOXBLACK/sounds/${USED.toUpperCase()}.wav`, name: `${USED}.wav` }] } }))
+  await draft(backups, join("0917-x", "draft"), JSON.stringify({ materials: { audios: [{ path: join(soundsDir, `${BACKED}.wav`) }] } }))
+  expect(await clean()).toEqual({ trashed: 1, blockedBy: null, kept: null })
+  expect(trashed).toEqual([join(soundsDir, `${GONE}.wav`)])
+})
+
+test("a composed sound made in the last ten minutes stays, and the result says so", async () => {
+  const { soundsDir, drafts, trashed, clean } = await setup([], [GONE, USED])
+  await draft(drafts, "0917", using())
+  const recent = new Date(NOW - 9 * 60_000)
+  await utimes(join(soundsDir, `${USED}.wav`), recent, recent)
+  expect(await clean()).toEqual({ trashed: 1, blockedBy: null, kept: "recent" })
+  expect(trashed).toEqual([join(soundsDir, `${GONE}.wav`)])
+})
+
+test("a render's temporary files a crash left behind go once settled; recent ones stay, and a draft never keeps them", async () => {
+  const { soundsDir, drafts, trashed, clean } = await setup([], [])
+  await aged(join(soundsDir, `${GONE}.raw.wav`), "x")
+  await aged(join(soundsDir, `${GONE}.wav.tmp`), "x")
+  // a render under way in another sense: the renderer is idle (the clean is not busy), but these were made a minute ago
+  await writeFile(join(soundsDir, `${OTHER}.raw.wav`), "x")
+  await writeFile(join(soundsDir, `${OTHER}.wav.tmp`), "x")
+  // a temporary name in a draft is no sound it plays
+  await draft(drafts, "0917", JSON.stringify({ materials: { audios: [{ path: join(soundsDir, `${GONE}.raw.wav`) }] } }))
+  expect(await clean()).toEqual({ trashed: 2, blockedBy: null, kept: "recent" })
+  expect(trashed.sort()).toEqual([join(soundsDir, `${GONE}.raw.wav`), join(soundsDir, `${GONE}.wav.tmp`)].sort())
+})
+
+test("while busy no sound goes either, and without a sounds folder only the graphics are looked at", async () => {
+  const { soundsDir, drafts, trashed, clean } = await setup([GONE], [GONE])
+  await aged(join(soundsDir, `${OTHER}.raw.wav`), "x")
+  await draft(drafts, "0917", using())
+  expect(await clean({ busy: () => true })).toEqual({ trashed: 0, blockedBy: { kind: "busy" }, kept: null })
+  expect(trashed).toEqual([])
+  expect(await clean({ soundsDir: undefined })).toEqual({ trashed: 1, blockedBy: null, kept: null })
+  expect(trashed.every((path) => !path.startsWith(soundsDir))).toBe(true)
+  // a sounds folder not made yet is no reason to stop (the stand-in Trash left the graphic where it was)
+  expect(await clean({ soundsDir: join(soundsDir, "none-yet") })).toEqual({ trashed: 1, blockedBy: null, kept: null })
+})
+
+test("a write that starts partway through the sounds stops the clean there, counting what went", async () => {
+  const { soundsDir, drafts, trashed, clean } = await setup([], [GONE, OTHER])
+  await draft(drafts, "0917", using())
+  let files = 0
+  const counting = async (path: string) => {
+    files++
+    trashed.push(path)
+  }
+  expect(await clean({ trash: counting, busy: () => files > 0 })).toEqual({ trashed: 1, blockedBy: null, kept: "stopped" })
+  expect(trashed).toHaveLength(1)
+  expect([join(soundsDir, `${GONE}.wav`), join(soundsDir, `${OTHER}.wav`)]).toContain(trashed[0])
 })

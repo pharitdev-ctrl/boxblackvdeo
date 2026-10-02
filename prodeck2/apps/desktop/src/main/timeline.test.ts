@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest"
 import { createHash } from "node:crypto"
-import { readdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { DraftMeta } from "@boxblack/core/capcut"
 import { CUT_PRESETS, DEFAULT_CUT_RULES } from "@boxblack/core/cut/rules"
@@ -20,7 +20,11 @@ import type { AppEvent } from "../shared/api.ts"
 import { problemFor, type RenderJob } from "./graphics-render.ts"
 import { beatsKey } from "./highlight-state.ts"
 import { createHighlightService, type HighlightService } from "./highlights.ts"
-import { createTimelineService, tally, type TimelineDeps } from "./timeline.ts"
+import { createTimelineService, tally, wavLengthUs, type TimelineDeps } from "./timeline.ts"
+import { SOUND_VERSION, type ComposedSound } from "@boxblack/core/sound/spec"
+import { hashOfHtml, soundJobOf, soundStatusOf } from "./composed-cues.ts"
+import { samePlace } from "./sound-cues.ts"
+import { hashOf as soundHashOf, type SoundJob } from "./sound-render.ts"
 
 test("the preview cuts the confirmed outline with the chosen rules", async () => {
   const { service, folder } = await setup()
@@ -1225,6 +1229,138 @@ test("cutaways that overlap are written on tracks of their own, the later on top
   expect(upper!.target_timerange.start).toBeLessThan(lower!.target_timerange.start + lower!.target_timerange.duration)
 })
 
+/* the moves of the picture */
+
+/** A move of Claude's on a word, or on the cutaway there. */
+const moveOn = (sourceUs: number, poses: { s: number; scale: number; ease?: "line" | "inOut" | "cut" }[], insert = false) => ({
+  anchor: { kind: "speech" as const, videoId: CLIP_ID, sourceUs, beatId: "beat-1" },
+  ...(insert ? { insert: true } : {}),
+  from: "medium" as const,
+  about: "ดันเข้า",
+  poses: poses.map((pose) => ({ x: 0, y: 0, rot: 0, ease: "line" as const, ...pose })),
+  edited: false,
+  off: false,
+})
+const MOVES_ON = { enabled: true, level: "heavy" as const, text: true, sound: false, zoom: true, insert: true, graphic: false }
+const scaleKeyframes = (segment: { common_keyframes?: { property_type: string; keyframe_list: { values: number[] }[] }[] | null }) =>
+  segment.common_keyframes?.find((entry) => entry.property_type === "KFTypeScaleX")?.keyframe_list.map((entry) => entry.values[0]) ?? []
+
+test("the write lays the moves as keyframes: on their piece, in place of a legacy zoom there, and on a cutaway's overlay", async () => {
+  const cat = { binId: "m1", path: "/pics/cat.jpg", name: "cat.jpg", kind: "photo" as const, width: 1080, height: 1920, durationUs: 5_000_000 }
+  const { service, folder, outlines } = await setup({ media: { list: async () => [cat] } })
+  const plan = await service.preview(folder, DEFAULT_CUT_RULES)
+  const stored = (await outlines.get(folder))!
+  const pieceAnchor = (cut: number) => ({ videoId: CLIP_ID, sourceUs: plan.cuts[cut]!.sourceStartUs, beatId: "beat-1" })
+  await outlines.put({
+    ...stored,
+    flair: {
+      looks: {},
+      // a legacy zoom on each piece: the first piece's gives way to the move on "ขึ้น"
+      zooms: [
+        { anchor: pieceAnchor(0), kind: "punch", edited: true },
+        { anchor: pieceAnchor(1), kind: "punch", edited: true },
+      ],
+      inserts: [{ anchor: { kind: "speech", videoId: CLIP_ID, sourceUs: s(18.08), beatId: "beat-1" }, binId: "m1", edited: true, fit: "cover", subject: null }],
+      moves: [
+        moveOn(s(17.16), [{ s: 0, scale: 1 }, { s: 1, scale: 1.2, ease: "inOut" }]),
+        moveOn(s(18.08), [{ s: 0, scale: 1.1, ease: "cut" }, { s: 1, scale: 1.2 }], true),
+      ],
+    },
+  })
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, { position: "auto", hideSubtitles: false, highlightsOn: true, groupCount: 0, flair: MOVES_ON })
+  expect(result).toMatchObject({ zoomCount: 1, insertCount: 1, dropped: { moves: 0, zooms: 0, inserts: 0 } })
+
+  const info = await readInfo(folder)
+  const [first, second] = info.tracks[0]!.segments
+  // the move: at rest until "ขึ้น", as far into the piece as the cut has it, then eased up to 1.2 in straight steps
+  const moved = scaleKeyframes(first!)
+  expect(moved[0]).toBe(1)
+  expect(moved.at(-1)).toBeCloseTo(1.2)
+  expect(moved.length).toBeGreaterThan(4)
+  const times = first!.common_keyframes![0]!.keyframe_list.map((entry) => entry.time_offset)
+  expect(times[1]).toBe(first!.source_timerange!.start + s(17.16) - plan.cuts[0]!.sourceStartUs)
+  // the second piece keeps its legacy punch
+  expect(scaleKeyframes(second!)).toEqual([1, 1.15])
+  // the cutaway's move goes on its overlay, on top of its framing
+  const [cutaway] = overlays(info).flatMap((track) => track.segments)
+  const onCutaway = scaleKeyframes(cutaway!)
+  expect(onCutaway[0]).toBeCloseTo(1.1)
+  expect(onCutaway.at(-1)).toBeCloseTo(1.2)
+})
+
+test("a move on the second of two cutaways goes on that cutaway's overlay alone", async () => {
+  const cat = { binId: "m1", path: "/pics/cat.jpg", name: "cat.jpg", kind: "photo" as const, width: 1080, height: 1920, durationUs: 5_000_000 }
+  const dog = { ...cat, binId: "m2", path: "/pics/dog.jpg", name: "dog.jpg" }
+  const { service, folder, outlines } = await setup({ media: { list: async () => [cat, dog] } })
+  const stored = (await outlines.get(folder))!
+  const on = (sourceUs: number) => ({ kind: "speech" as const, videoId: CLIP_ID, sourceUs, beatId: "beat-1" })
+  await outlines.put({
+    ...stored,
+    flair: {
+      looks: {},
+      inserts: [
+        { anchor: on(s(17.16)), binId: "m1", edited: true, fit: "cover", subject: null },
+        { anchor: on(s(18.08)), binId: "m2", edited: true, fit: "cover", subject: null },
+      ],
+      moves: [moveOn(s(18.08), [{ s: 0, scale: 1.1, ease: "cut" }, { s: 1, scale: 1.2 }], true)],
+    },
+  })
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, { position: "auto", hideSubtitles: false, highlightsOn: true, groupCount: 0, flair: MOVES_ON })
+  expect(result).toMatchObject({ insertCount: 2, dropped: { moves: 0, inserts: 0 } })
+  const info = await readInfo(folder)
+  const binOf = (segment: { material_id: string }) => (info.materials.videos as { id: string; local_material_id: string }[]).find((video) => video.id === segment.material_id)!.local_material_id
+  const [lower, upper] = overlays(info).map((track) => track.segments[0]!)
+  expect([binOf(lower!), binOf(upper!)]).toEqual(["m1", "m2"])
+  expect(scaleKeyframes(lower!)).toEqual([])
+  expect(scaleKeyframes(upper!)[0]).toBeCloseTo(1.1)
+  expect(scaleKeyframes(upper!).at(-1)).toBeCloseTo(1.2)
+})
+
+test("the write's graphics are judged against the faces where the moves put them: a free graphic the move covers its face with is stale for its old length, and waits", async () => {
+  // a face from 0.25 to 0.59 of the height, just above SPEC's box (0.6–0.72) until pushed in to 1.3 from "ขึ้น"
+  const scenes = [{ startUs: s(0), endUs: s(31), description: "หน้าคนพูด", kind: "talking-head" as const, issues: [], keepClear: { fromY: 0.25, toY: 0.59 } }]
+  const free: GraphicCue = { ...graphicAt(s(17.16)), from: "medium", spec: { ...SPEC, ...WRITTEN_FOR[s(17.16)]!, replacesText: false } }
+  const withMove = async (moves: ReturnType<typeof moveOn>[]) => {
+    const { service, folder, outlines, graphicJobs } = await withGraphics([free], { scenes })
+    await outlines.update(folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, moves } }))
+    const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request({ ...GRAPHICS, zoom: true }))
+    const { kept } = await graphicJobs.mock.results[0]!.value
+    return [result.graphicCount, result.graphicsSkipped, kept.map((graphic: { durationUs: number }) => graphic.durationUs)]
+  }
+  expect(await withMove([])).toEqual([1, 0, [2_000_000]])
+  expect(await withMove([moveOn(s(17.16), [{ s: 0, scale: 1.3, ease: "cut" }])])).toEqual([0, 1, [1_500_000]])
+})
+
+test("a move whose word the cut took out is counted with the zooms whose piece is gone, in the write and the preview alike", async () => {
+  const { service, folder, outlines, deps } = await setup()
+  const stored = (await outlines.get(folder))!
+  // "สาม" at 19.78 s is in the first countdown, cut as a retake
+  await outlines.put({ ...stored, flair: { looks: {}, moves: [moveOn(s(19.78), [{ s: 0, scale: 1.1, ease: "cut" }])] } })
+  const view = { position: "auto" as const, subtitlesOn: false, highlightsOn: true, flair: MOVES_ON }
+  const highlights = createHighlightService({ outlines, timeline: service, footage: deps })
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, view)).zoomsLost).toBe(1)
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, { position: "auto", hideSubtitles: false, highlightsOn: true, groupCount: 0, flair: MOVES_ON })
+  expect(result).toMatchObject({ zoomsLost: 1, dropped: { moves: 0 } })
+})
+
+test("a move the checks turn down is not written and is counted, and the legacy zoom on its piece plays on", async () => {
+  const { service, folder, outlines } = await setup()
+  const plan = await service.preview(folder, DEFAULT_CUT_RULES)
+  const stored = (await outlines.get(folder))!
+  await outlines.put({
+    ...stored,
+    flair: {
+      looks: {},
+      zooms: [{ anchor: { videoId: CLIP_ID, sourceUs: plan.cuts[0]!.sourceStartUs, beatId: "beat-1" }, kind: "punch", edited: true }],
+      // pushed in past the cap of a 1080-wide video
+      moves: [moveOn(s(17.16), [{ s: 0, scale: 1 }, { s: 1, scale: 1.8 }])],
+    },
+  })
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, { position: "auto", hideSubtitles: false, highlightsOn: true, groupCount: 0, flair: MOVES_ON })
+  expect(result).toMatchObject({ zoomCount: 1, dropped: { moves: 1, zooms: 0 } })
+  expect(scaleKeyframes((await readInfo(folder)).tracks[0]!.segments[0]!)).toEqual([1, 1.15])
+})
+
 test("graphics that overlap are written on tracks of their own, the later on top", async () => {
   // "ขึ้น" and "อวกาศ" are 0.92 s apart, and each graphic plays well over a second
   const { service, folder } = await withGraphics([graphicAt(s(17.16)), graphicAt(s(18.08))])
@@ -1243,9 +1379,11 @@ test("graphics that overlap are written on tracks of their own, the later on top
 
 test("the result counts what each writer placed and left out from that writer's own answer, and nothing for a writer that did not run", () => {
   // each writer was sent more than it placed, and no two answer alike
-  const laid = { sounds: { kept: 1, dropped: 2 }, zooms: { kept: 3, dropped: 4 }, inserts: { kept: 5, dropped: 6 }, graphics: { kept: 7, dropped: 8 } }
-  expect(tally(laid)).toEqual({ soundCount: 1, zoomCount: 3, insertCount: 5, graphicCount: 7, dropped: { sounds: 2, zooms: 4, inserts: 6, graphics: 8 } })
-  expect(tally({ inserts: { kept: 2, dropped: 1 } })).toEqual({ soundCount: 0, zoomCount: 0, insertCount: 2, graphicCount: 0, dropped: { sounds: 0, zooms: 0, inserts: 1, graphics: 0 } })
+  const laid = { sounds: { kept: 1, dropped: 2 }, zooms: { kept: 3, dropped: 4 }, inserts: { kept: 5, dropped: 6 }, graphics: { kept: 7, dropped: 8 }, moves: { kept: 9, dropped: 10 } }
+  expect(tally(laid)).toEqual({ soundCount: 1, composedCount: 0, zoomCount: 3, insertCount: 5, graphicCount: 7, dropped: { sounds: 2, zooms: 4, inserts: 6, graphics: 8, moves: 10 } })
+  expect(tally({ inserts: { kept: 2, dropped: 1 } })).toEqual({ soundCount: 0, composedCount: 0, zoomCount: 0, insertCount: 2, graphicCount: 0, dropped: { sounds: 0, zooms: 0, inserts: 1, graphics: 0, moves: 0 } })
+  // the composed sounds are counted apart, and those their writer left out are sounds left out
+  expect(tally({ sounds: { kept: 1, dropped: 2 }, composed: { kept: 3, dropped: 4 } })).toEqual({ soundCount: 1, composedCount: 3, zoomCount: 0, insertCount: 0, graphicCount: 0, dropped: { sounds: 6, zooms: 0, inserts: 0, graphics: 0, moves: 0 } })
 })
 
 test("a graphic the writer finds no frame for is counted as left out, not as written", async () => {
@@ -1499,4 +1637,352 @@ test("subtitles that hide nothing under the text cost what they did: the graphic
   const lines = await service.subtitles(folder, DEFAULT_CUT_RULES, "line", false)
   await service.write(folder, DEFAULT_CUT_RULES, 0, { length: "line", texts: lines.map((line) => line.text) }, bothGroups())
   expect(graphicJobs).toHaveBeenCalledTimes(1)
+})
+
+
+/* composed sounds */
+
+const SOUNDS_ON: FlairOptions = { ...GRAPHICS, sound: true }
+const CODE = "function compose(ctx, cue, kit) { return kit.silence() }"
+/** A composed sound on a moment of speech, written for the seconds and words `written` says. */
+const soundAt = (sourceUs: number, written: Pick<ComposedSound, "seconds" | "words">, over: Partial<ComposedSound> = {}): ComposedSound => ({
+  anchor: { kind: "speech", videoId: CLIP_ID, sourceUs, beatId: "beat-1" },
+  from: "light",
+  role: "เสียงวูบขึ้น",
+  loudness: "normal",
+  code: CODE,
+  version: SOUND_VERSION,
+  off: false,
+  ...written,
+  ...over,
+})
+/** Written on ขึ้น for its 2 s, as the graphic there is. */
+const UP = soundAt(s(17.16), WRITTEN_FOR[s(17.16)]!)
+/** Written on the second countdown's สาม for its 2 s. */
+const COUNT = soundAt(s(22.62), { seconds: 2, words: COUNTDOWN.words }, { code: `${CODE}\n// count` })
+/** Scoring `graphic`, composed to its fragment, for the 1.7 s it has on อวกาศ. */
+const tiedTo = (graphic: GraphicCue, over: Partial<ComposedSound> = {}) =>
+  soundAt(graphic.anchor.kind === "speech" ? graphic.anchor.sourceUs : 0, WRITTEN_FOR[s(18.08)]!, { graphic: graphic.anchor, graphicHtml: hashOfHtml(graphic.spec.html!), code: `${CODE}\n// tied`, ...over })
+
+const RATE_BYTES = 48_000 * 4
+/** A 16-bit stereo 48 kHz WAV of `seconds`, with a LIST chunk before its data, as ffmpeg writes one. */
+function wavFile(seconds: number): Buffer {
+  const data = Buffer.alloc(Math.round(seconds * 48_000) * 4)
+  const fmt = Buffer.alloc(24)
+  fmt.write("fmt ", 0, "latin1")
+  fmt.writeUInt32LE(16, 4)
+  fmt.writeUInt16LE(1, 8)
+  fmt.writeUInt16LE(2, 10)
+  fmt.writeUInt32LE(48_000, 12)
+  fmt.writeUInt32LE(RATE_BYTES, 16)
+  fmt.writeUInt16LE(4, 20)
+  fmt.writeUInt16LE(16, 22)
+  // an odd size, padded to an even one as RIFF asks
+  const list = Buffer.alloc(8 + 28)
+  list.write("LIST", 0, "latin1")
+  list.writeUInt32LE(27, 4)
+  list.write("INFOISFT", 8, "latin1")
+  const head = Buffer.alloc(8)
+  head.write("data", 0, "latin1")
+  head.writeUInt32LE(data.length, 4)
+  const riff = Buffer.alloc(12)
+  riff.write("RIFF", 0, "latin1")
+  riff.writeUInt32LE(4 + fmt.length + list.length + head.length + data.length, 4)
+  riff.write("WAVE", 8, "latin1")
+  return Buffer.concat([riff, fmt, list, head, data])
+}
+
+/**
+ * A sound renderer that makes the file of every job it is asked to ensure, unless `outcome` says it fails, is stopped,
+ * or is kept as a file that is no WAV ("garbled"), as the real one does: a file there is not made again, a failure is
+ * kept, and a stopped job is neither. Each file is `fileSeconds` long, by default a quarter of a second shorter than
+ * the sound, as a render cut of its silent tail is. Like the real one, while the machine is found unfit (`machine.problem`)
+ * nothing renders until it is forgotten; a problem that `stays` comes back as soon as it is forgotten.
+ */
+function fakeSoundRenderer(dir: string, outcome: (job: SoundJob) => "made" | "failed" | "stopped" | "garbled" = () => "made", fileSeconds = (job: SoundJob) => job.seconds - 0.25) {
+  const failed = new Set<string>()
+  const ensured: SoundJob[][] = []
+  const fileOf = (job: SoundJob) => join(dir, `${soundHashOf(job)}.wav`)
+  const there = (path: string) => stat(path).then(() => true, () => false)
+  const machine = { problem: null as string | null, stays: false, forgotten: 0 }
+  return {
+    ensured,
+    machine,
+    fileOf,
+    async ensure(jobs: SoundJob[]) {
+      ensured.push(jobs)
+      for (const job of jobs) {
+        if ((await there(fileOf(job))) || failed.has(soundHashOf(job)) || machine.problem !== null) continue
+        const result = outcome(job)
+        if (result === "made" || result === "garbled") {
+          await mkdir(dir, { recursive: true })
+          await writeFile(fileOf(job), result === "made" ? wavFile(fileSeconds(job)) : "not a wav")
+        } else if (result === "failed") failed.add(soundHashOf(job))
+      }
+    },
+    async statusOf(job: SoundJob) {
+      if (await there(fileOf(job))) return "ready" as const
+      return failed.has(soundHashOf(job)) ? ("failed" as const) : ("pending" as const)
+    },
+    failureOf: (job: SoundJob) => (failed.has(soundHashOf(job)) ? "failed" : null),
+    environmentProblem: () => machine.problem,
+    forgetMachine() {
+      machine.forgotten++
+      if (!machine.stays) machine.problem = null
+    },
+  }
+}
+
+/** The graphics set-up with composed sounds stored too, placed by the highlight service as the app wires it, and a fake sound renderer writing into a sounds folder shaped like the app's. */
+async function withSounds(
+  sounds: ComposedSound[],
+  graphics: GraphicCue[] = [],
+  extra: Parameters<typeof withGraphics>[1] & { soundOutcome?: Parameters<typeof fakeSoundRenderer>[1]; fileSeconds?: Parameters<typeof fakeSoundRenderer>[2] } = {},
+) {
+  const context = await withGraphics(graphics, extra)
+  await context.outlines.update(context.folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, composed: sounds } }))
+  const soundsDir = join(context.dir, "Movies", "CapCut", "BOXBLACK", "sounds")
+  const soundRenderer = fakeSoundRenderer(soundsDir, extra.soundOutcome, extra.fileSeconds)
+  const deps: TimelineDeps = { ...context.deps, soundRenderer, composedSounds: (...args) => context.highlights.composedSounds(...args), soundsDir }
+  return { ...context, deps, service: createTimelineService(deps), soundRenderer, soundsDir }
+}
+
+const viewOf = (flair: FlairOptions) => ({ position: "auto" as const, subtitlesOn: false, highlightsOn: true, flair })
+/** Each stored sound's render job as the write places it now (soundJobOf), found by its anchor. */
+async function jobsOf(context: Awaited<ReturnType<typeof withSounds>>, flair: FlairOptions = SOUNDS_ON): Promise<(sound: ComposedSound) => SoundJob> {
+  const { kept, off } = await context.highlights.composedSounds(context.folder, DEFAULT_CUT_RULES, viewOf(flair))
+  return (sound) => soundJobOf([...kept, ...off].find((placed) => samePlace(placed.sound.anchor, sound.anchor))!)
+}
+type Info = Awaited<ReturnType<typeof readInfo>>
+const composedMaterials = (info: Info) => (info.materials.audios as { id: string; type: string; path: string; duration: number; local_material_id: string }[]).filter((audio) => audio.type === "extract_music")
+/** The composed sounds' segments in playing order, each with the material it plays. */
+const composedSegments = (info: Info) => {
+  const materials = composedMaterials(info)
+  return info.tracks
+    .filter((track) => track.type === "audio")
+    .flatMap((track) => track.segments)
+    .flatMap((segment) => {
+      const material = materials.find((audio) => audio.id === segment.material_id)
+      return material ? [{ segment, material }] : []
+    })
+    .sort((a, b) => a.segment.target_timerange.start - b.segment.target_timerange.start)
+}
+const NO_SOUND_LEFT_OUT = { unwritten: 0, stale: 0, failed: 0 }
+
+test("a WAV's own length is read from its data chunk, in whole microseconds, past any chunk before it", async () => {
+  const { dir } = await setup()
+  const path = join(dir, "a.wav")
+  await writeFile(path, wavFile(1.5))
+  expect(await wavLengthUs(path)).toBe(1_500_000)
+  // 7 frames are 145.833… µs: whole microseconds, never more than the file holds
+  const seven = wavFile(7 / 48_000)
+  await writeFile(path, seven)
+  expect(await wavLengthUs(path)).toBe(145)
+  await writeFile(path, "not a wav")
+  await expect(wavLengthUs(path)).rejects.toThrow()
+  // a data size of 0xFFFFFFFF (a stream whose length was never written back) or one cut short: what the file holds
+  const second = wavFile(1)
+  const sizeAt = second.length - 192_000 - 4
+  const streamed = Buffer.from(second)
+  streamed.writeUInt32LE(0xffffffff, sizeAt)
+  await writeFile(path, streamed)
+  expect(await wavLengthUs(path)).toBe(1_000_000)
+  await writeFile(path, second.subarray(0, second.length - 96_000))
+  expect(await wavLengthUs(path)).toBe(500_000)
+  // no sound in it
+  await writeFile(path, wavFile(0))
+  expect(await wavLengthUs(path)).toBe(0)
+  // a chunk before the data that says it is longer than the file: no data is found
+  const oversized = Buffer.from(second)
+  oversized.writeUInt32LE(0x7fffffff, 12 + 24 + 4)
+  await writeFile(path, oversized)
+  await expect(wavLengthUs(path)).rejects.toThrow("has no sound in it")
+})
+
+test("the write waits for the composed sounds in force, then lays each on an audio track for its file's own length, each file in the media bin", async () => {
+  const graphic = graphicAt(s(18.08))
+  const tied = tiedTo(graphic)
+  const context = await withSounds([COUNT, UP, tied], [graphic])
+  const { service, folder, soundRenderer, soundsDir } = context
+  const jobOf = await jobsOf(context)
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 3, composedLeftOut: NO_SOUND_LEFT_OUT, graphicCount: 1, soundCount: 0 })
+  // the three were ensured together, before the draft was read, each by what is heard of it as stored
+  expect(soundRenderer.ensured).toHaveLength(1)
+  expect(new Set(soundRenderer.ensured[0]!.map(soundHashOf))).toEqual(new Set([UP, tied, COUNT].map((sound) => soundHashOf(jobOf(sound)))))
+
+  const info = await readInfo(folder)
+  const laid = composedSegments(info)
+  expect(laid.map(({ material }) => material.path)).toEqual([UP, tied, COUNT].map((sound) => soundRenderer.fileOf(jobOf(sound))))
+  // each plays its whole file, which the render made a quarter of a second shorter than the sound
+  expect(laid.map(({ segment }) => segment.target_timerange.duration)).toEqual([1_750_000, 1_450_000, 1_750_000])
+  expect(laid.map(({ material }) => material.duration)).toEqual([1_750_000, 1_450_000, 1_750_000])
+  // the tied one starts with its graphic
+  const [graphicSegment] = overlays(info)[0]!.segments
+  expect(laid[1]!.segment.target_timerange.start).toBe(graphicSegment!.target_timerange.start)
+  // สาม plays 2.92 s in: the frame it lands on
+  expect(Math.abs(laid[2]!.segment.target_timerange.start - 2_920_000)).toBeLessThanOrEqual(FRAME_US)
+
+  // each file is in the media bin once, as music, and its material points at that entry
+  const entries = (await imported(folder)).filter((item) => item.file_Path.startsWith(soundsDir))
+  expect(entries).toHaveLength(3)
+  for (const { material } of laid) {
+    const entry = entries.find((item) => item.file_Path === material.path)!
+    expect(entry).toMatchObject({ metetype: "music", duration: material.duration })
+    expect(material.local_material_id).toBe(entry.id)
+  }
+})
+
+test("the composed sounds go after the graphics and before the CapCut sounds", async () => {
+  const library = { list: async () => [{ effectId: "s1", name: "ปัง", durationUs: 330_000, path: null }] }
+  const graphic = graphicAt(s(18.08))
+  const { service, folder, outlines } = await withSounds([COUNT], [graphic], { sounds: library })
+  await outlines.update(folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, cues: [{ anchor: { kind: "beat", beatId: "beat-1", edge: "start" }, effectId: "s1", edited: true }] } }))
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 1, soundCount: 1, graphicCount: 1 })
+  const info = await readInfo(folder)
+  const kinds = info.tracks.map((track) => {
+    if (track.type !== "audio") return track.flag === 2 ? "overlay" : track.type
+    const material = (info.materials.audios as { id: string; type: string }[]).find((audio) => audio.id === track.segments[0]!.material_id)!
+    return material.type
+  })
+  expect(kinds.slice(kinds.indexOf("overlay"))).toEqual(["overlay", "extract_music", "sound"])
+})
+
+test("a sound not composed yet, whose composing or render failed, or stale, is left out and counted; the rest are laid", async () => {
+  const unwritten = soundAt(s(17.44), { seconds: 1, words: [] }, { code: null })
+  const writingFailed = soundAt(s(17.68), { seconds: 1, words: [] }, { code: null, failed: "the code failed twice" })
+  // composed under an older contract
+  const old = soundAt(s(19.0), { seconds: 1, words: [] }, { version: "sound-2026-01-01" })
+  const renderFails = { ...UP, code: `${CODE}\n// fails` }
+  const context = await withSounds([unwritten, writingFailed, old, renderFails, COUNT], [], { soundOutcome: (job) => (job.code.endsWith("fails") ? "failed" : "made") })
+  const { service, folder, soundRenderer } = context
+  const jobOf = await jobsOf(context)
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 1, composedLeftOut: { unwritten: 1, stale: 1, failed: 2 } })
+  // only the written, fresh ones were asked for
+  expect(soundRenderer.ensured.map((jobs) => jobs.length)).toEqual([2])
+  expect(composedSegments(await readInfo(folder)).map(({ material }) => material.path)).toEqual([soundRenderer.fileOf(jobOf(COUNT))])
+})
+
+test("a sound tied to a graphic the write leaves out is left out too, as stale: its graphic not written, stale or failed", async () => {
+  const failing = { ...graphicAt(s(18.08)), spec: { ...graphicAt(s(18.08)).spec, html: OTHER_FRAGMENT } }
+  // composed to its graphic, which is written and fresh but whose render fails
+  const onFailing = tiedTo(failing)
+  // composed to its graphic's fragment, which is no longer written
+  const unwritten = { ...graphicAt(s(17.16)), spec: { ...graphicAt(s(17.16)).spec, html: null } }
+  const onUnwritten = soundAt(s(17.16), WRITTEN_FOR[s(17.16)]!, { graphic: unwritten.anchor, graphicHtml: hashOfHtml(FRAGMENT) })
+  const context = await withSounds([onFailing, onUnwritten], [failing, unwritten], { outcome: (job) => (job.spec.html === OTHER_FRAGMENT ? "failed" : "made") })
+  const { service, folder, soundRenderer } = context
+  const jobOf = await jobsOf(context)
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ graphicCount: 0, graphicsSkipped: 2, composedCount: 0, composedLeftOut: { unwritten: 0, stale: 2, failed: 0 } })
+  // the one whose graphic had a job was made, in case the graphic is: it is in no draft
+  expect(soundRenderer.ensured.flat().map(soundHashOf)).toEqual([soundHashOf(jobOf(onFailing))])
+  expect(composedSegments(await readInfo(folder))).toEqual([])
+})
+
+test("a switched-off sound, one the level holds back, and every sound with the sounds off are neither laid nor counted", async () => {
+  const off = { ...UP, off: true }
+  const heavy = { ...COUNT, from: "heavy" as const }
+  const { service, folder, soundRenderer } = await withSounds([off, heavy])
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 0, composedLeftOut: NO_SOUND_LEFT_OUT })
+  expect(soundRenderer.ensured.flat()).toEqual([])
+
+  const again = await withSounds([UP, COUNT])
+  const quiet = await again.service.write(again.folder, DEFAULT_CUT_RULES, 0, null, request(GRAPHICS))
+  expect(quiet).toMatchObject({ composedCount: 0, composedLeftOut: NO_SOUND_LEFT_OUT })
+  expect(again.soundRenderer.ensured).toEqual([])
+  expect(composedSegments(await readInfo(again.folder))).toEqual([])
+})
+
+test("sounds stopped before they were made leave the draft as it was, and no backup; a machine found unfit says so", async () => {
+  const { deps, folder, service, soundRenderer } = await withSounds([UP, COUNT], [], { soundOutcome: (job) => (job.code === CODE ? "made" : "stopped") })
+  const files = () => Promise.all(["draft_info.json", "draft_meta_info.json"].map((file) => readFile(join(folder, file), "utf8")))
+  const before = await files()
+  await expect(service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))).rejects.toThrow("the sounds were stopped before they were made; the draft was not changed")
+  expect(await files()).toEqual(before)
+  await expect(readdir(deps.backupRoot)).rejects.toThrow()
+  // a machine found unfit is given another try before the write waits; one still unfit is named, and the write stops
+  soundRenderer.machine.problem = "the app's ffmpeg is missing"
+  soundRenderer.machine.stays = true
+  await expect(service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))).rejects.toThrow(
+    "the sounds cannot be made on this machine: the app's ffmpeg is missing, or turn sounds off; the draft was not changed",
+  )
+  expect(soundRenderer.machine.forgotten).toBe(2)
+  expect(await files()).toEqual(before)
+})
+
+test("a machine an earlier render found unfit is forgotten before the write waits, so the sounds are made if they can be now", async () => {
+  const { service, folder, soundRenderer } = await withSounds([UP, COUNT])
+  soundRenderer.machine.problem = "the sound page could not start"
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 2, composedLeftOut: NO_SOUND_LEFT_OUT })
+  expect(soundRenderer.machine.forgotten).toBe(1)
+})
+
+test("the media bin keeps one entry a file, reused on the next write, and loses the sounds a write no longer plays; the user's media stays", async () => {
+  const context = await withSounds([UP, COUNT])
+  const { service, folder, soundsDir, outlines } = context
+  const jobOf = await jobsOf(context)
+  const before = await imported(folder)
+  const first = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  const wavs = async () => (await imported(folder)).filter((item) => item.file_Path.startsWith(soundsDir))
+  const entries = await wavs()
+  expect(entries).toHaveLength(2)
+  // written again, each keeps its entry
+  const second = await service.write(folder, DEFAULT_CUT_RULES, first.segmentCount, null, request(SOUNDS_ON))
+  expect(await wavs()).toEqual(entries)
+  expect(composedSegments(await readInfo(folder)).map(({ material }) => material.local_material_id)).toEqual(entries.map((entry) => entry.id))
+  // one switched off goes from the bin; with the sounds off they all go, and the user's media stays
+  await outlines.update(folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, composed: [{ ...UP, off: true }, COUNT] } }))
+  const third = await service.write(folder, DEFAULT_CUT_RULES, second.segmentCount, null, request(SOUNDS_ON))
+  expect((await wavs()).map((entry) => entry.id)).toEqual([entries.find((entry) => entry.file_Path.includes(soundHashOf(jobOf(COUNT))))!.id])
+  await service.write(folder, DEFAULT_CUT_RULES, third.segmentCount, null, request(GRAPHICS))
+  expect(await imported(folder)).toEqual(before)
+})
+
+test("words said at other times keep a sound fresh: it is rendered for their times now, and the preview and the write ask about the same file", async () => {
+  // ไป said 0.06 s later than when UP was composed, the rest as they were
+  const words = transcript.words.map((said) => (said.text === "ไป" ? { ...said, startUs: s(17.5) } : said.text === "ขึ้น" ? { ...said, endUs: s(17.5) } : said))
+  const context = await withSounds([UP], [], { transcript: { ...transcript, words } })
+  const { service, folder, soundRenderer, outlines } = context
+  const highlights = createHighlightService({ outlines, timeline: context.service, footage: context.deps, soundStatus: soundStatusOf(soundRenderer), soundRenderer })
+  const [shown] = (await highlights.preview(folder, DEFAULT_CUT_RULES, viewOf(SOUNDS_ON))).composed
+  expect(shown).toMatchObject({ written: true, stale: null })
+  const job = (await jobsOf(context))(UP)
+  expect(job.words.map((word) => word.atS)).toEqual([0, 0.34, 0.52, 0.92, 1.84])
+  // the preview started its render with the words as they fall now, not as they were composed
+  await vi.waitFor(() => expect(soundRenderer.ensured.flat().map(soundHashOf)).toEqual([soundHashOf(job)]))
+  await vi.waitFor(async () => expect((await highlights.preview(folder, DEFAULT_CUT_RULES, viewOf(SOUNDS_ON))).composed[0]!.render).toBe("ready"))
+  const result = await service.write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 1, composedLeftOut: NO_SOUND_LEFT_OUT })
+  // the write asked about that same file, made by then, and laid it
+  expect(soundRenderer.ensured.at(-1)!.map(soundHashOf)).toEqual([soundHashOf(job)])
+  expect(composedSegments(await readInfo(folder)).map(({ material }) => material.path)).toEqual([soundRenderer.fileOf(job)])
+})
+
+test("a sound whose file is empty, or is there but cannot be read when it is laid, is left out as failed, with no bin entry", async () => {
+  const empty = await withSounds([UP], [], { fileSeconds: () => 0 })
+  expect(await empty.service.write(empty.folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))).toMatchObject({ composedCount: 0, composedLeftOut: { unwritten: 0, stale: 0, failed: 1 } })
+  expect((await imported(empty.folder)).filter((item) => item.file_Path.startsWith(empty.soundsDir))).toEqual([])
+  const garbled = await withSounds([UP], [], { soundOutcome: () => "garbled" })
+  expect(await garbled.service.write(garbled.folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))).toMatchObject({ composedCount: 0, composedLeftOut: { unwritten: 0, stale: 0, failed: 1 } })
+  expect((await imported(garbled.folder)).filter((item) => item.file_Path.startsWith(garbled.soundsDir))).toEqual([])
+})
+
+test("two sounds made of the same file share one entry in the media bin", async () => {
+  const context = await withSounds([COUNT])
+  const { deps, folder, highlights, soundsDir } = context
+  // the same sound played again 2.5 s earlier: the same job, so the same file
+  const twice: TimelineDeps["composedSounds"] = async (...args) => {
+    const placed = await highlights.composedSounds(...args)
+    return { ...placed, kept: [{ ...placed.kept[0]!, atUs: placed.kept[0]!.atUs - 2_500_000 }, ...placed.kept] }
+  }
+  const result = await createTimelineService({ ...deps, composedSounds: twice }).write(folder, DEFAULT_CUT_RULES, 0, null, request(SOUNDS_ON))
+  expect(result).toMatchObject({ composedCount: 2 })
+  const entries = (await imported(folder)).filter((item) => item.file_Path.startsWith(soundsDir))
+  expect(entries).toHaveLength(1)
+  expect(composedSegments(await readInfo(folder)).map(({ material }) => material.local_material_id)).toEqual([entries[0]!.id, entries[0]!.id])
 })

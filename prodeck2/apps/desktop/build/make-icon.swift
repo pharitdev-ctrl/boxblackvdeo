@@ -1,4 +1,5 @@
-// Draws the placeholder app icon until the product has a name and artwork.
+// Draws the app icon from the mascot (build/mascot-wave.png, cut out of its background with Vision):
+// the puppy's head and waving paw on a dark tile, the way BOXBLACK is black.
 //   swift build/make-icon.swift && iconutil -c icns build/icon.iconset -o build/icon.icns
 import AppKit
 
@@ -9,6 +10,11 @@ let sizes: [(String, Int)] = [
 ]
 let dir = URL(fileURLWithPath: "build/icon.iconset")
 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+let mascot = NSImage(contentsOf: URL(fileURLWithPath: "build/mascot-wave.png"))!
+let full = mascot.representations.first!
+let (w, h) = (CGFloat(full.pixelsWide), CGFloat(full.pixelsHigh))
+// the head, the paw and the collar: the top 62 % of the cut-out
+let crop = NSRect(x: 0, y: h * 0.38, width: w, height: h * 0.62)
 
 for (name, pixels) in sizes {
   let s = CGFloat(pixels)
@@ -16,22 +22,17 @@ for (name, pixels) in sizes {
                              hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
   NSGraphicsContext.saveGraphicsState()
   NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+  NSGraphicsContext.current!.imageInterpolation = .high
   // macOS icon grid: the tile is about 80% of the canvas
   let inset = s * 0.1
   let tile = NSRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset)
   let path = NSBezierPath(roundedRect: tile, xRadius: tile.width * 0.225, yRadius: tile.width * 0.225)
-  NSGradient(starting: NSColor(red: 0.16, green: 0.45, blue: 1.0, alpha: 1), ending: NSColor(red: 0.45, green: 0.2, blue: 0.9, alpha: 1))!
-    .draw(in: path, angle: -60)
-  // timeline clips on two tracks, cut by a playhead
-  NSColor.white.withAlphaComponent(0.92).setFill()
-  let unit = tile.width / 10
-  let clips: [(CGFloat, CGFloat, CGFloat)] = [(1.5, 5.6, 3.6), (5.9, 8.5, 3.6), (1.5, 3.9, 5.6), (4.2, 7.2, 5.6)]
-  for (from, to, row) in clips {
-    let rect = NSRect(x: tile.minX + from * unit, y: tile.minY + row * unit - unit * 0.7, width: (to - from) * unit, height: unit * 1.4)
-    NSBezierPath(roundedRect: rect, xRadius: unit * 0.3, yRadius: unit * 0.3).fill()
-  }
-  NSColor(red: 1.0, green: 0.82, blue: 0.25, alpha: 1).setFill()
-  NSBezierPath(roundedRect: NSRect(x: tile.minX + 4.95 * unit, y: tile.minY + 2.2 * unit, width: unit * 0.35, height: unit * 5.2), xRadius: unit * 0.17, yRadius: unit * 0.17).fill()
+  NSGradient(starting: NSColor(white: 0.24, alpha: 1), ending: NSColor(white: 0.06, alpha: 1))!.draw(in: path, angle: -90)
+  // the puppy fills the tile's width and stands on its bottom edge, clipped to the tile
+  path.addClip()
+  let scale = tile.width * 1.02 / crop.width
+  let drawn = NSRect(x: tile.midX - crop.width * scale / 2, y: tile.minY, width: crop.width * scale, height: crop.height * scale)
+  mascot.draw(in: drawn, from: crop, operation: .sourceOver, fraction: 1)
   NSGraphicsContext.restoreGraphicsState()
   try rep.representation(using: .png, properties: [:])!.write(to: dir.appendingPathComponent("\(name).png"))
 }

@@ -16,6 +16,9 @@ import type { FlairLevel } from "@boxblack/core/flair/catalogue"
 import type { CueAnchor } from "@boxblack/core/flair/plan"
 import type { HighlightGroup } from "@boxblack/core/highlights"
 import type { LlmTransport } from "@boxblack/core/llm"
+import { isComposed } from "@boxblack/core/sound/spec"
+import { samePlace } from "./sound-cues.ts"
+import { withoutStrandedMoves } from "./move-cues.ts"
 import type { EmphasisView, StoredOutline } from "../shared/api.ts"
 import { transcriptFingerprint } from "./footage.ts"
 import { currentPoints, placedPoints, pointText, regroupFlair, timelineOf } from "./highlight-state.ts"
@@ -88,13 +91,15 @@ export function offGoneLines<T extends { anchor: CueAnchor; edited: boolean }>(i
  * line sounds go too). The user's stay with their pointId removed, so they show at every level: an
  * edited item, and a group that is the user's (usersGroup), the rule the one-time cleanup keeps too.
  * An edited sound, cutaway or graphic on a line of a group that goes stays too, moved to the start of
- * the group's beat (offGoneLines). Pure.
+ * the group's beat (offGoneLines). A sound Claude composed is never the user's, edited or not: every one
+ * made for the point goes, one tied to a graphic of the user's too, and so does one tied to a graphic of Claude's
+ * that goes with the point, whatever point the sound names. Pure.
  */
 export function withoutPoint(stored: StoredOutline, pointId: string): StoredOutline {
   /** an item on the point goes, unless it is the user's: then it stays, bound to nothing */
   const settle = <T extends { pointId?: string }>(items: T[], theirs: (item: T) => boolean): T[] =>
     items.flatMap((item) => (item.pointId !== pointId ? [item] : theirs(item) ? [unbound(item)] : []))
-  // sounds, zooms, cutaways and graphics carry no source: the user's are the ones they edited or made (both edited)
+  // sounds, zooms, moves, cutaways and graphics carry no source: the user's are the ones they edited or made (both edited)
   const edited = (item: { edited: boolean }) => item.edited
   const emphasis = stored.emphasis && { ...stored.emphasis, points: stored.emphasis.points.filter((point) => point.id !== pointId) }
   const before = stored.highlights?.groups ?? []
@@ -103,12 +108,20 @@ export function withoutPoint(stored: StoredOutline, pointId: string): StoredOutl
   /** what stays of sounds, cutaways and graphics: one the user edited on a line of a group that goes moves off it first */
   const kept = <T extends { pointId?: string; edited: boolean; anchor: CueAnchor }>(items: T[]): T[] => offGoneLines(settle(items, edited), stored, before, staying)
   const was = stored.flair
+  // Claude's graphics on the point, which go: a sound tied to one goes with it
+  const goneGraphics = (was?.graphics ?? []).filter((graphic) => graphic.pointId === pointId && !graphic.edited)
+  const tiedToGone = (sound: { graphic?: CueAnchor }) => sound.graphic !== undefined && goneGraphics.some((graphic) => samePlace(graphic.anchor, sound.graphic!))
+  const inserts = was?.inserts ? kept(was.inserts) : undefined
   const flair = was && {
     ...was,
     ...(was.cues ? { cues: kept(was.cues) } : {}),
     ...(was.zooms ? { zooms: settle(was.zooms, edited) } : {}),
-    ...(was.inserts ? { inserts: kept(was.inserts) } : {}),
+    // Claude's moves on a cutaway that went with the point go too
+    ...(was.moves ? { moves: withoutStrandedMoves(settle(was.moves, edited), inserts ?? []) } : {}),
+    ...(inserts ? { inserts } : {}),
     ...(was.graphics ? { graphics: kept(was.graphics) } : {}),
+    // a stored entry that is no composed sound is left as it is
+    ...(was.composed ? { composed: was.composed.filter((sound) => !isComposed(sound) || (sound.pointId !== pointId && !tiedToGone(sound))) } : {}),
   }
   const highlights = stored.highlights && { ...stored.highlights, groups }
   const next: StoredOutline = { ...stored, ...(emphasis ? { emphasis } : {}), ...(flair ? { flair } : {}), ...(highlights ? { highlights } : {}) }
@@ -154,17 +167,19 @@ export function emphasisScenes(stored: StoredOutline, plan: CutPlan, clips: CutC
 }
 
 /**
- * Whether work 2 (text, zooms, cutaways, graphics) and work 4 (sounds) left anything on the points: a stored
- * item of Claude's, unedited, that carries a pointId. What the user made for a point or changed by hand says
- * nothing about whether Claude's work is behind. Read from the stored outline, so the level in force hides none.
+ * Whether work 2's text and techniques (text, zooms, moves, cutaways), its graphics, and work 4 (sounds) left anything on
+ * the points: a stored item of Claude's, unedited, that carries a pointId. What the user made for a point or changed
+ * by hand says nothing about whether Claude's work is behind. A composed sound is always Claude's, so every one on a
+ * point counts. Read from the stored outline, so the level in force hides none.
  */
-function placedOnPoints(stored: StoredOutline): { graphics: boolean; sounds: boolean } {
+function placedOnPoints(stored: StoredOutline): { techniques: boolean; graphics: boolean; sounds: boolean } {
   const bound = (items: { pointId?: string; edited: boolean }[] | undefined) => (items ?? []).some((item) => item.pointId !== undefined && !item.edited)
   const flair = stored.flair
   const groups = (stored.highlights?.groups ?? []).filter((group) => group.source === "ai")
   return {
-    graphics: bound(groups) || bound(flair?.zooms) || bound(flair?.inserts) || bound(flair?.graphics),
-    sounds: bound(flair?.cues),
+    techniques: bound(groups) || bound(flair?.zooms) || bound(flair?.moves) || bound(flair?.inserts),
+    graphics: bound(flair?.graphics),
+    sounds: bound(flair?.cues) || (flair?.composed ?? []).some((sound) => isComposed(sound) && sound.pointId !== undefined),
   }
 }
 
@@ -246,6 +261,8 @@ export function emphasisView(input: {
     hidden: emphasis.points.length - placed.length,
     version: emphasis.version,
     changed: {
+      // an outline from before 0.7.0 noted the text and techniques with the graphics; a note of null is their own
+      techniques: onCut && behind(emphasis.plannedOn.techniques === undefined ? emphasis.plannedOn.graphics : emphasis.plannedOn.techniques, emphasis.version, onPoints.techniques),
       graphics: onCut && behind(emphasis.plannedOn.graphics, emphasis.version, onPoints.graphics),
       sounds: onCut && behind(emphasis.plannedOn.sounds, emphasis.version, onPoints.sounds),
     },

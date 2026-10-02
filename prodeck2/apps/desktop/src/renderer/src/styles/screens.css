@@ -27,6 +27,20 @@
   margin-bottom: 18px;
 }
 
+/* the project list's head: the waving mascot, then the title, then the search pushed to the right */
+.projects .screen-head .mascot {
+  flex: none;
+  width: 56px;
+  height: 72px;
+  object-fit: contain;
+  margin: -6px -6px -4px 0;
+}
+
+.projects .screen-head .projects-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .screen-head h1 {
   font-size: 20px;
   font-weight: 700;
@@ -93,6 +107,19 @@
   border-color: transparent;
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+/* the prepare page's line about finding where things are in the pictures: offered, going, or failed */
+.objects-line {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+}
+
+.objects-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .warnings {
@@ -386,7 +413,8 @@
 }
 
 .brief-panel textarea,
-.brief-panel input[type="text"] {
+.brief-panel input[type="text"],
+.graphic-edit textarea {
   -webkit-app-region: no-drag;
   width: 100%;
   padding: 7px 10px;

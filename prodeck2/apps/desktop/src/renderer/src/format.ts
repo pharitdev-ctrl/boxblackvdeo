@@ -40,3 +40,11 @@ export function formatTimestamp(us: number): string {
 export function playedSeconds(durationUs: number): string {
   return (Math.floor(durationUs / 100_000) / 10).toFixed(1)
 }
+
+/** The end of a failure's message, where a tool says what went wrong: its last three lines that say something, on one line. The rest would not fit a row. */
+export const lastLines = (error: string): string =>
+  error
+    .split("\n")
+    .filter((line) => line.trim())
+    .slice(-3)
+    .join(" ")

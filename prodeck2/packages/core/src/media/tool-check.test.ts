@@ -6,6 +6,7 @@ const FILTERS = ` Filters:
   T.. = Timeline support
   ------
  .. silencedetect     A->A       Detect silence.
+ .. ebur128           A->N       EBU R128 scanner.
  .S blackdetect       V->V       Detect video intervals that are (almost) black.
  .. fps               V->V       Force constant framerate.
  T. metadata          V->V       Manipulate video frame metadata.
@@ -49,6 +50,11 @@ test("names prores_ks, png and mov -- what M23's graphics need -- when an otherw
   const noGraphicsEncoders = ENCODERS.replace(/.*prores_ks.*\n/, "").replace(/.*png.*\n/, "")
   const noGraphicsMuxers = MUXERS.replace(/.*mov.*\n/, "")
   expect(missingFfmpegParts(COMPLETE_FILTERS, noGraphicsEncoders, noGraphicsMuxers)).toEqual(["prores_ks", "png", "mov"])
+})
+
+test("a build without ebur128, which measures each composed sound's loudness, is caught", () => {
+  expect(missingFfmpegParts(COMPLETE_FILTERS.replace(/.*ebur128.*\n/, ""), ENCODERS, MUXERS)).toEqual(["ebur128"])
+  expect(missingFfmpegParts(COMPLETE_FILTERS, ENCODERS, MUXERS)).toEqual([])
 })
 
 test("a build that cannot write what the analysis writes is caught too, not only one missing a filter", () => {

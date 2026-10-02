@@ -1,0 +1,8 @@
+Final small fix round for 0.5.1, from the review of the whole release (verdict READY, minor findings only). Same rules as before (tests first and seen failing, `npm test` and `npm run typecheck` from the repo root, no app, no build, no real Claude, no `~/Movies`, `~/Library` or drafts, plain English prose comments without em-dashes, Thai only in `i18n.ts`). Nobody else is changing the repo. Do not change `apps/desktop/package.json`.
+
+1. **The stale hint of an edited graphic names แก้ too.** `graphics.state.stale` reads `การตัดช่วงนี้เปลี่ยนไป กดทำใหม่`. For a written graphic that a user's change made (`instruction` set), a redo would throw that change away, while แก้ refits the fragment to the room it has now and keeps it. Add `graphics.state.staleEdited` with `การตัดช่วงนี้เปลี่ยนไป กดแก้หรือทำใหม่`, used by `graphicState` when the graphic is stale and has an `instruction`; the plain one stays for the rest. Test both.
+2. **The last-edit line gives way while the row is written again**, as the edit-failed line already does: while a redo or an edit of that graphic runs, `แก้ล่าสุด: …` is not shown (it is about the fragment being replaced). Test.
+3. **The view's text fields are texts or null.** In `apps/desktop/src/main/graphics-cues.ts` (`graphicViews`), `writeFailed`, `instruction` and `editFailed` are passed on only when they are strings, else null, as `isPrevious` guards `previous`: an outline file edited by hand must not break the row (`lastLines(why).split`). Test with a number and an object in each.
+4. **A comment** in `apps/desktop/src/main/flair.ts` (about line 493) says a stale graphic waits for `redoGraphic`; an edit refits it as well. Say so.
+
+Report: per item what changed and what failed first, the final counts, the files changed.

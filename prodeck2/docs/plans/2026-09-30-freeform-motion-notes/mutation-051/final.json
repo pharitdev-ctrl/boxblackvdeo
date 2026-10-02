@@ -1,0 +1,30 @@
+[
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "stale edited reads plain",
+  "find": "plain(graphic.instruction ? \"graphics.state.staleEdited\" : \"graphics.state.stale\")",
+  "replace": "plain(\"graphics.state.stale\")",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "last edit shown while rewritten",
+  "find": "graphic.instruction && !rewritten ? t(",
+  "replace": "graphic.instruction ? t(",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/main/graphics-cues.ts",
+  "name": "view passes non-text on",
+  "find": "const textOrNull = (value: unknown): string | null => (typeof value === \"string\" ? value : null)",
+  "replace": "const textOrNull = (value: unknown): string | null => (value ?? null) as string | null",
+  "tests": [
+   "apps/desktop/src/main/graphics-cues.test.ts",
+   "apps/desktop/src/main/highlights.test.ts"
+  ]
+ }
+]

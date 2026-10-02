@@ -1,8 +1,20 @@
 import { expect, test } from "vitest"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { addBinItems, binIdOf, graphicBinItem, isRenderedGraphic, pruneBinItems, RENDERED_GRAPHICS_FOLDER } from "./bin.ts"
-import type { DraftMeta } from "./types.ts"
+import { spareMedia } from "../flair/media.ts"
+import {
+  addBinItems,
+  binIdOf,
+  graphicBinItem,
+  isRenderedGraphic,
+  isRenderedSound,
+  pruneBinItems,
+  RENDERED_GRAPHICS_FOLDER,
+  RENDERED_SOUNDS_FOLDER,
+  soundBinItem,
+} from "./bin.ts"
+import { binVideos } from "./read.ts"
+import type { BinItem, DraftMeta } from "./types.ts"
 
 const meta = () => ({
   draft_id: "d",
@@ -169,4 +181,75 @@ test("addBinItems after pruneBinItems with a reused id does not duplicate", () =
   const reused = graphicBinItem({ id: "KEEP", path: `${GRAPHICS_DIR}/keep.mov`, width: 2, height: 2, durationUs: 1, nowMs: 0 })
   const out = addBinItems(pruned, [reused])
   expect(out.draft_materials[0]!.value.map((entry) => entry.id)).toEqual(["KEEP", "USER", "SIBLING"])
+})
+
+// the entry CapCut 9.5 wrote for a WAV the user imported from BOXBLACK's sounds folder (Task 1 of
+// 0.6.0), with the id and the path replaced
+const WAV_ITEM = JSON.parse(readFileSync(new URL("./fixtures/local-wav/bin-item.json", import.meta.url), "utf8")) as BinItem
+
+test("a composed sound's bin item is the one CapCut wrote for an imported WAV, field by field", () => {
+  const item = soundBinItem({ id: WAV_ITEM.id, path: WAV_ITEM.file_Path, durationUs: WAV_ITEM.duration, nowMs: 1_790_000_000_000 })
+  expect(item).toEqual(WAV_ITEM)
+  expect(Object.keys(item)).toEqual(Object.keys(WAV_ITEM))
+})
+
+test("isRenderedSound is true only for a path under BOXBLACK's own sounds folder", () => {
+  expect(isRenderedSound(`/Users/x${RENDERED_SOUNDS_FOLDER}ab12.wav`)).toBe(true)
+  expect(isRenderedSound(`/Users/x${RENDERED_GRAPHICS_FOLDER}ab12.mov`)).toBe(false)
+  expect(isRenderedSound("/Users/x/Movies/CapCut/song.wav")).toBe(false)
+  expect(isRenderedGraphic(`/Users/x${RENDERED_SOUNDS_FOLDER}ab12.wav`)).toBe(false)
+})
+
+const BOXBLACK_DIR = "/Users/x/Movies/CapCut/BOXBLACK"
+const SOUNDS_DIR = `${BOXBLACK_DIR}/sounds`
+
+const withSounds = (): DraftMeta => ({
+  ...meta(),
+  draft_materials: [
+    {
+      type: 0,
+      value: [
+        graphicBinItem({ id: "GRAPHIC_GONE", path: `${GRAPHICS_DIR}/gone.mov`, width: 2, height: 2, durationUs: 1, nowMs: 0 }),
+        graphicBinItem({ id: "GRAPHIC_KEEP", path: `${GRAPHICS_DIR}/keep.mov`, width: 2, height: 2, durationUs: 1, nowMs: 0 }),
+        soundBinItem({ id: "SOUND_GONE", path: `${SOUNDS_DIR}/gone.wav`, durationUs: 1, nowMs: 0 }),
+        soundBinItem({ id: "SOUND_KEEP", path: `${SOUNDS_DIR}/keep.wav`, durationUs: 1, nowMs: 0 }),
+        // the user's own music, imported by hand, here and under Movies/CapCut
+        { id: "USER_SONG", file_Path: "/Users/x/Music/song.wav", metetype: "music", duration: 1, width: 0, height: 0 },
+        { id: "USER_CAPCUT", file_Path: "/Users/x/Movies/CapCut/song.wav", metetype: "music", duration: 1, width: 0, height: 0 },
+        // a sibling folder with the same prefix is a different folder, not this one
+        { id: "SIBLING", file_Path: `${SOUNDS_DIR}-old/x.wav`, metetype: "music", duration: 1, width: 0, height: 0 },
+      ],
+    },
+    { type: 1, value: [{ id: "type1-item", file_Path: `${SOUNDS_DIR}/type1-item.wav`, metetype: "none", duration: 0, width: 0, height: 0 }] },
+  ],
+})
+
+test("pruneBinItems on the sounds folder drops an unkept sound and leaves the graphics and the user's music alone", () => {
+  const original = withSounds()
+  const out = pruneBinItems(original, SOUNDS_DIR, new Set(["SOUND_KEEP"]))
+  expect(out.draft_materials[0]!.value.map((entry) => entry.id)).toEqual(["GRAPHIC_GONE", "GRAPHIC_KEEP", "SOUND_KEEP", "USER_SONG", "USER_CAPCUT", "SIBLING"])
+  expect(out.draft_materials[1]).toEqual(original.draft_materials[1])
+  // pure: the object passed in is untouched
+  expect(original.draft_materials[0]!.value).toHaveLength(7)
+})
+
+test("pruneBinItems on the graphics folder still leaves the sounds alone", () => {
+  const out = pruneBinItems(withSounds(), GRAPHICS_DIR, new Set(["GRAPHIC_KEEP"]))
+  expect(out.draft_materials[0]!.value.map((entry) => entry.id)).toEqual(["GRAPHIC_KEEP", "SOUND_GONE", "SOUND_KEEP", "USER_SONG", "USER_CAPCUT", "SIBLING"])
+})
+
+test("pruneBinItems on a folder holding both drops unkept graphics and sounds, never the user's own files", () => {
+  const out = pruneBinItems(withSounds(), BOXBLACK_DIR, new Set(["GRAPHIC_KEEP", "SOUND_KEEP"]))
+  // the sibling folder is under BOXBLACK's, but it is not where BOXBLACK writes its sounds
+  expect(out.draft_materials[0]!.value.map((entry) => entry.id)).toEqual(["GRAPHIC_KEEP", "SOUND_KEEP", "USER_SONG", "USER_CAPCUT", "SIBLING"])
+  const home = BOXBLACK_DIR.split("/").slice(0, 3).join("/")
+  expect(pruneBinItems(withSounds(), home, new Set()).draft_materials[0]!.value.map((entry) => entry.id)).toEqual(["USER_SONG", "USER_CAPCUT", "SIBLING"])
+})
+
+test("a composed sound's bin item is neither footage nor a picture to cut away to", () => {
+  const sound = soundBinItem({ id: "SOUND", path: `${SOUNDS_DIR}/ab12.wav`, durationUs: 4_000_000, nowMs: 0 })
+  const video = { id: "VIDEO", file_Path: "/Users/x/clips/talk.mov", metetype: "video", duration: 8_000_000, width: 1080, height: 1920 }
+  const bin: DraftMeta = { ...meta(), draft_materials: [{ type: 0, value: [sound, video] }] }
+  expect(binVideos(bin).map((entry) => entry.id)).toEqual(["VIDEO"])
+  expect(spareMedia(bin, [], () => true).map((media) => media.binId)).toEqual(["VIDEO"])
 })

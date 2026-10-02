@@ -1,8 +1,8 @@
 import { TEXT_REPLY } from "../../llm/text-reply.ts"
 import type { LlmTransport } from "../../llm/types.ts"
-import type { MotionWord } from "../plan.ts"
+import { TEXT_STAGE_MIN_PX, type MotionWord } from "../plan.ts"
 
-export const MOTION_WRITE_PROMPT_VERSION = "motion-write-2026-10-01"
+export const MOTION_WRITE_PROMPT_VERSION = "motion-write-2026-10-01b"
 
 /**
  * What Claude writes a motion graphic by, as the system prompt of the writing call: the one shape a fragment has,
@@ -61,8 +61,22 @@ You write ONE HTML fragment, in exactly this order: one \`<style>\` block first,
  * The request of the writing call for one graphic: the stage in pixels, how long it lasts, the words said while
  * it plays in the order of their variables (`--w1` is the first) with the time each is said now, what to draw, and
  * what the clip is about. With no words said while it plays, it says so.
+ *
+ * Three lines may come before what to draw, each only when it applies, so a brief with none of them is the brief
+ * of before 0.7.0: what the graphic does with its moment's highlight text (shows in its place, `replaces` being that
+ * text, or `pairs` with it shown elsewhere), where the subtitles start over the stage in its own pixels, and, on a
+ * stage lower than TEXT_STAGE_MIN_PX, that it holds no text.
  */
-export function motionBrief(args: { stage: { width: number; height: number }; seconds: number; words: MotionWord[]; idea: string; about: string }): string {
+export function motionBrief(args: {
+  stage: { width: number; height: number }
+  seconds: number
+  words: MotionWord[]
+  idea: string
+  about: string
+  text?: { replaces: string } | { pairs: true }
+  /** the stage's own y where the subtitles start, 0 <= px < H */
+  captionsFromPx?: number
+}): string {
   const words =
     args.words.length === 0
       ? "- Words: none are said while it plays."
@@ -72,6 +86,13 @@ export function motionBrief(args: { stage: { width: number; height: number }; se
     `- Stage: W = ${args.stage.width}, H = ${args.stage.height} px.`,
     `- D = ${args.seconds} seconds.`,
     words,
+    ...(args.text === undefined
+      ? []
+      : "replaces" in args.text
+        ? [`- Highlight text: this graphic shows in place of the highlight text "${args.text.replaces}", which does not show while it plays. Carry its key words in the graphic, short and exact.`]
+        : ["- Highlight text: the highlight text of this moment shows elsewhere on screen. Do not repeat its words."]),
+    ...(args.captionsFromPx === undefined ? [] : [`- Subtitles cover the stage from y = ${args.captionsFromPx} px to its bottom, in front of the graphic. Keep every text, number and the focal point above y = ${args.captionsFromPx}.`]),
+    ...(args.stage.height < TEXT_STAGE_MIN_PX ? ["- The stage is too small for text: draw shapes only, with no text."] : []),
     `- What to draw: ${args.idea}`,
     `- The clip is about: ${args.about}.`,
   ].join("\n")

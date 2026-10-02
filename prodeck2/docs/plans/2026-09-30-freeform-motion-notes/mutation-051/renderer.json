@@ -1,0 +1,244 @@
+[
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: sent untrimmed",
+  "find": "if (ready) onSend(text.trim())",
+  "replace": "if (ready) onSend(text)",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: 301 allowed",
+  "find": "const tooLong = length > INSTRUCTION_MAX",
+  "replace": "const tooLong = length > INSTRUCTION_MAX + 1",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: empty sendable",
+  "find": "const ready = length > 0 && !tooLong && !held",
+  "replace": "const ready = !tooLong && !held",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: send not held",
+  "find": "const ready = length > 0 && !tooLong && !held",
+  "replace": "const ready = length > 0 && !tooLong",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: composing Escape closes",
+  "find": "if (event.key !== \"Escape\" || event.nativeEvent.isComposing) return",
+  "replace": "if (event.key !== \"Escape\") return",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: Escape ignored",
+  "find": "if (event.key !== \"Escape\" || event.nativeEvent.isComposing) return",
+  "replace": "return",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "field: key never let go",
+  "find": "if (asking !== null && !(options.graphic &&",
+  "replace": "if (false && asking !== null && !(options.graphic &&",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: edit on unwritten",
+  "find": "{graphic.written && (\n                        <Button\n                          size=\"xs\"\n                          aria-label={t(\"graphics.editLabel\", named)}",
+  "replace": "{(\n                        <Button\n                          size=\"xs\"\n                          aria-label={t(\"graphics.editLabel\", named)}",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: undo always shown",
+  "find": "{graphic.canUndo && (",
+  "replace": "{true && (",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: edit not held during a run",
+  "find": "aria-expanded={fieldOpen}\n                          disabled={held}",
+  "replace": "aria-expanded={fieldOpen}\n                          disabled={busy}",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: undo not held during a run",
+  "find": "aria-label={t(\"graphics.undoLabel\", named)} disabled={held}",
+  "replace": "aria-label={t(\"graphics.undoLabel\", named)} disabled={busy}",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: an edit reads as writing",
+  "find": "rewritten === \"edit\" ? \"graphics.state.editing\" : \"graphics.state.writing\"",
+  "replace": "\"graphics.state.writing\"",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: no last edit line",
+  "find": "const lastEdit = graphic.instruction ? t(",
+  "replace": "const lastEdit = false ? t(",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: edit failure shown while rewritten",
+  "find": "const editFailed = graphic.editFailed === null || rewritten ? null",
+  "replace": "const editFailed = graphic.editFailed === null ? null",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: edit failure never shown",
+  "find": "const editFailed = graphic.editFailed === null || rewritten ? null",
+  "replace": "const editFailed = true ? null",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/FlairTab.tsx",
+  "name": "row: sending keeps the field open",
+  "find": "setAsking(null)\n                          onEditGraphic(",
+  "replace": "onEditGraphic(",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "room: undo reads nothing again",
+  "find": "      setGraphicsVersion((version) => version + 1)\n    } catch (e) {\n      // refused (nothing",
+  "replace": "    } catch (e) {\n      // refused (nothing",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "room: undo holds nothing",
+  "find": "    beginEdit()\n    setError(null)\n    try {\n      await api.undoGraphic",
+  "replace": "    setError(null)\n    try {\n      await api.undoGraphic",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "room: undo refusal untranslated",
+  "find": "setError(mainText(e instanceof Error ? e.message : String(e)))\n    } finally {\n      endEdit()",
+  "replace": "setError(e instanceof Error ? e.message : String(e))\n    } finally {\n      endEdit()",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "room: edit marked as a redo",
+  "find": "rewrite(anchor, \"edit\", (asked) => api.editGraphic",
+  "replace": "rewrite(anchor, \"redo\", (asked) => api.editGraphic",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "room: refused rewrite keeps its mark",
+  "find": "        setRewriting(null)\n        if (stillWriting) setWritingGraphics(true)",
+  "replace": "        if (stillWriting) setWritingGraphics(true)",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/room/ClipRoom.tsx",
+  "name": "room: hold is a boolean again",
+  "find": "    edits.current -= 1\n    if (edits.current === 0) setEditing(false)",
+  "replace": "    edits.current -= 1\n    setEditing(false)",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/postTabs.ts",
+  "name": "words: not written untranslated",
+  "find": "  [/(?:^|: )this graphic has not been written yet$/, \"graphics.refused.notWritten\"],\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx",
+   "apps/desktop/src/renderer/src/edit/postTabs.test.ts"
+  ]
+ },
+ {
+  "file": "apps/desktop/src/renderer/src/edit/postTabs.ts",
+  "name": "words: nothing back untranslated",
+  "find": "  [/(?:^|: )this graphic has nothing to go back to$/, \"graphics.refused.nothingBack\"],\n",
+  "replace": "",
+  "tests": [
+   "apps/desktop/src/renderer/src/screens/PostScreen.test.tsx",
+   "apps/desktop/src/renderer/src/room/ClipRoom.test.tsx",
+   "apps/desktop/src/renderer/src/edit/postTabs.test.ts"
+  ]
+ }
+]

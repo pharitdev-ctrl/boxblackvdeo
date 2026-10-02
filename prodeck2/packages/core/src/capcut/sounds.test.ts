@@ -147,3 +147,10 @@ test("the writer says how many sounds it placed and how many had no room", async
   expect(addSoundTrack(info, [pop, { ...pop, atUs: 9_500_000 }, { ...pop, atUs: -100_000 }, call])).toMatchObject({ kept: 2, dropped: 2 })
   expect(addSoundTrack(info, [])).toMatchObject({ kept: 0, dropped: 0 })
 })
+
+test("a cue whose length is not a positive number is left out", async () => {
+  const info = await roughCut()
+  const written = addSoundTrack(info, [{ ...pop, durationUs: Number.NaN }, { ...pop, atUs: 2_000_000, durationUs: 0 }, { ...pop, atUs: 3_000_000 }])
+  expect([written.kept, written.dropped]).toEqual([1, 2])
+  expect(audioTracks(written.info).flatMap((track) => track.segments.map((segment) => segment.target_timerange))).toEqual([{ start: 3_000_000, duration: 333_333 }])
+})

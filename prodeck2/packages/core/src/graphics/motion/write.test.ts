@@ -22,7 +22,7 @@ const said = (html: string) => lintFragment(html).join("\n")
 // the contract
 
 test("the contract opens with its title and what to return, has its six sections in order, and goes by its version", () => {
-  expect(MOTION_WRITE_PROMPT_VERSION).toBe("motion-write-2026-10-01")
+  expect(MOTION_WRITE_PROMPT_VERSION).toBe("motion-write-2026-10-01b")
   expect(MOTION_CONTRACT.startsWith("# Contract for one free-form motion graphic\n\nYou write ONE HTML fragment, in exactly this order: one `<style>` block first, then markup, then (optionally) one plain `<script>` block as the very last thing. Return only the fragment, with no code fence and no explanation.\n")).toBe(true)
   const headings = MOTION_CONTRACT.split("\n").flatMap((line) => /^\*\*([^*]+)\*\*/.exec(line)?.[1] ?? [])
   expect(headings).toEqual(["Shape, checked by a linter that refuses anything else.", "The script, when there is one.", "Where it goes.", "Time.", "Words are variables.", "Look."])
@@ -435,6 +435,44 @@ test("with no words said while it plays, the brief says so", () => {
     "- What to draw: คลื่นซัดเข้าฝั่ง",
     "- The clip is about: ทะเล.",
   ])
+})
+
+const SMALL = { stage: { width: 1080, height: 600 }, seconds: 3, words: [{ text: "อวกาศ", atS: 0.2 }], idea: "จรวดเล็กลอยขึ้น", about: "ทะเล" }
+
+test("a graphic in place of its point's text is told to carry that text's key words, and one beside it not to repeat them", () => {
+  expect(motionBrief({ ...SMALL, text: { replaces: "เร็วถึง 28,000 กม./ชม." } }).split("\n")).toEqual([
+    "Brief:",
+    "- Stage: W = 1080, H = 600 px.",
+    "- D = 3 seconds.",
+    '- Words, in order, with the time each is said now: --w1 "อวกาศ" 0.20.',
+    '- Highlight text: this graphic shows in place of the highlight text "เร็วถึง 28,000 กม./ชม.", which does not show while it plays. Carry its key words in the graphic, short and exact.',
+    "- What to draw: จรวดเล็กลอยขึ้น",
+    "- The clip is about: ทะเล.",
+  ])
+  expect(motionBrief({ ...SMALL, text: { pairs: true } }).split("\n")[4]).toBe("- Highlight text: the highlight text of this moment shows elsewhere on screen. Do not repeat its words.")
+})
+
+test("the subtitles over the stage are named by the stage's own y, and a stage too low for text asks for shapes only", () => {
+  expect(motionBrief({ ...SMALL, captionsFromPx: 412 }).split("\n")[4]).toBe("- Subtitles cover the stage from y = 412 px to its bottom, in front of the graphic. Keep every text, number and the focal point above y = 412.")
+  expect(motionBrief({ ...SMALL, stage: { width: 600, height: 123 } }).split("\n")[4]).toBe("- The stage is too small for text: draw shapes only, with no text.")
+  // the floor itself holds text
+  expect(motionBrief({ ...SMALL, stage: { width: 600, height: 124 } })).not.toContain("too small")
+})
+
+test("every line the brief may gain comes before what to draw, in one order, and with none of them the brief is as it was", () => {
+  expect(motionBrief({ ...SMALL, stage: { width: 600, height: 100 }, text: { pairs: true }, captionsFromPx: 0 }).split("\n")).toEqual([
+    "Brief:",
+    "- Stage: W = 600, H = 100 px.",
+    "- D = 3 seconds.",
+    '- Words, in order, with the time each is said now: --w1 "อวกาศ" 0.20.',
+    "- Highlight text: the highlight text of this moment shows elsewhere on screen. Do not repeat its words.",
+    "- Subtitles cover the stage from y = 0 px to its bottom, in front of the graphic. Keep every text, number and the focal point above y = 0.",
+    "- The stage is too small for text: draw shapes only, with no text.",
+    "- What to draw: จรวดเล็กลอยขึ้น",
+    "- The clip is about: ทะเล.",
+  ])
+  expect(motionBrief(TIMELINE)).toBe(TIMELINE_BRIEF)
+  expect(motionBrief({ ...SMALL, text: undefined, captionsFromPx: undefined })).toBe(motionBrief(SMALL))
 })
 
 /** What the host reported of the trial's fifth fragment at render time, which is what the one real repair call was given. */

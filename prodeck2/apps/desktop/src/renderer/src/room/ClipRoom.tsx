@@ -23,6 +23,7 @@ import type {
   FlairOptions,
   HighlightOptions,
   HighlightPreview,
+  MoveAnchor,
   PostRequest,
   PostRunView,
   PostWork,
@@ -49,6 +50,17 @@ export type WriteState = { kind: "idle" } | { kind: "writing" } | { kind: "writt
 
 /** What the room reads from main for its page: the settings, the rough cut, the placed preview and the subtitle lines. */
 export type RoomRead = "settings" | "cut" | "preview" | "lines"
+
+/**
+ * A graphic, a composed sound or a move of the picture being made again, by its place, and how: from its idea or role
+ * (ทำใหม่) or with a change the user asked for (แก้). A sound tied to a graphic has the graphic's place, and a move may
+ * start on that same word, so `of` says which it is. A move's place says whether it is on a cutaway (`insert`).
+ */
+export interface Rewriting {
+  anchor: MoveAnchor
+  how: "redo" | "edit"
+  of: "graphic" | "sound" | "move"
+}
 
 export interface ClipRoomProps {
   api: RendererApi
@@ -106,9 +118,9 @@ export interface ClipRoomValue {
   run: PostRunView
   /** the works of the run going, or of the last one, as heard since it began; null when the room opened on a run already going */
   runWorks: readonly PostWork[] | null
-  /** the graphic being written again, by its place: from the press of ทำใหม่ until the preview read that follows the run's end has landed or failed; null when none is */
-  redoing: CueAnchor | null
-  /** a run that is not a redo is writing the graphics not written yet: from its graphics work running until the preview read that follows that work's end has landed or failed */
+  /** the graphic or the sound being written again, by its place, and how: from the press of ทำใหม่ or of แก้'s send until the preview read that follows the run's end has landed or failed; null when none is */
+  rewriting: Rewriting | null
+  /** a run that is not a redo or an edit is writing the graphics not written yet: from its graphics work running until the preview read that follows that work's end has landed or failed */
   writingGraphics: boolean
   decide(videoId: string, change: CutDecisionChange): Promise<void>
   changeRules(next: CutRules): void
@@ -125,6 +137,28 @@ export interface ClipRoomValue {
   rethink(work: RethinkWork | "emphasis"): Promise<void>
   /** has Claude write the motion graphic at this place again: a run of the graphics work alone, asked with the settings on screen and followed like a work thought again */
   redoGraphic(anchor: CueAnchor): Promise<void>
+  /** has Claude change the motion graphic at this place as the user asks (`instruction`, trimmed): a run like redoGraphic's, marked as a change */
+  editGraphic(anchor: CueAnchor, instruction: string): Promise<void>
+  /** takes the graphic at this place one step back, as a change of the user's (no run), then reads the graphics again quietly; a refusal is said as `error` */
+  undoGraphic(anchor: CueAnchor): Promise<void>
+  /** has Claude compose the sound at this place again: a run of the sounds work alone, marked and followed as redoGraphic's is */
+  redoSound(anchor: CueAnchor): Promise<void>
+  /** has Claude change the sound at this place as the user asks (`instruction`, trimmed): a run like redoSound's, marked as a change */
+  editSound(anchor: CueAnchor, instruction: string): Promise<void>
+  /** takes the sound at this place one step back, as undoGraphic takes a graphic */
+  undoSound(anchor: CueAnchor): Promise<void>
+  /** switches the sound at this place off or on, or removes it with null, as a change of the user's (no run), then reads the preview again quietly */
+  setSound(anchor: CueAnchor, patch: { off: boolean } | null): Promise<void>
+  /** has Claude design the move at this place again: a run of the techniques work alone, marked and followed as redoGraphic's is */
+  redoMove(anchor: MoveAnchor): Promise<void>
+  /** has Claude change the move at this place as the user asks (`instruction`, trimmed): a run like redoMove's, marked as a change */
+  editMove(anchor: MoveAnchor, instruction: string): Promise<void>
+  /** takes the move at this place one step back, as undoGraphic takes a graphic */
+  undoMove(anchor: MoveAnchor): Promise<void>
+  /** switches the move at this place off or on, or removes it with null, as setSound does a sound */
+  setMove(anchor: MoveAnchor, patch: { off: boolean } | null): Promise<void>
+  /** takes one of the user's own CapCut sounds off its place, as setSound removes a composed one */
+  removeOwnSound(anchor: CueAnchor): Promise<void>
   /** runs a write the write button built: marks it as this room's own, follows it to its end, refreshes the project; asked again while it runs, it does nothing */
   runWrite(call: () => Promise<WriteResult>): Promise<void>
 }
@@ -233,24 +267,35 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
     setPlacingState(next)
   }
   const [editing, setEditing] = useState(false)
+  // the changes of the user's being saved, counted: several may be out at once (a style saved while a step back is
+  // still in main), and one that ends does not release the hold of another
+  const edits = useRef(0)
+  const beginEdit = () => {
+    edits.current += 1
+    setEditing(true)
+  }
+  const endEdit = () => {
+    edits.current -= 1
+    if (edits.current === 0) setEditing(false)
+  }
   const [run, setRun] = useState<PostRunView>(NO_RUN)
   const [runWorks, setRunWorks] = useState<readonly PostWork[] | null>([])
   // whether a run goes, for the events that arrive between renders: the first event of a run begins its works
   const runningNow = useRef(false)
   // what the graphics' rows say is being written. A graphic written again is known by its place from the press of
-  // ทำใหม่, and is the only one being written then; any other run writes every graphic not written yet while its
-  // graphics work runs. A room opened on a run already going cannot know whether it is a redo, nor of which
-  // graphic, since main does not say: it takes it for a plan run
-  const [redoing, setRedoing] = useState<CueAnchor | null>(null)
+  // ทำใหม่ (or of แก้'s send, which writes it again with a change), and is the only one being written then; any other
+  // run writes every graphic not written yet while its graphics work runs. A room opened on a run already going cannot
+  // know whether it is a redo or an edit, nor of which graphic, since main does not say: it takes it for a plan run
+  const [rewriting, setRewriting] = useState<Rewriting | null>(null)
   const [writingGraphics, setWritingState] = useState(false)
-  // the same, for the press of ทำใหม่, which takes it off and must know what it took
+  // the same, for the press of ทำใหม่ or of แก้'s send, which takes it off and must know what it took
   const writingNow = useRef(false)
   const setWritingGraphics = (next: boolean) => {
     writingNow.current = next
     setWritingState(next)
   }
-  // this room's own redo is the run going, for the events that arrive between renders: its graphics work is not a plan run's
-  const redoRun = useRef(false)
+  // this room's own redo or edit is the run going, for the events that arrive between renders: its graphics work is not a plan run's
+  const rewriteRun = useRef(false)
   // the graphics work or the run has ended: the number of the latest preview read asked by then, else null. What
   // says a graphic is being written holds until a read asked after the end lands or fails. The read that follows
   // an end is only asked once the room has drawn again, and one asked before it, whose answer comes in between,
@@ -438,7 +483,7 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
     const writingShown = () => {
       if (writingOver.current === null || request <= writingOver.current) return
       writingOver.current = null
-      setRedoing(null)
+      setRewriting(null)
       setWritingGraphics(false)
     }
     api.previewHighlights(folder, rules, { position: highlightPosition, subtitlesOn, highlightsOn, flair: flair ?? DEFAULT_FLAIR_OPTIONS }).then(
@@ -479,7 +524,10 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
     const stop = api.onEvent((event) => {
       // the renderer pack is in: graphics that waited for it are read again, which starts their renders
       const packInstalled = event.type === "graphics-pack" && event.state === "done"
-      if ((!packInstalled && (event.type !== "graphics" || event.folder !== folder)) || due !== undefined) return
+      // a composed sound's file was made, or failed, or found the machine unfit: the renderer does not say for which
+      // project, so any is read again, at the same pace
+      const soundRendered = event.type === "sounds-rendered"
+      if ((!packInstalled && !soundRendered && (event.type !== "graphics" || event.folder !== folder)) || due !== undefined) return
       const wait = last + GRAPHICS_REFRESH_MS - performance.now()
       if (wait > 0) due = setTimeout(refresh, wait)
       else refresh()
@@ -519,10 +567,12 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
       setRunWorks((works) => (begins ? [work] : works === null || works.includes(work) ? works : [...works, work]))
       // a work's state lands on top of how the others last stood: main keeps the states a run does not touch
       setRun((current) => ({ running: true, states: { ...current.states, [event.work]: event.state } }))
+      // the sounds work counts as each sound's composing is stored: the rows are read again for each count, quietly, as the graphics' are
+      if (event.work === "sounds" && event.state.state === "running" && event.state.done !== undefined) setGraphicsVersion((version) => version + 1)
       if (event.work === "graphics" && event.state.state === "running") {
-        // a redo is a run of the graphics work too, and writes the one graphic asked for: only a run that is not
-        // this room's redo writes every graphic not written yet
-        if (!redoRun.current) {
+        // a redo, or an edit, is a run of the graphics work too, and writes the one graphic asked for: only a run that
+        // is not this room's redo or edit writes every graphic not written yet
+        if (!rewriteRun.current) {
           writingOver.current = null
           setWritingGraphics(true)
         }
@@ -759,7 +809,7 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
   })
 
   const changeHighlightText = useStable(async (action: () => Promise<unknown>): Promise<string | null> => {
-    setEditing(true)
+    beginEdit()
     setError(null)
     try {
       await action()
@@ -774,7 +824,7 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
       setError(message)
       return message
     } finally {
-      setEditing(false)
+      endEdit()
     }
   })
 
@@ -831,29 +881,77 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
     }),
   )
 
-  const redoGraphic = useStable((anchor: CueAnchor) =>
+  /**
+   * Has Claude write one graphic, one sound or one move (`of`) again, from its idea or role or with a change (`how`),
+   * through `call`: a run of its work alone, asked with the request a plan is asked with. A redo and an edit, of any of
+   * the three, are marked and released alike.
+   */
+  const rewrite = (anchor: MoveAnchor, how: Rewriting["how"], of: Rewriting["of"], call: (asked: PostRequest) => Promise<PostRunView>) =>
     running(async (asked) => {
-      // what the press takes off of a plan run's writing, to put back if main refuses the redo because that run
+      // what the press takes off of a plan run's writing, to put back if main refuses it because that run
       // goes. One already over, held only for its read, is not put back: nothing would take it off again
       const stillWriting = writingNow.current && writingOver.current === null
       // from the press the graphic is the one being written, and the only one: a writing before it whose read is
       // still out gives way to this one
       writingOver.current = null
       setWritingGraphics(false)
-      setRedoing(anchor)
-      redoRun.current = true
+      setRewriting({ anchor, how, of })
+      rewriteRun.current = true
       try {
-        return await api.redoGraphic(folder, anchor, asked)
+        return await call(asked)
       } catch (e) {
         // refused before it began, as when another run goes: no graphic is being written again, and no read follows to say so
-        setRedoing(null)
+        setRewriting(null)
         if (stillWriting) setWritingGraphics(true)
         throw e
       } finally {
-        redoRun.current = false
+        rewriteRun.current = false
       }
-    }),
-  )
+    })
+
+  const redoGraphic = useStable((anchor: CueAnchor) => rewrite(anchor, "redo", "graphic", (asked) => api.redoGraphic(folder, anchor, asked)))
+
+  const editGraphic = useStable((anchor: CueAnchor, instruction: string) => rewrite(anchor, "edit", "graphic", (asked) => api.editGraphic(folder, anchor, instruction, asked)))
+
+  const redoSound = useStable((anchor: CueAnchor) => rewrite(anchor, "redo", "sound", (asked) => api.redoSound(folder, anchor, asked)))
+
+  const editSound = useStable((anchor: CueAnchor, instruction: string) => rewrite(anchor, "edit", "sound", (asked) => api.editSound(folder, anchor, instruction, asked)))
+
+  const redoMove = useStable((anchor: MoveAnchor) => rewrite(anchor, "redo", "move", (asked) => api.redoMove(folder, anchor, asked)))
+
+  const editMove = useStable((anchor: MoveAnchor, instruction: string) => rewrite(anchor, "edit", "move", (asked) => api.editMove(folder, anchor, instruction, asked)))
+
+  /**
+   * A change of the user's that asks no Claude and changes nothing but the graphics, the sounds or the moves, as a step
+   * back is: the page waits for it, so a second press cannot swap the two back, and the preview is read again quietly
+   * after it. A move changed places the highlight text again, which that read brings with it.
+   */
+  const quickChange = async (change: () => Promise<void>) => {
+    beginEdit()
+    setError(null)
+    try {
+      await change()
+      // nothing else changed, so it is read again quietly, as for a graphic made
+      setGraphicsVersion((version) => version + 1)
+    } catch (e) {
+      // refused (nothing to go back to, a run going): said in the user's words, as a refused switch is
+      setError(mainText(e instanceof Error ? e.message : String(e)))
+    } finally {
+      endEdit()
+    }
+  }
+
+  const undoGraphic = useStable((anchor: CueAnchor) => quickChange(() => api.undoGraphic(folder, anchor)))
+
+  const undoSound = useStable((anchor: CueAnchor) => quickChange(() => api.undoSound(folder, anchor)))
+
+  const setSound = useStable((anchor: CueAnchor, patch: { off: boolean } | null) => quickChange(() => api.setSound(folder, anchor, patch)))
+
+  const removeOwnSound = useStable((anchor: CueAnchor) => quickChange(() => api.setSoundCue(folder, anchor, null)))
+
+  const undoMove = useStable((anchor: MoveAnchor) => quickChange(() => api.undoMove(folder, anchor)))
+
+  const setMove = useStable((anchor: MoveAnchor, patch: { off: boolean } | null) => quickChange(() => api.setMove(folder, anchor, patch)))
 
   const runWrite = useStable(async (call: () => Promise<WriteResult>) => {
     // a second activation in the same moment as the first, before the page has rendered the write as running,
@@ -915,7 +1013,7 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
       writing: write.kind === "writing",
       run,
       runWorks,
-      redoing,
+      rewriting,
       writingGraphics,
       decide,
       changeRules,
@@ -928,18 +1026,29 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
       planPost,
       rethink,
       redoGraphic,
+      editGraphic,
+      undoGraphic,
+      redoSound,
+      editSound,
+      undoSound,
+      setSound,
+      removeOwnSound,
+      redoMove,
+      editMove,
+      undoMove,
+      setMove,
       runWrite,
     }),
     // the actions keep their identities for good; request's changes with what it asks with
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, folder, project, stored, capcutRunning, rules, presets, subtitles, highlights, flair, plan, preview, lines, texts, error, failed, placing, deciding, editing, writeKnown, write, run, runWorks, redoing, writingGraphics, request],
+    [api, folder, project, stored, capcutRunning, rules, presets, subtitles, highlights, flair, plan, preview, lines, texts, error, failed, placing, deciding, editing, writeKnown, write, run, runWorks, rewriting, writingGraphics, request],
   )
 
   return (
     <RoomContext.Provider value={value}>
       {children}
-      {told && <Toast message={toldMessage(told)} ms={toldIsLong(told) ? ACTION_TOAST_MS : undefined} onDone={toldDone} />}
-      {writeFailed !== null && <Toast message={t("write.failed", { message: writeFailed })} ms={ACTION_TOAST_MS} onDone={writeFailedDone} />}
+      {told && <Toast message={toldMessage(told)} ms={toldIsLong(told) ? ACTION_TOAST_MS : undefined} pose="done" onDone={toldDone} />}
+      {writeFailed !== null && <Toast message={t("write.failed", { message: writeFailed })} ms={ACTION_TOAST_MS} pose="oops" onDone={writeFailedDone} />}
     </RoomContext.Provider>
   )
 }

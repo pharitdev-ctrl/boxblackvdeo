@@ -4,27 +4,35 @@ import type { PlacedPoint } from "@boxblack/core/emphasis"
 import type { FlairOptions } from "@boxblack/core/flair/catalogue"
 import type { CueAnchor } from "@boxblack/core/flair/plan"
 import { frameKey } from "@boxblack/core/graphics/motion/points"
-import { MOTION_VERSION, type GraphicCue, type GraphicSpec, type MotionSpec } from "@boxblack/core/graphics/plan"
+import { COVER_MAX_US, FREE_GRAPHIC_MIN_US, MOTION_VERSION, type GraphicBox, type GraphicCue, type GraphicSpec, type MotionSpec } from "@boxblack/core/graphics/plan"
 import type { PlacedGroup, TimedGroup } from "@boxblack/core/highlights"
 import { HIGHLIGHT_STYLES } from "@boxblack/core/highlights/styles"
 import {
-  existingGraphics,
   framesWanted,
   graphicJob,
   graphicPoints,
   graphicsInForce,
+  admitFree,
+  boxesOverlap,
   graphicViews,
   isReplaced,
+  keepBoxesIn,
   keepClearsIn,
   renderSeconds,
   replacedPoints,
   replacesText,
+  roomOf,
+  scenesOnCut,
   sentenceOf,
   textBands,
   textBandsIn,
   wordsSaidFrom,
+  zoomedFaces,
 } from "./graphics-cues.ts"
 import type { ItemPlace } from "./insert-media.ts"
+import type { Pose } from "@boxblack/core/flair/moves"
+import { OBJECTS_VERSION } from "@boxblack/core/vision"
+import type { PlacedMove } from "./move-cues.ts"
 import type { SpokenSentence } from "./spoken.ts"
 
 const PORTRAIT = { width: 1080, height: 1920 }
@@ -243,30 +251,27 @@ test("a moment where one sentence ends on a word timed with no length and the ne
   expect(sentenceOf([before, after], speech(10_300_000, "b1"))).toBe(before)
 })
 
-test("the user's own graphics are shown to Claude by the point they sit on and what they draw; Claude's own and those on no point shown are not", () => {
-  const points = graphicPoints({ points: [pointOn(SENTENCES[0]!, "p1"), pointOn(SENTENCES[1]!, "p2"), pointOn(SENTENCES[2]!, "p3")], sentences: SENTENCES, clips: CLIPS, bands: [] })
-  const graphics: GraphicCue[] = [
-    { ...CUE, edited: true, pointId: "p3" },
-    // Claude's own
-    { ...CUE, anchor: speech(10_300_000, "b1") },
-    // bound to no point: it sits on the point whose sentence holds its moment, in its beat
-    { ...CUE, anchor: speech(12_000_000, "b2"), edited: true, off: true },
-    { ...CUE, edited: true, pointId: "gone" },
-    { ...CUE, anchor: speech(40_000_000, "b1"), edited: true },
-  ]
-  expect(existingGraphics(graphics, points)).toEqual([
-    { point: 3, summary: "ตัวเลขวิ่งถึง 1,200,000 แล้วคำว่า บาท เด้งขึ้น", off: false },
-    { point: 3, summary: "ตัวเลขวิ่งถึง 1,200,000 แล้วคำว่า บาท เด้งขึ้น", off: true },
-  ])
-})
-
 const ON: FlairOptions = { enabled: true, level: "heavy", text: true, sound: true, zoom: true, insert: true, graphic: true }
 /** Each graphic plays 10 s before its source time; one at 30 s of the source has no place on the cut. */
 const place = (anchor: CueAnchor): ItemPlace | null => (anchor.kind === "speech" && anchor.sourceUs < 25_000_000 ? { atUs: anchor.sourceUs - 10_000_000, what: "ที่ “ล้านสองแสน”", beatId: "b1", by: anchor } : null)
 /** A box's edges to the millionth, so the sums of shares compare cleanly. */
 const rounded = (box: GraphicSpec["box"]) => Object.fromEntries(Object.entries(box).map(([edge, value]) => [edge, Number(value.toFixed(6))]))
 const inForce = (graphics: GraphicCue[], over: Partial<Parameters<typeof graphicsInForce>[0]> = {}) =>
-  graphicsInForce({ graphics, place, flair: ON, durationUs: 60_000_000, passes: () => true, pieceEndOf: () => null, keepClearIn: () => [], textIn: () => [], wordsFrom: () => [], captionsFromY: null, ...over })
+  graphicsInForce({
+    graphics,
+    place,
+    flair: ON,
+    durationUs: 60_000_000,
+    passes: () => true,
+    pieceEndOf: () => null,
+    keepClearIn: () => [],
+    textIn: () => [],
+    room: { textIn: () => [], ownTextIn: () => [], keepIn: () => [] },
+    pointPlaced: () => true,
+    wordsFrom: () => [],
+    captionsFromY: null,
+    ...over,
+  })
 
 test("graphics in force: placed on the rough cut, off ones skipped, boxes moved off the face", () => {
   const { kept, dropped } = inForce([CUE, { ...CUE, off: true }, SECOND_CUE], {
@@ -390,10 +395,8 @@ test("a stored graphic that is no motion graphic is left out where graphics are 
   const beside = inForce([others[0]!, MOTION_CUE, others[2]!, SECOND_CUE, others[4]!], { wordsFrom: AS_WRITTEN })
   expect(beside).toEqual(inForce([MOTION_CUE, SECOND_CUE], { wordsFrom: AS_WRITTEN }))
   expect(beside.kept.map((graphic) => graphic.cue)).toEqual([MOTION_CUE, SECOND_CUE])
-  // nor are they listed on the screen, or shown to Claude as the user's own
+  // nor are they listed on the screen
   expect(graphicViews(beside, place).map((view) => view.anchor)).toEqual([MOTION_CUE.anchor, SECOND_CUE.anchor])
-  const points = graphicPoints({ points: [pointOn(SENTENCES[0]!, "p1"), pointOn(SENTENCES[1]!, "p2")], sentences: SENTENCES, clips: CLIPS, bands: [] })
-  expect(existingGraphics([stored(card, { edited: true, pointId: "p1" }), { ...MOTION_CUE, edited: true, pointId: "p2" }], points)).toEqual([{ point: 2, summary: MOTION.idea, off: false }])
 })
 
 test("a motion graphic carries the words said now while it plays, asked for by the moment it plays by and the length the rules leave it", () => {
@@ -928,9 +931,6 @@ test("an entry of the stored graphics that is no graphic at all is left out like
   const beside = inForce([broken[0]!, MOTION_CUE, broken[1]!, SECOND_CUE, broken[2]!], { wordsFrom: AS_WRITTEN })
   expect(beside).toEqual(inForce([MOTION_CUE, SECOND_CUE], { wordsFrom: AS_WRITTEN }))
   expect(graphicViews(beside, place).map((view) => view.anchor)).toEqual([MOTION_CUE.anchor, SECOND_CUE.anchor])
-  // nor are they shown to Claude as the user's own
-  const points = graphicPoints({ points: [pointOn(SENTENCES[0]!, "p1"), pointOn(SENTENCES[1]!, "p2")], sentences: SENTENCES, clips: CLIPS, bands: [] })
-  expect(existingGraphics([...broken, { ...MOTION_CUE, edited: true, pointId: "p2" }], points)).toEqual([{ point: 2, summary: MOTION.idea, off: false }])
 })
 
 test("a length in microseconds is written and rendered for as seconds to the millisecond below", () => {
@@ -969,6 +969,9 @@ test("the view of a graphic says where it plays and what it is", () => {
       canUndo: false,
       edited: true,
       off: false,
+      from: null,
+      replaces: false,
+      coversKeep: false,
     },
   ])
 })
@@ -995,6 +998,10 @@ test("the view of a motion graphic is summed up by its idea, names the words it 
     canUndo: false,
     edited: false,
     off: false,
+    from: null,
+    // a legacy graphic made for no point takes no text's place
+    replaces: false,
+    coversKeep: false,
   })
   // not written yet: no writing has failed, and it is not stale
   expect(waiting).toMatchObject({ atUs: 7_000_000, summary: MOTION.idea, written: false, stale: false, writeFailed: null, off: false })
@@ -1004,12 +1011,514 @@ test("the view of a motion graphic is summed up by its idea, names the words it 
   expect(graphicViews(inForce([MOTION_CUE], { wordsFrom: said(["ล้าน", 0]) }), place)).toMatchObject([{ summary: MOTION.idea, what: "ที่ “ล้านสองแสน”", written: true, stale: true, writeFailed: null }])
 })
 
-test("a graphic is summed up by its idea, written or not, on the screen and in what Claude is told of the user's own graphics", () => {
+test("a graphic whose stored failure, change or failed edit is no text (an outline edited by hand may hold anything) shows none of them", () => {
+  for (const odd of [7, { why: "nothing was drawn" }]) {
+    const cue: GraphicCue = { ...MOTION_CUE, spec: { ...MOTION, failed: odd, instruction: odd, editFailed: odd } as unknown as MotionSpec }
+    expect(graphicViews(inForce([cue], { wordsFrom: AS_WRITTEN }), place), JSON.stringify(odd)).toMatchObject([{ written: true, writeFailed: null, instruction: null, editFailed: null }])
+  }
+  // text is shown as it is stored
+  const said: GraphicCue = { ...MOTION_CUE, spec: { ...MOTION, failed: "a", instruction: "b", editFailed: "c" } }
+  expect(graphicViews(inForce([said], { wordsFrom: AS_WRITTEN }), place)).toMatchObject([{ writeFailed: "a", instruction: "b", editFailed: "c" }])
+})
+
+test("a graphic is summed up on the screen by its idea, written or not", () => {
   const unwritten: GraphicCue = { ...MOTION_CUE, anchor: speech(17_000_000, "b1"), spec: { ...MOTION, html: null, failed: "nothing was drawn: every frame is empty" } }
   expect(graphicViews(inForce([MOTION_CUE, unwritten], { wordsFrom: AS_WRITTEN }), place).map((view) => view.summary)).toEqual([MOTION.idea, MOTION.idea])
-  const points = graphicPoints({ points: [pointOn(SENTENCES[0]!, "p1"), pointOn(SENTENCES[1]!, "p2")], sentences: SENTENCES, clips: CLIPS, bands: [] })
-  expect(existingGraphics([{ ...MOTION_CUE, edited: true, pointId: "p2" }, { ...MOTION_CUE, edited: true, off: true, pointId: "p1" }], points)).toEqual([
-    { point: 2, summary: MOTION.idea, off: false },
-    { point: 1, summary: MOTION.idea, off: true },
+})
+
+/* free graphics */
+
+const box = (x0: number, y0: number, x1: number, y1: number): GraphicBox => ({ x0, y0, x1, y1 })
+const FACE = box(0.3, 0.1, 0.7, 0.45)
+const SHOWN = box(0.2, 0.6, 0.5, 0.9)
+const POINTED = box(0.6, 0.6, 0.9, 0.9)
+
+/**
+ * Clip "a" with its objects found: a face and a thing pointed at in its first scene, a shown thing in its second. Clip "b"
+ * with no objects pass yet: a face band in its first scene, and nothing to keep clear in its second.
+ */
+const OBJECT_CLIPS = [
+  {
+    id: "a",
+    insight: {
+      scenes: [
+        { startUs: 0, endUs: 10_000_000, description: "คนพูด", kind: "talking-head", issues: [], keepClear: { fromY: 0.1, toY: 0.4 } },
+        { startUs: 10_000_000, endUs: 20_000_000, description: "ถือสินค้า", kind: "product", issues: [], keepClear: { fromY: 0.5, toY: 0.9 } },
+      ],
+    },
+    objects: {
+      version: "objects-2026-10-01",
+      scenes: [
+        [
+          { what: "หน้า", kind: "keep", box: FACE, still: false },
+          { what: "แก้ว", kind: "point", box: POINTED, still: true },
+        ],
+        [{ what: "กล่อง", kind: "keep", box: SHOWN, still: true }],
+      ],
+    },
+  },
+  {
+    id: "b",
+    insight: {
+      scenes: [
+        { startUs: 0, endUs: 10_000_000, description: "หน้าตรง", kind: "talking-head", issues: [], keepClear: { fromY: 0.5, toY: 0.9 } },
+        { startUs: 10_000_000, endUs: 20_000_000, description: "มือ", kind: "b-roll", issues: [], keepClear: null },
+      ],
+    },
+    objects: null,
+  },
+] as unknown as CutClip[]
+
+test("the boxes to keep clear over a span are the keep objects of every scene played in it, or a scene's keepClear band across the frame when its video has no objects", () => {
+  // 5–15 s of a plays at 0–10 s, then 5–15 s of b at 10–20 s
+  const plan = { beats: [], cuts: [{ binId: "a", sourceStartUs: 5_000_000, sourceDurationUs: 10_000_000 }, { binId: "b", sourceStartUs: 5_000_000, sourceDurationUs: 10_000_000 }], durationUs: 20_000_000 } as unknown as CutPlan
+  // both scenes of a: the face and the shown thing, and never the thing pointed at, nor a's keepClear bands
+  expect(keepBoxesIn(plan, OBJECT_CLIPS, { startUs: 0, endUs: 10_000_000 })).toEqual([FACE, SHOWN])
+  expect(keepBoxesIn(plan, OBJECT_CLIPS, { startUs: 6_000_000, endUs: 7_000_000 })).toEqual([SHOWN])
+  // b has no objects: its first scene's band, across the frame
+  expect(keepBoxesIn(plan, OBJECT_CLIPS, { startUs: 12_000_000, endUs: 14_000_000 })).toEqual([box(0, 0.5, 1, 0.9)])
+  // b's second scene has neither
+  expect(keepBoxesIn(plan, OBJECT_CLIPS, { startUs: 16_000_000, endUs: 18_000_000 })).toEqual([])
+  // a scene whose objects are only things to point at keeps nothing clear
+  const pointing = [{ ...OBJECT_CLIPS[0]!, objects: { version: "objects-2026-10-01", scenes: [[{ what: "แก้ว", kind: "point", box: POINTED, still: true }], []] } }] as unknown as CutClip[]
+  expect(keepBoxesIn(plan, pointing, { startUs: 0, endUs: 10_000_000 })).toEqual([])
+})
+
+test("the scenes on the cut are each scene a piece plays, timed on the rough cut, with the scene before merged when it goes on", () => {
+  // a 2–4 s, a 5–8 s and a 8–12 s play at 0–9 s, all but the last 2 s in a's first scene; b 0–2 s at 9–11 s; a 0–1 s at 11–12 s
+  const plan = {
+    beats: [],
+    cuts: [
+      { binId: "a", sourceStartUs: 2_000_000, sourceDurationUs: 2_000_000 },
+      { binId: "a", sourceStartUs: 5_000_000, sourceDurationUs: 3_000_000 },
+      { binId: "a", sourceStartUs: 8_000_000, sourceDurationUs: 4_000_000 },
+      { binId: "b", sourceStartUs: 0, sourceDurationUs: 2_000_000 },
+      { binId: "a", sourceStartUs: 0, sourceDurationUs: 1_000_000 },
+    ],
+    durationUs: 12_000_000,
+  } as unknown as CutPlan
+  const talking = { kind: "talking-head", description: "คนพูด", keepClear: { fromY: 0.1, toY: 0.4 }, objects: [{ what: "หน้า", kind: "keep", box: FACE, still: false }, { what: "แก้ว", kind: "point", box: POINTED, still: true }] }
+  expect(scenesOnCut(plan, OBJECT_CLIPS)).toEqual([
+    { startUs: 0, endUs: 7_000_000, ...talking },
+    { startUs: 7_000_000, endUs: 9_000_000, kind: "product", description: "ถือสินค้า", keepClear: { fromY: 0.5, toY: 0.9 }, objects: [{ what: "กล่อง", kind: "keep", box: SHOWN, still: true }] },
+    // b has no objects pass yet
+    { startUs: 9_000_000, endUs: 11_000_000, kind: "talking-head", description: "หน้าตรง", keepClear: { fromY: 0.5, toY: 0.9 }, objects: null },
+    // a's first scene again, after another video: an entry of its own
+    { startUs: 11_000_000, endUs: 12_000_000, ...talking },
   ])
+})
+
+test("boxes overlap only with a positive area on both axes: touching is not overlapping", () => {
+  const left = box(0, 0, 0.5, 0.5)
+  expect(boxesOverlap(left, box(0.5, 0, 1, 0.5))).toBe(false)
+  expect(boxesOverlap(left, box(0, 0.5, 0.5, 1))).toBe(false)
+  expect(boxesOverlap(left, box(0.5, 0.5, 1, 1))).toBe(false)
+  expect(boxesOverlap(left, box(0.49, 0.49, 1, 1))).toBe(true)
+  expect(boxesOverlap(box(0.1, 0.1, 0.2, 0.2), left)).toBe(true)
+  // overlapping on one axis only is apart
+  expect(boxesOverlap(left, box(0.2, 0.6, 0.4, 0.9))).toBe(false)
+  // touching is not overlapping whichever box is named first, on either axis
+  expect(boxesOverlap(box(0.5, 0, 1, 0.5), left)).toBe(false)
+  expect(boxesOverlap(box(0, 0.5, 0.5, 1), left)).toBe(false)
+})
+
+test("two of Claude's free graphics side by side, touching at x, are on screen together: both are admitted, in either order", () => {
+  const room = roomWith({})
+  const at = (sourceUs: number, x0: number, x1: number): GraphicCue => ({ ...FREE, anchor: speech(sourceUs, "b1"), spec: { ...MOTION, html: null, box: box(x0, 0.6, x1, 0.8) } })
+  // the earlier on the left, the later on the right; then the earlier on the right
+  for (const [first, second] of [
+    [at(12_000_000, 0.1, 0.5), at(12_500_000, 0.5, 0.9)],
+    [at(12_000_000, 0.5, 0.9), at(12_500_000, 0.1, 0.5)],
+  ]) {
+    expect(admitFree([first!, second!], placedOf, room, [])).toEqual({ admitted: [first, second], dropped: 0 })
+    // and placed, neither gives way to the other
+    expect(inForce([first!, second!], { room }).kept.map((graphic) => graphic.cue)).toEqual([first, second])
+  }
+})
+
+/** A free graphic on the moment MOTION_CUE plays at (2–5 s of the rough cut, box 0.3–0.5 of the height), written to stay beside its point's text. */
+const FREE: GraphicCue = { ...MOTION_CUE, from: "medium", spec: { ...MOTION, replacesText: false } }
+/** Text on screen, as the room hands it: a band, and the point its group was made for. */
+const textIn =
+  (...groups: [number, number, string?][]) =>
+  () =>
+    groups.map(([fromY, toY, pointId]) => ({ band: { fromY, toY }, ...(pointId !== undefined ? { pointId } : {}) }))
+type At = { startUs: number; endUs: number }
+/** A room with the text drawn at the level, and the same text as its point's own with every point shown unless told otherwise. */
+const roomWith = (over: { textIn?: ReturnType<typeof textIn>; ownTextIn?: (span: At, pointId: string) => { fromY: number; toY: number }[]; keepIn?: (span: At) => GraphicBox[] }) => ({
+  textIn: over.textIn ?? (() => []),
+  ownTextIn:
+    over.ownTextIn ??
+    ((_span: At, pointId: string) =>
+      (over.textIn?.() ?? []).flatMap((group) => (group.pointId === pointId ? [group.band] : []))),
+  keepIn: over.keepIn ?? (() => []),
+})
+
+test("a free graphic's room: another point's text, or text bound to none, under its box makes it gone; its own point's makes it covering; a face or a shown thing under it is covered", () => {
+  const span = { startUs: 2_000_000, endUs: 5_000_000 }
+  const tied = (pointId?: string): GraphicCue => ({ ...FREE, ...(pointId !== undefined ? { pointId } : {}) })
+  expect(roomOf(tied("p1"), span, roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }))).toEqual({ gone: false, covering: true, coversKeep: false })
+  expect(roomOf(tied("p2"), span, roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }))).toEqual({ gone: true })
+  expect(roomOf(tied("p1"), span, roomWith({ textIn: textIn([0.25, 0.55]) }))).toEqual({ gone: true })
+  // one tied to no point is gone over any text
+  expect(roomOf(tied(), span, roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }))).toEqual({ gone: true })
+  // text beside it, touching its edge, is neither
+  expect(roomOf(tied("p2"), span, roomWith({ textIn: textIn([0.5, 0.6, "p1"], [0.1, 0.3]) }))).toEqual({ gone: false, covering: false, coversKeep: false })
+  expect(roomOf(tied("p1"), span, roomWith({ textIn: textIn([0.5, 0.6, "p1"]) }))).toEqual({ gone: false, covering: false, coversKeep: false })
+  // a keep box overlapping it in both directions is covered; one only touching it, or beside it across, is not
+  expect(roomOf(tied(), span, roomWith({ keepIn: () => [box(0.4, 0.4, 0.6, 0.6)] }))).toEqual({ gone: false, covering: false, coversKeep: true })
+  expect(roomOf(tied(), span, roomWith({ keepIn: () => [box(0.9, 0.3, 1, 0.5), box(0.1, 0.5, 0.9, 0.7)] }))).toEqual({ gone: false, covering: false, coversKeep: false })
+  // the room is asked for the span given
+  const asked: unknown[] = []
+  roomOf(tied("p1"), span, { textIn: (at) => (asked.push(at), []), ownTextIn: (at, pointId) => (asked.push([at, pointId]), []), keepIn: (at) => (asked.push(at), []) })
+  expect(asked).toEqual([span, [span, "p1"], span])
+  // text bound to no point under a graphic tied to none: gone, not covering
+  expect(roomOf(tied(), span, roomWith({ textIn: textIn([0.25, 0.55]) }))).toEqual({ gone: true })
+})
+
+test("a free graphic plays from its own level up, whatever its point's importance, and not on a point the cut took away; neither is listed or counted", () => {
+  const off: GraphicCue = { ...FREE, anchor: speech(15_000_000, "b1"), off: true }
+  const shown = (level: "light" | "medium" | "heavy") => inForce([FREE, off], { flair: { ...ON, level }, wordsFrom: AS_WRITTEN })
+  expect(shown("light")).toEqual({ kept: [], dropped: 0, off: [] })
+  expect(shown("medium").kept.map((graphic) => graphic.cue)).toEqual([FREE])
+  expect(shown("medium").off.map((graphic) => graphic.cue)).toEqual([off])
+  expect(shown("heavy").kept.map((graphic) => graphic.cue)).toEqual([FREE])
+  // a point the level hides does not hide it: it has a level of its own
+  expect(inForce([{ ...FREE, pointId: "p1" }], { passes: () => false, wordsFrom: AS_WRITTEN }).kept).toHaveLength(1)
+  // tied to a point not on this cut, it is hidden, switched off or not
+  const away = inForce([{ ...FREE, pointId: "gone" }, { ...off, pointId: "gone" }, { ...FREE, anchor: speech(20_000_000, "b1"), pointId: "p1" }], { pointPlaced: (id) => id !== "gone", wordsFrom: AS_WRITTEN })
+  expect([away.kept.map((graphic) => graphic.cue.pointId), away.off, away.dropped]).toEqual([["p1"], [], 0])
+})
+
+test("a free graphic is never moved: another point's text under it makes it gone and counted, unless it is off; its own point's text makes it covering", () => {
+  const other = inForce([{ ...FREE, pointId: "p2" }], { room: roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }), wordsFrom: AS_WRITTEN })
+  expect(other).toEqual({ kept: [], dropped: 1, off: [] })
+  // switched off it is listed all the same, as a legacy one with no room is, and not counted
+  const offOther = inForce([{ ...FREE, pointId: "p2", off: true }], { room: roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }), wordsFrom: AS_WRITTEN })
+  expect([offOther.kept, offOther.off.length, offOther.dropped]).toEqual([[], 1, 0])
+  // its own point's text: kept where it was stored, covering, and written to stay beside it, so stale and replacing nothing
+  const own = inForce([{ ...FREE, pointId: "p1" }], { room: roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }), keepClearIn: () => [{ fromY: 0, toY: 1 }], wordsFrom: AS_WRITTEN })
+  expect(own.kept.map((graphic) => [graphic.cue.spec.box, graphic.covering, graphic.coversKeep, graphic.stale, graphic.replaces])).toEqual([[MOTION.box, true, false, true, false]])
+  // beside it: not covering
+  const beside = inForce([{ ...FREE, pointId: "p1" }], { room: roomWith({ textIn: textIn([0.6, 0.7, "p1"]) }), wordsFrom: AS_WRITTEN })
+  expect(beside.kept.map((graphic) => [graphic.covering, graphic.stale, graphic.replaces])).toEqual([[false, false, false]])
+})
+
+test("a free graphic over a face or a shown thing plays 1.5 s at most; a keepClear band does the same on a video with no objects", () => {
+  const unwritten: GraphicCue = { ...FREE, spec: { ...MOTION, html: null } }
+  const over = inForce([unwritten], { room: roomWith({ keepIn: () => [box(0.4, 0.4, 0.6, 0.6)] }) })
+  expect(over.kept.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[COVER_MAX_US, true]])
+  // and the same when it is switched off, which says what it would do switched on
+  expect(inForce([{ ...unwritten, off: true }], { room: roomWith({ keepIn: () => [box(0.4, 0.4, 0.6, 0.6)] }) }).off.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[COVER_MAX_US, true]])
+  // the source plays as it is on the rough cut: v has its face band at 0.1–0.45 until 11.2 s, and no objects; a has a face high in the frame
+  const plan = (binId: string) => ({ beats: [], cuts: [{ binId, sourceStartUs: 0, sourceDurationUs: 60_000_000 }], durationUs: 60_000_000 }) as unknown as CutPlan
+  const clips = [...CLIPS, { ...OBJECT_CLIPS[0]!, id: "a" }] as CutClip[]
+  const keepOf = (binId: string) => roomWith({ keepIn: (span) => keepBoxesIn(plan(binId), clips, span) })
+  expect(inForce([unwritten], { room: keepOf("v") }).kept.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[COVER_MAX_US, true]])
+  // a's face is at 0.1–0.45 across 0.3–0.7 of the width, over the graphic's box: covered too; its second scene's thing is low and not
+  expect(inForce([unwritten], { room: keepOf("a") }).kept.map((graphic) => graphic.coversKeep)).toEqual([true])
+  expect(inForce([{ ...unwritten, anchor: speech(22_000_000, "b1") }], { room: keepOf("a") }).kept.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[3_000_000, false]])
+  // nothing kept clear: its whole length
+  expect(inForce([unwritten]).kept.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[3_000_000, false]])
+})
+
+test("of two free graphics on screen together in the same place the later is dropped and counted; in time only, or in place only, both play", () => {
+  const later = (sourceUs: number, over: Partial<MotionSpec> = {}): GraphicCue => ({ ...FREE, anchor: speech(sourceUs, "b1"), spec: { ...FREE.spec, ...over } })
+  const both = inForce([later(13_000_000), FREE], { wordsFrom: AS_WRITTEN })
+  expect([both.kept.map((graphic) => graphic.atUs), both.dropped]).toEqual([[2_000_000], 1])
+  const apart = inForce([FREE, later(13_000_000, { box: box(0.1, 0.6, 0.9, 0.8) })], { wordsFrom: AS_WRITTEN })
+  expect([apart.kept.map((graphic) => graphic.atUs), apart.dropped]).toEqual([[2_000_000, 3_000_000], 0])
+  const afterwards = inForce([FREE, later(15_000_000)], { wordsFrom: AS_WRITTEN })
+  expect([afterwards.kept.map((graphic) => graphic.atUs), afterwards.dropped]).toEqual([[2_000_000, 5_000_000], 0])
+  // one dropped this way makes no room for a third: the third is judged against the ones kept
+  const three = inForce([FREE, later(13_000_000), later(15_500_000, { box: box(0.1, 0.45, 0.9, 0.6) })], { wordsFrom: AS_WRITTEN })
+  expect([three.kept.map((graphic) => graphic.atUs), three.dropped]).toEqual([[2_000_000, 5_500_000], 1])
+  // a switched-off one takes no place
+  expect(inForce([{ ...FREE, off: true }, later(13_000_000)], { wordsFrom: AS_WRITTEN }).kept.map((graphic) => graphic.atUs)).toEqual([3_000_000])
+})
+
+test("a free graphic never moves or drops a legacy one: it gives way to it, before or after, and the legacy one is placed as if it were not there", () => {
+  const legacy: GraphicCue = { ...MOTION_CUE, anchor: speech(13_000_000, "b1"), pointId: "p1" }
+  const alone = inForce([legacy], { wordsFrom: AS_WRITTEN })
+  const before = inForce([FREE, legacy], { wordsFrom: AS_WRITTEN })
+  expect([before.kept, before.dropped]).toEqual([alone.kept, 1])
+  const after = inForce([legacy, { ...FREE, anchor: speech(14_000_000, "b1") }], { wordsFrom: AS_WRITTEN })
+  expect([after.kept, after.dropped]).toEqual([alone.kept, 1])
+  // a legacy graphic carries none of the free fields
+  expect(alone.kept[0]).not.toHaveProperty("covering")
+  expect(alone.kept[0]).not.toHaveProperty("replaces")
+  expect(alone.kept[0]).not.toHaveProperty("coversKeep")
+})
+
+test("a written free graphic is stale when it was written to replace its point's text and does not cover it now, or the other way round", () => {
+  const written = (replacesText: boolean): GraphicCue => ({ ...FREE, pointId: "p1", spec: { ...MOTION, replacesText } })
+  const over = roomWith({ textIn: textIn([0.25, 0.55, "p1"]) })
+  const judged = (cue: GraphicCue, room = roomWith({})) => inForce([cue], { room, wordsFrom: AS_WRITTEN }).kept.map((graphic) => [graphic.covering, graphic.stale, graphic.replaces])
+  expect(judged(written(true), over)).toEqual([[true, false, true]])
+  expect(judged(written(true))).toEqual([[false, true, false]])
+  expect(judged(written(false), over)).toEqual([[true, true, false]])
+  expect(judged(written(false))).toEqual([[false, false, false]])
+  // one not written yet is never stale, and replaces nothing until it is written
+  expect(judged({ ...written(true), spec: { ...MOTION, html: null } }, over)).toEqual([[true, false, false]])
+})
+
+test("a free graphic plays as short as 0.8 s: 0.9 s plays, where a legacy one of the same length does not, and its piece's end gives it no less than 0.8 s", () => {
+  const short: MotionSpec = { ...MOTION, html: null, seconds: 0.9 }
+  expect(inForce([{ ...FREE, spec: short }]).kept.map((graphic) => graphic.durationUs)).toEqual([900_000])
+  expect(inForce([{ ...MOTION_CUE, spec: short }])).toEqual({ kept: [], dropped: 1, off: [] })
+  expect(inForce([{ ...FREE, spec: { ...MOTION, html: null } }], { pieceEndOf: () => 2_500_000 }).kept.map((graphic) => graphic.durationUs)).toEqual([FREE_GRAPHIC_MIN_US])
+})
+
+test("a free graphic takes its point's text's place only when it covers it and is written and fresh; replacedPoints follows", () => {
+  const over = roomWith({ textIn: textIn([0.25, 0.55, "p1"]) })
+  const replacing: GraphicCue = { ...FREE, pointId: "p1", spec: { ...MOTION, replacesText: true } }
+  const kept = inForce([replacing], { room: over, wordsFrom: AS_WRITTEN })
+  expect(kept.kept.map(replacesText)).toEqual([true])
+  expect([...replacedPoints(kept)]).toEqual(["p1"])
+  // beside its point's text, written to stay beside it: fresh, with a job, and the text stays
+  const beside = inForce([{ ...FREE, pointId: "p1" }], { wordsFrom: AS_WRITTEN })
+  expect(graphicJob(beside.kept[0]!, { canvas: PORTRAIT, fps: 30, style: HIGHLIGHT_STYLES["bold-white"] })).not.toBeNull()
+  expect([...replacedPoints(beside)]).toEqual([])
+})
+
+test("the view of a free graphic says its level, whether it takes its point's text's place and whether it covers a face or a shown thing; a legacy one has no level", () => {
+  const replacing: GraphicCue = { ...FREE, pointId: "p1", spec: { ...MOTION, replacesText: true } }
+  const views = graphicViews(inForce([replacing], { room: roomWith({ textIn: textIn([0.25, 0.55, "p1"]), keepIn: () => [box(0.4, 0.4, 0.6, 0.6)] }), wordsFrom: said(["ล้าน", 0]) }), place)
+  // covering a face it plays 1.5 s, and the words said in those are the ones it is judged by
+  expect(views.map((view) => [view.from, view.coversKeep])).toEqual([["medium", true]])
+  // a second, tied to no point, low in the frame clear of the text, from the loudest level
+  const low: GraphicCue = { ...FREE, anchor: speech(20_000_000, "b1"), from: "heavy", spec: { ...FREE.spec, box: box(0.1, 0.6, 0.9, 0.8) } }
+  const fresh = graphicViews(inForce([replacing, low], { room: roomWith({ textIn: textIn([0.25, 0.55, "p1"]) }), wordsFrom: AS_WRITTEN }), place)
+  expect(fresh.map((view) => [view.from, view.replaces, view.coversKeep])).toEqual([
+    ["medium", true, false],
+    ["heavy", false, false],
+  ])
+  // a legacy one made for a point says it replaces by the old rule
+  const legacy = graphicViews(inForce([{ ...MOTION_CUE, pointId: "p1" }], { wordsFrom: AS_WRITTEN }), place)
+  expect(legacy.map((view) => [view.from, view.replaces, view.coversKeep])).toEqual([[null, true, false]])
+})
+
+/** Where each cue of an admission plays: 10 s before its source moment, for its seconds; none past 25 s. */
+const placedOf = (cue: GraphicCue) => (cue.anchor.kind === "speech" && cue.anchor.sourceUs < 25_000_000 ? { atUs: cue.anchor.sourceUs - 10_000_000, durationUs: Math.round(cue.spec.seconds * 1_000_000) } : null)
+/** p1's text on screen from 1 s to 4 s at 0.25–0.55, as the room hands it for a span. */
+const P1_TEXT = {
+  textIn: (span: At) => (span.startUs < 4_000_000 && 1_000_000 < span.endUs ? [{ band: { fromY: 0.25, toY: 0.55 }, pointId: "p1" }] : []),
+  ownTextIn: (span: At, pointId: string) => (pointId === "p1" && span.startUs < 4_000_000 && 1_000_000 < span.endUs ? [{ fromY: 0.25, toY: 0.55 }] : []),
+  keepIn: () => [],
+}
+
+test("admitting Claude's free graphics drops one with no place, one gone, and one tied to a point that does not start while its point's text is on screen", () => {
+  const tied = (sourceUs: number, pointId?: string): GraphicCue => ({ ...FREE, anchor: speech(sourceUs, "b1"), spec: { ...MOTION, html: null }, ...(pointId !== undefined ? { pointId } : {}) })
+  // starts at 2 s, while p1's text is up
+  expect(admitFree([tied(12_000_000, "p1")], placedOf, P1_TEXT, [])).toEqual({ admitted: [tied(12_000_000, "p1")], dropped: 0 })
+  // no place on the cut
+  expect(admitFree([tied(30_000_000, "p1")], placedOf, P1_TEXT, [])).toEqual({ admitted: [], dropped: 1 })
+  // over p1's text, tied to another point or to none
+  expect(admitFree([tied(12_000_000, "p2"), tied(12_000_000)], placedOf, P1_TEXT, [])).toEqual({ admitted: [], dropped: 2 })
+  // starts at 4 s, after p1's text has gone: its start is outside its point's text, though it plays on
+  const late = tied(14_000_000, "p1")
+  expect(admitFree([late], placedOf, P1_TEXT, [])).toEqual({ admitted: [], dropped: 1 })
+  // one tied to no point may start anywhere clear
+  expect(admitFree([tied(16_000_000)], placedOf, P1_TEXT, [])).toEqual({ admitted: [tied(16_000_000)], dropped: 0 })
+})
+
+test("admitting drops one on screen with the user's own graphic or an earlier one admitted in the same place, and cuts one over a face or a shown thing to 1.5 s", () => {
+  const at = (sourceUs: number, over: Partial<MotionSpec> = {}): GraphicCue => ({ ...FREE, anchor: speech(sourceUs, "b1"), spec: { ...MOTION, html: null, ...over } })
+  const room = roomWith({})
+  // the user's own at 3–6 s in the same box
+  const own = [{ span: { startUs: 3_000_000, endUs: 6_000_000 }, box: MOTION.box }]
+  expect(admitFree([at(12_000_000)], placedOf, room, own)).toEqual({ admitted: [], dropped: 1 })
+  // in another place, or after it, it stays
+  expect(admitFree([at(12_000_000, { box: box(0.1, 0.6, 0.9, 0.8) }), at(16_000_000)], placedOf, room, own).dropped).toBe(0)
+  // two of Claude's together in the same place: the later goes, whatever order they come in
+  expect(admitFree([at(13_000_000), at(12_000_000)], placedOf, room, [])).toEqual({ admitted: [at(12_000_000)], dropped: 1 })
+  // over a face: kept, its seconds cut to 1.5, and so clear of one that starts at 1.6 s after it
+  const face = roomWith({ keepIn: () => [box(0.4, 0.4, 0.6, 0.6)] })
+  expect(admitFree([at(12_000_000), at(13_600_000)], placedOf, face, [])).toEqual({ admitted: [at(12_000_000, { seconds: COVER_MAX_US / 1e6 }), at(13_600_000, { seconds: COVER_MAX_US / 1e6 })], dropped: 0 })
+  // a short one keeps its seconds
+  expect(admitFree([at(12_000_000, { seconds: 1 })], placedOf, face, []).admitted.map((cue) => cue.spec.seconds)).toEqual([1])
+})
+
+test("a free graphic's covering is judged against its point's text with every point shown, so a level that hides that text makes it neither uncovering nor stale", () => {
+  // p1 is secondary: at light its text is not drawn, but with every point shown it is under the graphic
+  const graphic: GraphicCue = { ...FREE, from: "light", pointId: "p1", spec: { ...MOTION, replacesText: true } }
+  const drawnAt = (level: "light" | "medium") => (level === "light" ? textIn() : textIn([0.25, 0.55, "p1"]))
+  for (const level of ["light", "medium"] as const) {
+    const room = roomWith({ textIn: drawnAt(level), ownTextIn: () => [{ fromY: 0.25, toY: 0.55 }] })
+    const [placed] = inForce([graphic], { flair: { ...ON, level }, room, wordsFrom: AS_WRITTEN }).kept
+    expect([placed!.covering, placed!.stale, placed!.replaces], level).toEqual([true, false, true])
+  }
+})
+
+test("a free graphic's covering is judged on the span it plays once cut: by a face, or by the end of the rough cut", () => {
+  // p1's own text comes up at 4 s; the graphic plays 2–5 s at full length
+  const late = roomWith({ ownTextIn: (span) => (span.endUs > 4_000_000 ? [{ fromY: 0.25, toY: 0.55 }] : []) })
+  const cue: GraphicCue = { ...FREE, pointId: "p1", spec: { ...MOTION, html: null } }
+  expect(inForce([cue], { room: late }).kept.map((graphic) => graphic.covering)).toEqual([true])
+  // over a face it plays 2–3.5 s, and never covers the text
+  const face = { ...late, keepIn: () => [box(0.4, 0.4, 0.6, 0.6)] }
+  expect(inForce([cue], { room: face }).kept.map((graphic) => [graphic.durationUs, graphic.coversKeep, graphic.covering])).toEqual([[COVER_MAX_US, true, false]])
+  // the rough cut ends at 3.9 s: it plays 2–3.9 s, and never covers the text either, switched on or off
+  expect(inForce([cue], { room: late, durationUs: 3_900_000 }).kept.map((graphic) => [graphic.durationUs, graphic.covering])).toEqual([[1_900_000, false]])
+  expect(inForce([{ ...cue, off: true }], { room: late, durationUs: 3_900_000 }).off.map((graphic) => graphic.covering)).toEqual([false])
+})
+
+test("a free graphic is never moved off the subtitles: it keeps its box where they would be", () => {
+  expect(inForce([FREE], { captionsFromY: 0.4, wordsFrom: AS_WRITTEN }).kept.map((graphic) => graphic.cue.spec.box)).toEqual([MOTION.box])
+})
+
+test("admitting drops a tied graphic that starts before its point's text comes up, though it plays over it later", () => {
+  // plays 0.5–3.5 s; p1's text is up 1–4 s
+  const early: GraphicCue = { ...FREE, anchor: speech(10_500_000, "b1"), pointId: "p1", spec: { ...MOTION, html: null } }
+  expect(admitFree([early], placedOf, P1_TEXT, [])).toEqual({ admitted: [], dropped: 1 })
+})
+
+test("scenes on the cut merge only where the rough cut runs on: a piece of a video with no pictures analysed between two of one scene parts them", () => {
+  const plan = {
+    beats: [],
+    cuts: [
+      { binId: "a", sourceStartUs: 2_000_000, sourceDurationUs: 2_000_000 },
+      { binId: "c", sourceStartUs: 0, sourceDurationUs: 1_000_000 },
+      { binId: "a", sourceStartUs: 5_000_000, sourceDurationUs: 1_000_000 },
+    ],
+    durationUs: 4_000_000,
+  } as unknown as CutPlan
+  const clips = [...OBJECT_CLIPS, { id: "c", insight: null }] as unknown as CutClip[]
+  expect(scenesOnCut(plan, clips).map((scene) => [scene.startUs, scene.endUs, scene.description])).toEqual([
+    [0, 2_000_000, "คนพูด"],
+    [3_000_000, 4_000_000, "คนพูด"],
+  ])
+})
+
+test("objects out of step with a video's scenes count as none for the scenes they miss: the keepClear band is kept, and the scene is shown with no objects", () => {
+  // the objects were found for a's first scene only
+  const clips = [{ ...OBJECT_CLIPS[0]!, objects: { version: "objects-2026-10-01", scenes: [[{ what: "หน้า", kind: "keep", box: FACE, still: false }]] } }] as unknown as CutClip[]
+  const plan = { beats: [], cuts: [{ binId: "a", sourceStartUs: 5_000_000, sourceDurationUs: 10_000_000 }], durationUs: 10_000_000 } as unknown as CutPlan
+  expect(keepBoxesIn(plan, clips, { startUs: 0, endUs: 10_000_000 })).toEqual([FACE, box(0, 0.5, 1, 0.9)])
+  expect(scenesOnCut(plan, clips).map((scene) => scene.objects)).toEqual([[{ what: "หน้า", kind: "keep", box: FACE, still: false }], null])
+})
+
+/** Two pieces playing clip "z" from its start for a minute, half a minute each, on a portrait canvas the clip fills. */
+const ZOOM_PLAN = {
+  beats: [],
+  cuts: [
+    { binId: "z", sourceStartUs: 0, sourceDurationUs: 30_000_000 },
+    { binId: "z", sourceStartUs: 30_000_000, sourceDurationUs: 30_000_000 },
+  ],
+  durationUs: 60_000_000,
+} as unknown as CutPlan
+const zoomAt = (_cut: number, sourceUs: number) => sourceUs
+/** A move held from a piece's first frame to its end: one pose. */
+const heldMove = (pose: Partial<Pose>, cut = 0): PlacedMove => ({
+  cue: { anchor: speech(cut * 30_000_000, "b1"), from: "medium", about: "ดันเข้า", poses: [], edited: false, off: false },
+  atUs: cut * 30_000_000,
+  durationUs: 0,
+  beatId: "b1",
+  startUs: 0,
+  poses: [{ s: 0, scale: 1, x: 0, y: 0, rot: 0, ease: "cut", ...pose }],
+  cut,
+})
+
+test("the highlight text keeps off the face where a punch puts it; with no move it is placed as before", () => {
+  // no objects pass: the scene's band across the whole width, around the frame's middle
+  const clips = [{ id: "z", width: 1080, height: 1920, insight: { scenes: [{ startUs: 0, endUs: 60_000_000, description: "", kind: "talking-head", issues: [], keepClear: { fromY: 0.36, toY: 0.62 } }] } }] as unknown as CutClip[]
+  const group: PlacedGroup = { groupId: "g1", beatId: "b1", videoId: "z", lines: [{ lineIndex: 0, text: "ราคา", cut: 0, sourceUs: 1_000_000, partial: false, words: { from: 0, to: 1 } }], end: { cut: 0, sourceUs: 2_000_000 } }
+  const bands = (moves: PlacedMove[]) => {
+    const faces = zoomedFaces({ moves, plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt })
+    return textBands({ placed: [group], timed: [timed("g1")], clips, canvas: PORTRAIT, font: "kanit", looks: {}, position: "auto", subtitlesOn: false, faceBand: faces.bandIn })
+  }
+  const plain = textBands({ placed: [group], timed: [timed("g1")], clips, canvas: PORTRAIT, font: "kanit", looks: {}, position: "auto", subtitlesOn: false })
+  expect(bands([])).toEqual(plain)
+  // a punch to 1.3 widens the band about the middle to 0.318–0.656: text that sat just clear of 0.36–0.62 now would not
+  const punched = zoomedFaces({ moves: [heldMove({ scale: 1.3 })], plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt }).bandIn({ startUs: 0, endUs: 1_200_000 })!
+  expect(punched.fromY).toBeCloseTo(0.318)
+  expect(punched.toY).toBeCloseTo(0.656)
+  const band = bands([heldMove({ scale: 1.3 })])[0]!.band
+  expect(band.toY <= punched.fromY || band.fromY >= punched.toY).toBe(true)
+  expect(band).not.toEqual(plain[0]!.band)
+  // a move on another piece moves nothing here
+  expect(bands([heldMove({ scale: 1.3 }, 1)])).toEqual(plain)
+})
+
+test("a free graphic over the face where a move puts it plays 1.5 s at most; with no move it plays its whole length", () => {
+  // a face below the graphic's box (0.3–0.5 of the height) until the picture is pushed in and raised over it
+  const face = { x0: 0.4, y0: 0.55, x1: 0.6, y1: 0.65 }
+  const clips = [{ id: "z", width: 1080, height: 1920, insight: { scenes: [{ startUs: 0, endUs: 60_000_000, description: "", kind: "talking-head", issues: [], keepClear: { fromY: 0.55, toY: 0.65 } }] }, objects: { version: OBJECTS_VERSION, scenes: [[{ what: "หน้า", kind: "keep", box: face, still: false, face: true }]] } }] as unknown as CutClip[]
+  const unwritten: GraphicCue = { ...FREE, spec: { ...MOTION, html: null } }
+  const roomUnder = (moves: PlacedMove[]) => roomWith({ keepIn: zoomedFaces({ moves, plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt }).keepIn })
+  expect(inForce([unwritten], { room: roomUnder([]) }).kept.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[3_000_000, false]])
+  expect(inForce([unwritten], { room: roomUnder([heldMove({ scale: 1.3, y: 0.2 })]) }).kept.map((graphic) => [graphic.durationUs, graphic.coversKeep])).toEqual([[COVER_MAX_US, true]])
+})
+
+/** A punch to 1.3 on the first piece of ZOOM_PLAN from `atUs` on. */
+const punchFrom = (atUs: number): PlacedMove => ({ ...heldMove({ scale: 1.3 }), atUs, startUs: atUs })
+/** Clip "z" with one scene to 2 s and another after it, each with its keepClear band, and objects when given. */
+const twoScenes = (objects?: unknown) =>
+  [
+    {
+      id: "z",
+      width: 1080,
+      height: 1920,
+      insight: {
+        scenes: [
+          { startUs: 0, endUs: 2_000_000, description: "", kind: "talking-head", issues: [], keepClear: { fromY: 0.1, toY: 0.5 } },
+          { startUs: 2_000_000, endUs: 60_000_000, description: "", kind: "talking-head", issues: [], keepClear: { fromY: 0.36, toY: 0.62 } },
+        ],
+      },
+      ...(objects ? { objects } : {}),
+    },
+  ] as unknown as CutClip[]
+
+test("the text keeps off the face where a move puts it for as long as it is on screen, after its last word too", () => {
+  const clips = [{ ...twoScenes()[0]!, insight: { scenes: [{ startUs: 0, endUs: 60_000_000, description: "", kind: "talking-head", issues: [], keepClear: { fromY: 0.36, toY: 0.62 } }] } }] as unknown as CutClip[]
+  // its words are said from 0.2 s to 1 s, and it stays up until 3 s; the punch comes at 2 s
+  const group: PlacedGroup = { groupId: "g1", beatId: "b1", videoId: "z", lines: [{ lineIndex: 0, text: "ราคา", cut: 0, sourceUs: 200_000, partial: false, words: { from: 0, to: 1 } }], end: { cut: 0, sourceUs: 1_000_000 } }
+  const up: TimedGroup = { ...timed("g1"), startUs: 200_000, endUs: 3_000_000 }
+  const bands = (moves: PlacedMove[]) =>
+    textBands({ placed: [group], timed: [up], clips, canvas: PORTRAIT, font: "kanit", looks: {}, position: "auto", subtitlesOn: false, faceBand: zoomedFaces({ moves, plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt }).bandIn })
+  const punched = zoomedFaces({ moves: [punchFrom(2_000_000)], plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt }).bandIn({ startUs: 200_000, endUs: 3_000_000 })!
+  expect(punched.toY).toBeCloseTo(0.656)
+  const band = bands([punchFrom(2_000_000)])[0]!.band
+  expect(band.toY <= punched.fromY || band.fromY >= punched.toY).toBe(true)
+  expect(band).not.toEqual(bands([])[0]!.band)
+  // a punch after it has gone changes nothing
+  expect(bands([punchFrom(3_000_000)])).toEqual(bands([]))
+})
+
+test("text on screen across a move's start keeps off the scenes' bands where no move reaches, never less than before; with no face found under the move it keeps to them as before", () => {
+  // the objects pass found the face smaller than the first scene's band; the second scene's face is in the middle
+  const objects = { version: OBJECTS_VERSION, scenes: [[{ what: "หน้า", kind: "keep", box: { x0: 0.4, y0: 0.3, x1: 0.6, y1: 0.4 }, still: false, face: true }], [{ what: "หน้า", kind: "keep", box: { x0: 0.4, y0: 0.4, x1: 0.6, y1: 0.6 }, still: false, face: true }]] }
+  const faces = zoomedFaces({ moves: [punchFrom(2_000_000)], plan: ZOOM_PLAN, clips: twoScenes(objects), canvas: PORTRAIT, at: zoomAt })
+  // from 1 s to 4 s: the first scene's whole band, 0.1–0.5, before the punch; the face pushed to 0.37–0.63 after it
+  const band = faces.bandIn({ startUs: 1_000_000, endUs: 4_000_000 })!
+  expect(band.fromY).toBeCloseTo(0.1)
+  expect(band.toY).toBeCloseTo(0.63)
+  // wholly under the move: the face after it alone
+  const under = faces.bandIn({ startUs: 3_000_000, endUs: 4_000_000 })!
+  expect([under.fromY, under.toY].map((value) => Number(value.toFixed(2)))).toEqual([0.37, 0.63])
+  // no move there: no band, and the scenes' bands as before
+  expect(faces.bandIn({ startUs: 500_000, endUs: 1_500_000 })).toBeNull()
+  // the pass found no face under the move: no band either
+  const empty = { version: OBJECTS_VERSION, scenes: [[], []] }
+  expect(zoomedFaces({ moves: [punchFrom(2_000_000)], plan: ZOOM_PLAN, clips: twoScenes(empty), canvas: PORTRAIT, at: zoomAt }).bandIn({ startUs: 1_000_000, endUs: 4_000_000 })).toBeNull()
+})
+
+test("the scenes Claude is told of for graphics list the faces where a move puts them, in place of the faces found; other things and other scenes stay", () => {
+  const face = { x0: 0.4, y0: 0.3, x1: 0.6, y1: 0.5 }
+  const glass = { what: "แก้ว", kind: "keep", box: { x0: 0.1, y0: 0.6, x1: 0.3, y1: 0.8 }, still: true, face: false }
+  const sign = { what: "ป้าย", kind: "point", box: { x0: 0.7, y0: 0.6, x1: 0.9, y1: 0.8 }, still: true }
+  const objects = { version: OBJECTS_VERSION, scenes: [[{ what: "หน้า", kind: "keep", box: face, still: false, face: true }, glass, sign], [{ what: "หน้า", kind: "keep", box: face, still: false, face: true }]] }
+  const clips = twoScenes(objects)
+  const faces = zoomedFaces({ moves: [punchFrom(2_000_000)], plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt })
+  const told = scenesOnCut(ZOOM_PLAN, clips, faces.facesIn)
+  // the first scene plays before the punch: as found
+  expect(told[0]!.objects).toEqual(objects.scenes[0])
+  // the second, which both pieces play: pushed in to 1.3 about the middle on the first, and as found on the second
+  expect(told[1]!.objects!.map((object) => object.what)).toEqual(["หน้า (หลังซูม)", "หน้า"])
+  expect(told[1]!.objects![1]).toBe(objects.scenes[1]![0])
+  const zoomed = told[1]!.objects![0]!
+  expect(zoomed).toMatchObject({ kind: "keep", still: false, face: true })
+  for (const [edge, value] of Object.entries({ x0: 0.37, y0: 0.24, x1: 0.63, y1: 0.5 })) expect(zoomed.box[edge as keyof typeof zoomed.box]).toBeCloseTo(value)
+  // without moves, as before
+  expect(scenesOnCut(ZOOM_PLAN, clips)).toEqual(scenesOnCut(ZOOM_PLAN, clips, zoomedFaces({ moves: [], plan: ZOOM_PLAN, clips, canvas: PORTRAIT, at: zoomAt }).facesIn))
 })

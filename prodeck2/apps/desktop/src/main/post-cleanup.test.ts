@@ -38,6 +38,15 @@ const motion = (sourceUs: number, more: Partial<GraphicCue> = {}): GraphicCue =>
   ...more,
 })
 const graphic = (edited: boolean): GraphicCue => card(1_000_000, { edited })
+/** A move of the picture, the user's (switched by hand) or Claude's. */
+const move = (edited: boolean) => ({
+  anchor: { kind: "speech" as const, videoId: "v", sourceUs: 2_000_000, beatId: "b1" },
+  from: "light" as const,
+  about: "ดันเข้า",
+  poses: [{ s: 0, scale: 1.1, x: 0, y: 0, rot: 0, ease: "line" as const }],
+  edited,
+  off: false,
+})
 const group = (id: string, source: "ai" | "user", edited: boolean) => ({ id, source, edited, beatId: "b1", lines: [{ videoId: "v", from: 0, to: 1, text: id }] })
 
 /** An outline from before M25: Claude's picks and effects, some of them changed by the user. */
@@ -62,6 +71,7 @@ const OLD: StoredOutline = {
       { anchor: PIECE, kind: "punch", edited: false },
       { anchor: PIECE, kind: "drift", edited: true },
     ],
+    moves: [move(false), move(true)],
     inserts: [{ anchor: CUT, binId: "m", edited: false }],
     graphics: [graphic(false), graphic(true)],
   },
@@ -78,6 +88,7 @@ test("an outline from before M25 loses what Claude made and the user left alone;
     looks: { changed: LOOK, mine: LOOK },
     cues: [{ anchor: CUT, effectId: "by-user", edited: true }],
     zooms: [{ anchor: PIECE, kind: "drift", edited: true }],
+    moves: [move(true)],
     inserts: [],
     graphics: [graphic(true)],
   })
@@ -287,7 +298,7 @@ test("an outline with no post version gets M25's clean-up and then this one, end
   expect(cleaned.postVersion).toBe(2)
   // M25's: Claude's own groups and unedited effects are gone. This one's: so is the card the user had edited, which M25's keeps
   expect(cleaned.highlights!.groups.map((one) => one.id)).toEqual(["changed", "mine"])
-  expect(cleaned.flair).toEqual({ looks: { changed: LOOK, mine: LOOK }, cues: [{ anchor: CUT, effectId: "by-user", edited: true }], zooms: [{ anchor: PIECE, kind: "drift", edited: true }], inserts: [], graphics: [] })
+  expect(cleaned.flair).toEqual({ looks: { changed: LOOK, mine: LOOK }, cues: [{ anchor: CUT, effectId: "by-user", edited: true }], zooms: [{ anchor: PIECE, kind: "drift", edited: true }], moves: [move(true)], inserts: [], graphics: [] })
   expect((await plain.get(OLD.folder))!).toEqual(cleaned)
   // the one copy, from before both clean-ups, is the way back past both
   expect(await readFile(join(userData, "outlines-before-m25", original.name), "utf8")).toBe(original.text)

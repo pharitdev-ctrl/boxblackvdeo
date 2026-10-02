@@ -1,12 +1,12 @@
 import { POST_WORKS, type EmphasisPointView, type PostRunView, type PostWork } from "../../../shared/api.ts"
 import { t, type MessageKey } from "../i18n.ts"
 
-/** The five tabs of the post-production page, in the order of the work. */
-export const POST_TABS = ["cut", "emphasis", "graphics", "sound", "subtitles"] as const
+/** The six tabs of the post-production page, in the order of the work. */
+export const POST_TABS = ["cut", "emphasis", "techniques", "graphics", "sound", "subtitles"] as const
 export type PostTab = (typeof POST_TABS)[number]
 
-/** Which tab each work of the run fills. */
-export const TAB_OF_WORK: Record<PostWork, PostTab> = { emphasis: "emphasis", text: "graphics", techniques: "graphics", graphics: "graphics", sounds: "sound", subtitles: "subtitles" }
+/** Which tab each work of the run fills: the highlight text and the zooms and cutaways one, the graphics their own. */
+export const TAB_OF_WORK: Record<PostWork, PostTab> = { emphasis: "emphasis", text: "techniques", techniques: "techniques", graphics: "graphics", sounds: "sound", subtitles: "subtitles" }
 
 /** How a tab stands in the run: a spinner while a work of it runs, a warning when one failed (not stopped), else its count. */
 export type TabRun = { state: "idle" } | { state: "running" } | { state: "failed"; error: string }
@@ -32,8 +32,21 @@ const MAIN_WORDS: [RegExp, MessageKey][] = [
   [/(?:^|: )the point \S+ is not on the rough cut$/, "emphasis.refused.offCut"],
   [/(?:^|: )this project has no picture \S+$/, "graphics.refused.noPicture"],
   [/(?:^|: )there is no cutaway of that picture at that place$/, "graphics.refused.noCutaway"],
-  // thrown inside the graphics work when one graphic is written again, so it comes as that work's failure in the strip
+  // thrown inside the graphics work when one graphic is written again or changed, so it comes as that work's failure in the strip
   [/(?:^|: )this graphic has no place on the clip now$/, "graphics.refused.noPlace"],
+  // thrown inside the graphics work too, when a graphic with no fragment is to be changed
+  [/(?:^|: )this graphic has not been written yet$/, "graphics.refused.notWritten"],
+  // a step back is no run: main refuses it to the call itself
+  [/(?:^|: )this graphic has nothing to go back to$/, "graphics.refused.nothingBack"],
+  // a composed sound's, in the same three places: the sounds work's failure for the first two, the call's own for the step back
+  [/(?:^|: )this sound has no place on the clip now$/, "sounds.refused.noPlace"],
+  [/(?:^|: )this sound has not been written yet$/, "sounds.refused.notWritten"],
+  [/(?:^|: )this sound has nothing to go back to$/, "sounds.refused.nothingBack"],
+  // a move's: the techniques work's failure for a redesign or a change, the call's own for a step back or a switch.
+  // One taken away meanwhile has no place on the clip either, as the user sees it
+  [/(?:^|: )this move has no place on the clip now$/, "moves.refused.noPlace"],
+  [/(?:^|: )there is no move at that place$/, "moves.refused.noPlace"],
+  [/(?:^|: )this move has nothing to go back to$/, "moves.refused.nothingBack"],
 ]
 
 /** A message from main in the user's words when it is one they can meet on the page (MAIN_WORDS), else as it came. */

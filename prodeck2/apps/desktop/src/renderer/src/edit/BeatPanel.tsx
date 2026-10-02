@@ -19,7 +19,7 @@ export interface BeatPanelProps {
   children: ReactNode
 }
 
-/** What is open, a beat or the whole clip, and its five tabs shown one at a time. */
+/** What is open, a beat or the whole clip, and its six tabs shown one at a time. */
 export function BeatPanel({ beat, wholeClip, tab, onTab, counts, runs, busy, strip, children }: BeatPanelProps) {
   const panelId = useId()
   return (

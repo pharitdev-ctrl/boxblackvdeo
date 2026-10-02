@@ -32,8 +32,12 @@ export interface StoredEmphasis {
   points: EmphasisPoint[]
   /** goes up by one whenever the points change in a way works 2 and 4 should hear about */
   version: number
-  /** the version works 2 and 4 last planned on; one that differs from `version` shows the "จุดเน้นเปลี่ยน" banner */
-  plannedOn: { graphics: number | null; sounds: number | null }
+  /**
+   * the version works 2 and 4 last planned on; one that differs from `version` shows the "จุดเน้นเปลี่ยน" banner. The
+   * text and techniques of work 2 have their own since 0.7.0; an outline from before has none, and they then go by
+   * the graphics'
+   */
+  plannedOn: { graphics: number | null; sounds: number | null; techniques?: number | null }
   /** per video, the transcript fingerprint the speech points' word numbers belong to */
   transcripts: Record<string, string>
 }

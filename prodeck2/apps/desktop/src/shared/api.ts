@@ -2,11 +2,13 @@ import type { AsrEngineId, ModelState, SpokenLanguage, VideoStatus } from "@boxb
 import type { ProjectDetail, ProjectSummary } from "@boxblack/core/capcut"
 import type { CutPlan } from "@boxblack/core/cut"
 import type { CutDecisionChange, CutDecisions, CutPreset, CutPresetId, CutRules } from "@boxblack/core/cut/rules"
-import type { FlairOptions, TextPattern } from "@boxblack/core/flair/catalogue"
+import type { FlairLevel, FlairOptions, TextPattern } from "@boxblack/core/flair/catalogue"
 import type { FrameEveryS } from "@boxblack/core/vision/estimate"
 import type { MediaFit } from "@boxblack/core/flair/look-at"
 import type { CueAnchor, GroupLook, InsertCue, PieceAnchor, SoundCue, Tone, ZoomCue, ZoomKind } from "@boxblack/core/flair/plan"
+import type { MoveCue } from "@boxblack/core/flair/moves"
 import type { GraphicCue, GraphicSpec } from "@boxblack/core/graphics/plan"
+import type { ComposedSound, SoundLoudness } from "@boxblack/core/sound/spec"
 import type { Dodge } from "@boxblack/core/highlights/layout"
 import type { HighlightGroup } from "@boxblack/core/highlights/placement"
 import type { EmphasisAnchor, EmphasisPatch, EmphasisType, Importance, StoredEmphasis } from "@boxblack/core/emphasis/types"
@@ -42,6 +44,8 @@ export const API_METHODS = [
   "analysisState",
   "analysedVideos",
   "knownRetakes",
+  "videosWithoutObjects",
+  "locateObjects",
   "retryUnfetchableSounds",
   "claudeCodeStatus",
   "installClaudeCode",
@@ -79,6 +83,14 @@ export const API_METHODS = [
   "redoGraphic",
   "editGraphic",
   "undoGraphic",
+  "redoMove",
+  "editMove",
+  "undoMove",
+  "setMove",
+  "redoSound",
+  "editSound",
+  "undoSound",
+  "setSound",
   "planEmphasis",
   "setEmphasisPoint",
   "addEmphasisPoint",
@@ -162,6 +174,10 @@ export interface DesktopApi {
   analysedVideos(folder: string): Promise<string[]>
   /** For each video whose speech is read already, what comparing its lines said twice will take: the estimate counts them. */
   knownRetakes(folder: string): Promise<Record<string, RetakeLoad>>
+  /** The project's analysed videos whose objects were never found: analysed before the objects pass existed, or whose pass failed. */
+  videosWithoutObjects(folder: string): Promise<string[]>
+  /** Finds where things are in the pictures of videos analysed already; ends with analysis-finished, and holds the one-run lock meanwhile. */
+  locateObjects(folder: string, videoIds: string[]): Promise<void>
   /** Offers the sounds CapCut could not fetch again: it may only have been offline. */
   retryUnfetchableSounds(): Promise<void>
 
@@ -224,7 +240,10 @@ export interface DesktopApi {
   addHighlightGroup(folder: string, videoId: string, wordIndexes: number[], maxChars: number, beatId?: string, pointId?: string): Promise<void>
   /** Sets one group's look by hand, which stops Claude rewriting it. */
   setFlairLook(folder: string, groupId: string, patch: FlairLookPatch): Promise<void>
-  /** Puts a sound effect on a place by hand, or takes it off with a null sound. */
+  /**
+   * Takes a CapCut sound the user chose by hand off its place with a null sound. Choosing one is no longer possible
+   * since sounds are composed (0.6.0): any sound named is refused.
+   */
   setSoundCue(folder: string, anchor: CueAnchor, effectId: string | null): Promise<void>
   /** Zooms a piece by hand, or leaves it still with a null kind. */
   setZoom(folder: string, anchor: PieceAnchor, kind: ZoomKind | null): Promise<void>
@@ -255,7 +274,9 @@ export interface DesktopApi {
    * way. Its fragment stays until the new writing has ended, then gives way to the new one, or to why there is none,
    * and is kept for one step back (`undoGraphic`).
    * The graphic does not become the user's own, and no other graphic is touched. A graphic with no place on the rough
-   * cut now fails the work.
+   * cut now fails the work. Once it is written, the composed sounds tied to it are composed again in the same run, with
+   * the sounds work among its works; tied sounds the level hides, or all of them with the sounds switched off, are not
+   * composed again and read as stale by the picture.
    */
   redoGraphic(folder: string, anchor: CueAnchor, request: PostRequest): Promise<PostRunView>
   /**
@@ -264,7 +285,8 @@ export interface DesktopApi {
    * `redoGraphic` is, with `post-plan` events on the way. Written, the new fragment is kept with the change and the one
    * before it is kept for one step back; failed, the graphic keeps its fragment and says why the edit failed. The
    * graphic does not become the user's own, and no other graphic is touched. One with no place on the rough cut now,
-   * or not written yet, fails the work.
+   * or not written yet, fails the work. Written, it has its tied sounds composed again as `redoGraphic` does; those the
+   * level hides, or all of them with the sounds switched off, are not, and read as stale by the picture.
    */
   editGraphic(folder: string, anchor: CueAnchor, instruction: string, request: PostRequest): Promise<PostRunView>
   /**
@@ -273,6 +295,52 @@ export interface DesktopApi {
    * the project, and for a graphic with nothing to go back to.
    */
   undoGraphic(folder: string, anchor: CueAnchor): Promise<void>
+  /**
+   * Has Claude design one move of the picture again, at the word it starts on (or on its cutaway), as the techniques
+   * plan would, the other words not asked: one run of the techniques work alone, refused while another run goes on the
+   * project, with `post-plan` events on the way. The text and the graphics are not thought again; the preview places
+   * them anew. The new move is checked where it plays: one that passes takes the move's place and the move before it is
+   * kept for one step back (`undoMove`); one that fails, or no answer for that word, leaves the move as it was with why
+   * (`MoveView.editFailed`). The move does not become the user's own. One with no place on the rough cut now fails the work.
+   */
+  redoMove(folder: string, anchor: MoveAnchor, request: PostRequest): Promise<PostRunView>
+  /**
+   * Has Claude change one move of the picture as the user asks (`instruction`, at most INSTRUCTION_MAX graphemes once
+   * trimmed), from the poses it has, as `redoMove` designs one: kept with the change when it passes the checks, the one
+   * before kept for one step back; otherwise the move is left as it was with why the edit failed.
+   */
+  editMove(folder: string, anchor: MoveAnchor, instruction: string, request: PostRequest): Promise<PostRunView>
+  /**
+   * Takes a move one step back: the poses kept by its last edit or redesign change places with the ones it has, so a
+   * second step back comes back. Claude is not asked and it is no run, but it is refused while a run goes on the
+   * project, and for a move with nothing to go back to.
+   */
+  undoMove(folder: string, anchor: MoveAnchor): Promise<void>
+  /** Switches a move off or on by hand (Claude leaves it alone after), or removes it with null. */
+  setMove(folder: string, anchor: MoveAnchor, patch: { off: boolean } | null): Promise<void>
+  /**
+   * Has Claude compose one composed sound again, from its role and the clip's palette, for the room it has on the rough
+   * cut under this request, to its graphic's fragment as it is now when it is tied to one: one run of the sounds work
+   * alone, refused while another run goes on the project, with `post-plan` events on the way. Its code stays until the
+   * composing has ended, then gives way to the new one, or to why there is none, and is kept for one step back
+   * (`undoSound`). A sound with no place on the rough cut now fails the work.
+   */
+  redoSound(folder: string, anchor: CueAnchor, request: PostRequest): Promise<PostRunView>
+  /**
+   * Has Claude change one written composed sound as the user asks (`instruction`, at most INSTRUCTION_MAX graphemes once
+   * trimmed), as `redoSound` composes one. Written, the new code is kept with the change and the one before it for one
+   * step back; failed, the sound keeps its code and says why the edit failed. One with no place on the rough cut now,
+   * or not written yet, fails the work.
+   */
+  editSound(folder: string, anchor: CueAnchor, instruction: string, request: PostRequest): Promise<PostRunView>
+  /**
+   * Takes a composed sound one step back: the code kept by its last edit or composing again changes places with the
+   * one it has. Claude is not asked and it is no run, but it is refused while a run goes on the project, and for a
+   * sound with nothing to go back to.
+   */
+  undoSound(folder: string, anchor: CueAnchor): Promise<void>
+  /** Switches a composed sound off or on by hand, or removes it with null. */
+  setSound(folder: string, anchor: CueAnchor, patch: { off: boolean } | null): Promise<void>
   /** Claude plans the emphasis points again; the user's and edited stay; Claude's old ones go with what sat on them. */
   planEmphasis(folder: string, rules: CutRules): Promise<{ count: number; dropped: number }>
   /** Changes a point by hand (it becomes the user's to keep), or deletes it with what sat on it. */
@@ -285,7 +353,7 @@ export interface DesktopApi {
   rethinkPost(folder: string, work: RethinkWork, request: PostRequest): Promise<PostRunView>
   /** How the plan run of this project stands, or how the last one ended; null when none ran since the app started. */
   postPlanState(folder: string): Promise<PostRunView | null>
-  /** Stops the Claude calls that are going: the works of a plan run (planPost, rethinkPost, redoGraphic, editGraphic) and planEmphasis. They fail with "cancelled"; a plan run skips the works it had not started. */
+  /** Stops the Claude calls that are going: the works of a plan run (planPost, rethinkPost, redoGraphic, editGraphic, redoMove, editMove, redoSound, editSound) and planEmphasis. They fail with "cancelled"; a plan run skips the works it had not started. */
   cancelAi(): Promise<void>
   /** Backups of this project, newest first. */
   listBackups(folder: string): Promise<BackupInfo[]>
@@ -438,11 +506,14 @@ export interface GraphicCleanResult {
   kept: "recent" | "stopped" | null
 }
 
-/** The works of the plan run in the order they run; text, techniques and graphics are work 2's three calls (2a, 2b, 2c). */
+/**
+ * The works of the plan run, in the order the screen lists them; text, techniques and graphics are work 2's three calls
+ * (2a, 2b, 2c). Since 0.8.0 the techniques run before the text, which keeps off the faces where the moves take them.
+ */
 export const POST_WORKS = ["emphasis", "text", "techniques", "graphics", "sounds", "subtitles"] as const
 export type PostWork = (typeof POST_WORKS)[number]
 /** What the AI menu can think again on its own; the points go through planEmphasis. */
-export const RETHINK_WORKS = ["graphics", "sounds", "subtitles"] as const
+export const RETHINK_WORKS = ["techniques", "graphics", "sounds", "subtitles"] as const
 export type RethinkWork = (typeof RETHINK_WORKS)[number]
 
 export type PostWorkState =
@@ -476,6 +547,8 @@ export interface PostRequest {
 export type AppEvent =
   | { type: "transcription"; folder: string; videoId: string; status: VideoStatus }
   | { type: "vision"; folder: string; videoId: string; status: VisionStatus }
+  /** how finding the objects of one video stands, after its pictures are described or on request */
+  | { type: "objects"; folder: string; videoId: string; status: { state: "running" } | { state: "done" } | { state: "failed"; error: string } }
   | { type: "analysis-finished"; folder: string; outcome: "done" | "cancelled" }
   | { type: "analysis-finished"; folder: string; outcome: "failed"; error: string }
   | { type: "model-download"; state: "progress"; received: number; total: number }
@@ -490,13 +563,15 @@ export type AppEvent =
   | { type: "graphics"; folder: string; state: "progress"; hash: string; done: number; total: number }
   | { type: "graphics"; folder: string; state: "done" }
   | { type: "graphics"; folder: string; state: "failed"; hash: string; error: string }
+  /** a composed sound's render in the background ended (made, failed, or found the machine unfit), for whichever project asked: the page reads how its sounds stand */
+  | { type: "sounds-rendered" }
   /** a write to the draft in `folder` started, or ended; the post-production page that asked may have been left and opened again meanwhile */
   | { type: "timeline-write"; folder: string; state: "started" }
   | { type: "timeline-write"; folder: string; state: "done"; result: WriteResult }
   | { type: "timeline-write"; folder: string; state: "failed"; error: string }
   /** how one work of a plan run stands; a run starts by sending "waiting" for every work it will touch */
   | { type: "post-plan"; folder: string; work: PostWork; state: PostWorkState }
-  /** a plan run (planPost, rethinkPost, redoGraphic, editGraphic or planEmphasis) is over, stopped or not */
+  /** a plan run (planPost, rethinkPost, redoGraphic, editGraphic, redoMove, editMove, redoSound, editSound or planEmphasis) is over, stopped or not */
   | { type: "post-plan-finished"; folder: string }
   | { type: "license"; state: LicenseState }
   | { type: "update"; state: UpdateState }
@@ -518,8 +593,14 @@ export interface StoredOutline {
   cutDecisions?: CutDecisions
   /** highlight text picked by Claude or the user; planning again starts without it */
   highlights?: StoredHighlights
-  /** how each highlight group looks, by group id, and the sound effects, zooms, cutaways and graphics on the rough cut */
-  flair?: { looks: Record<string, GroupLook>; cues?: SoundCue[]; zooms?: ZoomCue[]; inserts?: InsertCue[]; graphics?: GraphicCue[] }
+  /**
+   * how each highlight group looks, by group id, and the sound effects, zooms, moves, cutaways and graphics on the rough
+   * cut. `cues` are CapCut library sounds, kept only for what is already there; `composed` are the sounds Claude composed
+   * since 0.6.0, and `palette` the clip's sound palette they were composed to. `zooms` are the punches and drifts of
+   * before 0.8.0, which play until the techniques are thought again; `moves` are the moves of the picture Claude
+   * designs since 0.8.0
+   */
+  flair?: { looks: Record<string, GroupLook>; cues?: SoundCue[]; zooms?: ZoomCue[]; moves?: MoveCue[]; inserts?: InsertCue[]; graphics?: GraphicCue[]; composed?: ComposedSound[]; palette?: string }
   /** the emphasis points and their bookkeeping; absent until points are planned or added. The level shows only the items on points of the importances it lets through. */
   emphasis?: StoredEmphasis
   /** the user's or the polish's text per subtitle line, by `SubtitleLine.key` */
@@ -624,6 +705,42 @@ export interface ZoomView {
   pointId?: string
 }
 
+/**
+ * Where a move of the picture is, as the page names it to the app: its stored anchor, the word it starts on or its
+ * cutaway's, with `insert: true` for a move on a cutaway. A move on a word and one on the cutaway that comes up on that
+ * same word share an anchor, and are told apart by it.
+ */
+export type MoveAnchor = CueAnchor & { insert?: boolean }
+
+/** One move of the picture on the rough cut, as the post-production page shows it. */
+export interface MoveView {
+  /** as stored, which a change finds it by (`MoveAnchor`, with `insert`) */
+  anchor: CueAnchor
+  /** it moves a cutaway, from its first frame, rather than the footage */
+  insert: boolean
+  /** where it starts on the rough cut */
+  atUs: number
+  /** how long its poses run before it holds the last */
+  durationUs: number
+  /** the beat it plays in */
+  beatId: string
+  /** what it does, in Claude's words, one line in Thai */
+  about: string
+  /** the lowest level it plays at */
+  from: FlairLevel
+  /** the point it was made for; absent when it is bound to none */
+  pointId?: string
+  /** the user switched it off or on by hand */
+  edited: boolean
+  off: boolean
+  /** the change the user asked for that made the poses it has; null when none did */
+  instruction: string | null
+  /** why the last redesign or edit could not be used; null when it was */
+  editFailed: string | null
+  /** it keeps the poses it had before, for one step back */
+  canUndo: boolean
+}
+
 /** One cutaway on the rough cut, as the post-production page shows it. */
 export interface InsertView {
   anchor: CueAnchor
@@ -683,11 +800,69 @@ export interface GraphicView {
   pointId?: string
   /** switched off by the user */
   off: boolean
+  /** the lowest level it plays at; null on a graphic planned before 0.7.0, which plays by its point's importance */
+  from: FlairLevel | null
+  /** it plays in place of its point's highlight text, which is not drawn meanwhile */
+  replaces: boolean
+  /** its box covers a face or a shown thing, so it plays 1.5 s at most */
+  coversKeep: boolean
 }
 
 /** What the user may change on a graphic from the post-production page: switched off or on. Claude draws it, so nothing else of it is changed by hand; leaving the field out keeps it. */
 export interface GraphicPatch {
   off?: boolean
+}
+
+/** One sound effect Claude composed, as the post-production page shows it. */
+export interface ComposedSoundView {
+  /** its stored anchor, which an edit finds it by */
+  anchor: CueAnchor
+  /** where it starts on the rough cut: its moment's place, or its graphic's */
+  atUs: number
+  /** how long it plays there: its length, or less where its room ends first */
+  durationUs: number
+  /** the beat it plays in */
+  beatId: string
+  /** what it does, in the user's language */
+  role: string
+  /** the lowest level it plays at */
+  from: FlairLevel
+  loudness: SoundLoudness
+  /** the point it was made for; absent when it is bound to none */
+  pointId?: string
+  /** the graphic it scores, summed up by its idea; null for a sound on a moment of speech alone */
+  graphic: { summary: string } | null
+  /** it has the code Claude composed for it */
+  written: boolean
+  /**
+   * written, and no longer played as it was composed for: "cut" when its words or its room changed, or it was composed
+   * under an earlier contract; "picture" when the graphic it scores was written again or waits to be. It waits to be
+   * composed again
+   */
+  stale: "cut" | "picture" | null
+  /** why its last composing failed; null when none has */
+  writeFailed: string | null
+  /** the change the user asked for that made the code it has; null when a plan or a composing again made it */
+  instruction: string | null
+  /** why the user's last edit of it failed, the code from before that edit still playing; null when none has */
+  editFailed: string | null
+  /** a code an edit or a composing again replaced is kept: the sound can go one step back to it */
+  canUndo: boolean
+  /** switched off by the user, or its graphic is */
+  off: boolean
+  /** its file: one with nothing to render (not written, stale, failed or switched off) waits */
+  render: "pending" | "ready" | "failed"
+  /** why the render failed, when it did */
+  error: string | null
+}
+
+/** A CapCut sound the user chose by hand before 0.6.0, still playing: it can only be taken off now. */
+export interface OwnSoundView {
+  /** the place it plays on, which taking it off names */
+  anchor: CueAnchor
+  atUs: number
+  /** what the sound is, from this machine's sound library */
+  name: string
 }
 
 /** A change to one group's look from the post-production page; leaving a field out keeps it. */
@@ -738,11 +913,20 @@ export interface HighlightPreview {
    * `pro` when the sound needs CapCut Pro, which the user does not have
    */
   unusedSounds: { unplaced: number; missing: number; lost: number; pro: number }
-  /** the zooms that will play, in time order */
+  /** the sounds Claude composed that play, at the level in force, in time order, one not composed yet or stale among them (a write leaves it out), then the switched-off ones */
+  composed: ComposedSoundView[]
+  /** the CapCut sounds the user chose by hand that still play, in time order */
+  ownSounds: OwnSoundView[]
+  /**
+   * the punches and drifts of before 0.8.0 that will play, in time order. One on a piece a move plays on is left out:
+   * the move replaces it there, and it plays again once that move goes
+   */
   zooms: ZoomView[]
+  /** Claude's moves of the picture that will play, in time order, then the switched-off ones */
+  moves: MoveView[]
   /** every piece a zoom could go on */
   pieces: { anchor: PieceAnchor; atUs: number; durationUs: number; what: string; beatId: string }[]
-  /** zooms stored whose piece is not on the rough cut now (the cut moved its start) */
+  /** zooms stored whose piece is not on the rough cut now (the cut moved its start), and moves stored with no place on it (their word or cutaway gone) */
   zoomsLost: number
   /** the cutaways that will play, in time order */
   inserts: InsertView[]
@@ -758,6 +942,11 @@ export interface HighlightPreview {
    * nothing is known to be wrong. While it is set nothing renders, and graphicsWaitForPack is true too
    */
   graphicsProblem: GraphicsProblem | null
+  /**
+   * why composed sounds cannot render on this machine, as a render found it (the sealed page or the app's ffmpeg), in
+   * plain English; null when nothing is known to be wrong, and while the sounds are off
+   */
+  soundsProblem: string | null
   /** what the emphasis tab shows: the points on this rough cut, the sentences and scenes to make more from, and whether works 2 and 4 are behind */
   emphasis: EmphasisView
   /**
@@ -824,8 +1013,11 @@ export interface EmphasisView {
   /** stored points not shown: every word of them cut, or their transcript changed */
   hidden: number
   version: number
-  /** the points changed since work 2 (graphics) or work 4 (sounds) last planned on them, or that work left items on them with no version stored (a failed first run) */
-  changed: { graphics: boolean; sounds: boolean }
+  /**
+   * the points changed since work 2's text and techniques, its graphics, or work 4 (sounds) last planned on them, or that
+   * work left items on them with no version stored (a failed first run)
+   */
+  changed: { techniques: boolean; graphics: boolean; sounds: boolean }
 }
 
 /** Highlight text to write with the rough cut, as the user last saw it. */
@@ -866,14 +1058,24 @@ export interface WriteResult {
   insertCount: number
   /** graphics the writer placed */
   graphicCount: number
+  /** sounds Claude composed that the writer placed */
+  composedCount: number
   /**
    * what the writers left out: an item with less than a frame left to play, or one that starts before
    * the rough cut does. The zooms' is only a safety net (a piece not on the timeline, no length, or a
    * second zoom on a piece already zoomed): the write hands the writer zooms mapped from the cut's own
-   * pieces (zoomsFor), one a piece (enforceZooms). Zooms whose piece is gone are counted in `zoomsLost`
+   * pieces (zoomsFor), one a piece (enforceZooms). Zooms whose piece is gone are counted in `zoomsLost`. The moves'
+   * are those the checks turned down (movesInForce: a move that fails them, or plays while another does on its piece
+   * or cutaway) and those the writer left out; a legacy zoom on a piece a move plays on is replaced, not left out
    */
-  dropped: { sounds: number; zooms: number; inserts: number; graphics: number }
-  /** zooms stored whose piece is not on the rough cut any more */
+  dropped: { sounds: number; zooms: number; inserts: number; graphics: number; moves: number }
+  /**
+   * composed sounds in force that the write left out: not composed yet (`unwritten`); no longer played as they were
+   * composed for, or tied to a graphic this write leaves out (`stale`); their composing or their render failed (`failed`).
+   * Those the writer itself left out are in `dropped.sounds`
+   */
+  composedLeftOut: { unwritten: number; stale: number; failed: number }
+  /** zooms stored whose piece is not on the rough cut any more, and moves stored with no place on it (their word or cutaway gone) */
   zoomsLost: number
   /** graphics left out because their render failed or their file was gone by the write, and motion graphics left out because they are not written yet or are stale */
   graphicsSkipped: number

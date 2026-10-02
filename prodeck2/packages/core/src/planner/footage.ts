@@ -1,5 +1,6 @@
 import type { Transcript } from "../asr/types.ts"
 import type { VideoInsight } from "../vision/describe.ts"
+import type { SceneObjects } from "../vision/objects.ts"
 
 /** One analysed video from the project's media bin. */
 export interface FootageClip {
@@ -8,6 +9,11 @@ export interface FootageClip {
   durationUs: number
   transcript: Transcript | null
   insight: VideoInsight | null
+  /** where the things in each of the insight's scenes are; absent or null before the objects pass has run */
+  objects?: SceneObjects | null
+  /** the video's own size in pixels, from the media bin; absent where it is not known */
+  width?: number
+  height?: number
 }
 
 export interface FootageIndex {

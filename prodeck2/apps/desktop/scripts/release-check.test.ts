@@ -71,6 +71,7 @@ const FILTERS = ` Filters:
  .S freezedetect      V->V       Detect frozen video.
  .. blurdetect        V->V       Blur detection filter.
  .. silencedetect     A->A       Detect silence.
+ .. ebur128           A->N       EBU R128 scanner.
  .. fps               V->V       Force constant framerate.
  .. scale             V->V       Scale the input video size and/or convert the image format.
  T. metadata          V->V       Manipulate video frame metadata.

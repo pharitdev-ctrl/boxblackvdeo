@@ -12,12 +12,15 @@ import type { EmphasisPoint } from "@boxblack/core/emphasis"
 import { MOTION_VERSION, type GraphicCue, type GraphicSpec, type MotionSpec } from "@boxblack/core/graphics/plan"
 import { HIGHLIGHT_FONTS, styleFor, type HighlightStyle } from "@boxblack/core/highlights/styles"
 import { BUILT_IN_SOUNDS } from "@boxblack/core/flair/sound-catalogue"
+import { SOUND_VERSION, type ComposedSound } from "@boxblack/core/sound/spec"
 import type { GraphicRenderState, StoredOutline } from "../shared/api.ts"
 import { problemFor, type RenderJob } from "./graphics-render.ts"
 import type { LlmContent, LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
 import { transcriptFingerprint } from "./footage.ts"
 import { unbound, withoutPoint } from "./emphasis.ts"
 import { createHighlightService } from "./highlights.ts"
+import { hashOfHtml, type SoundStatus } from "./composed-cues.ts"
+import type { SoundJob } from "./sound-render.ts"
 import * as graphicsCues from "./graphics-cues.ts"
 
 // the real module, with the placing of the graphics watched: one test counts how often a look at the preview places them
@@ -101,7 +104,7 @@ const NO_POINTS = {
   scenes: [],
   hidden: 0,
   version: 0,
-  changed: { graphics: false, sounds: false },
+  changed: { techniques: false, graphics: false, sounds: false },
 }
 
 const textOf = (content: LlmContent[]) => content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n")
@@ -121,7 +124,10 @@ test("before any is picked there is no highlight text, the default style and a p
     slots: [],
     sounds: [],
     unusedSounds: { unplaced: 0, missing: 0, lost: 0, pro: 0 },
+    composed: [],
+    ownSounds: [],
     zooms: [],
+    moves: [],
     pieces: [],
     zoomsLost: 0,
     inserts: [],
@@ -129,6 +135,7 @@ test("before any is picked there is no highlight text, the default style and a p
     graphics: [],
     graphicsWaitForPack: false,
     graphicsProblem: null,
+    soundsProblem: null,
     emphasis: NO_POINTS,
     exits: EVERY_EXIT,
     proLeftOut: { exits: 0, sounds: 0 },
@@ -515,6 +522,31 @@ test("the write puts the groups where the preview said", async () => {
   expect(below.dodge).toBe("below")
 })
 
+test("the text keeps off the face where a move pushes it in, in the preview and in the write alike; with no move it is placed as before", async () => {
+  // the face from 0.2 to 0.75 of the height leaves room for the text under it; pushed in to 1.3 about the middle it
+  // reaches 0.11–0.825, and the text has nowhere left to go but over it
+  const keepClear = { fromY: 0.2, toY: 0.75 }
+  const { highlights, folder, outlines, service } = await withHighlights({ scenes: [scene(0, 31, keepClear)], highlightAssets: assets })
+  const zoomOn = { ...VIEW, flair: { ...VIEW.flair, zoom: true } }
+  const { preview } = await highlights.pick(folder, DEFAULT_CUT_RULES, zoomOn)
+  expect(preview.groups[0]!.placement).toBe("below")
+  const stored = (await outlines.get(folder))!
+  const punch = { anchor: { kind: "speech" as const, videoId: CLIP_ID, sourceUs: s(17.16), beatId: "beat-1" }, from: "medium" as const, about: "ดันเข้า", poses: [{ s: 0, scale: 1.3, x: 0, y: 0, rot: 0, ease: "cut" as const }], edited: false, off: false }
+  await outlines.put({ ...stored, flair: { looks: {}, ...stored.flair, moves: [punch] } })
+  const moved = await highlights.preview(folder, DEFAULT_CUT_RULES, zoomOn)
+  expect(moved.moves).toHaveLength(1)
+  expect(moved.groups[0]!.placement).toBe("over")
+  // with the zooms off no move plays, and the text is placed as before
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, VIEW)).groups[0]!.placement).toBe("below")
+
+  await service.write(folder, DEFAULT_CUT_RULES, 0, null, { position: "auto", hideSubtitles: false, highlightsOn: true, groupCount: 2, flair: zoomOn.flair })
+  const info = await readInfo(folder)
+  const firstLine = info.tracks.find((track) => track.type === "text" && track.flag === 0)!.segments[0]!
+  const over = layoutGroup(["ขึ้นไป", "อวกาศ!"], "chonburi", { width: 1080, height: 1920 }, { kind: "auto", keepClear: { fromY: 0.11, toY: 0.825 }, keepSubtitleRoom: false })
+  expect(over.dodge).toBe("over")
+  expect((firstLine.clip as { transform: { y: number } }).transform.y).toBeCloseTo(over.lines[0]!.y, 2)
+})
+
 /** A service whose Claude answers `reply` only once `release` is called; `asked` settles when the call is made. */
 function heldClaude(base: Awaited<ReturnType<typeof setup>>, reply: HighlightReply) {
   let release!: () => void
@@ -683,6 +715,10 @@ test("the preview lists the graphics that play, with what the renderer has made 
       error: null,
       edited: false,
       off: false,
+      // made for no point and planned before 0.7.0: no level of its own, and no text's place to take
+      from: null,
+      replaces: false,
+      coversKeep: false,
     },
   ])
   // one job per graphic that plays, drawn in the style the stored outline has, with the times its words are said at
@@ -966,6 +1002,10 @@ test("the preview lists a motion graphic by its idea, written and fresh, and ren
       error: null,
       edited: false,
       off: false,
+      // made for no point and planned before 0.7.0: no level of its own, and no text's place to take
+      from: null,
+      replaces: false,
+      coversKeep: false,
     },
   ])
   expect(renderer.ensure).toHaveBeenCalledTimes(1)
@@ -1005,6 +1045,14 @@ test("a motion graphic shows the change the user asked that made its fragment, w
   ])
   const plain = await withGraphics([graphicAt(s(22.62), { spec: COUNTDOWN })], { packReady: false })
   expect((await plain.highlights.preview(plain.folder, DEFAULT_CUT_RULES, GRAPHICS_ON)).graphics).toMatchObject([{ instruction: null, editFailed: null, canUndo: false }])
+})
+
+test("a graphic whose stored fragment kept for a step back is no fragment (a file may hold anything) has nothing to go back to", async () => {
+  for (const previous of [null, {}, "x"]) {
+    const cue = graphicAt(s(22.62), { spec: { ...COUNTDOWN, previous } as unknown as MotionSpec })
+    const { highlights, folder } = await withGraphics([cue], { packReady: false })
+    expect((await highlights.preview(folder, DEFAULT_CUT_RULES, GRAPHICS_ON)).graphics, JSON.stringify(previous)).toMatchObject([{ canUndo: false }])
+  }
 })
 
 test("a motion graphic goes stale when the cut takes out a word it was written for: it is listed waiting and nothing renders it, until the word is back", async () => {
@@ -1190,8 +1238,9 @@ test("the preview says which point each item was made for, and the emphasis tab 
   expect(preview.zooms.map((zoom) => zoom.pointId)).toEqual(["p1"])
   // "อวกาศ" plays 1.07 s in
   expect(preview.emphasis.points).toMatchObject([{ id: "p1", beatId: "beat-1", atUs: 1_070_000, text: "อวกาศ", shown: true, items: { text: 1, zoom: 1, insert: 0, graphic: 0, sound: 0 } }])
-  // graphics were planned on version 1 of the points, sounds on 2
-  expect([preview.emphasis.hidden, preview.emphasis.version, preview.emphasis.changed]).toEqual([0, 2, { graphics: true, sounds: false }])
+  // graphics were planned on version 1 of the points, sounds on 2; an outline from before 0.7.0 noted the text and
+  // techniques with the graphics
+  expect([preview.emphasis.hidden, preview.emphasis.version, preview.emphasis.changed]).toEqual([0, 2, { techniques: true, graphics: true, sounds: false }])
 })
 
 test("a point the level leaves out takes its items off the preview, and the emphasis tab says it does not show", async () => {
@@ -1812,6 +1861,75 @@ test("every group of a replaced point is replaced, and none of another point or 
   ])
 })
 
+test("a free graphic beside its point's text leaves the text drawn; one over it, written to replace it, takes its place; a legacy one still replaces", { timeout: 20_000 }, async () => {
+  const shown = async (graphics: GraphicCue[]) => {
+    const { highlights, folder } = await withReplacing(graphics)
+    const preview = await highlights.preview(folder, DEFAULT_CUT_RULES, GRAPHICS_ON)
+    return { replaced: preview.groups.map((group) => group.replaced), graphics: preview.graphics.map((graphic) => [graphic.from, graphic.replaces, graphic.stale]) }
+  }
+  // beside pb's text, which is drawn at 0.14–0.41 of the height: the box the fixture's graphics are planned in
+  expect(await shown([onSpace({ pointId: "pb", from: "medium", spec: { ...ON_SPACE, replacesText: false } })])).toEqual({ replaced: [false, false], graphics: [["medium", false, false]] })
+  // over pb's text, written to take its place
+  const over = { ...ON_SPACE, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.35 }, replacesText: true }
+  expect(await shown([onSpace({ pointId: "pb", from: "medium", spec: over })])).toEqual({ replaced: [false, true], graphics: [["medium", true, false]] })
+  // over it, but written to stay beside it: stale, so the text is drawn
+  expect(await shown([onSpace({ pointId: "pb", from: "medium", spec: { ...over, replacesText: false } })])).toEqual({ replaced: [false, false], graphics: [["medium", false, true]] })
+  // from a level louder than the one chosen it does not play, and the text stays
+  expect(await shown([onSpace({ pointId: "pb", from: "heavy", spec: over })])).toEqual({ replaced: [false, false], graphics: [] })
+  // a legacy one in the box beside the text replaces it all the same
+  expect(await shown([onSpace({ pointId: "pb" })])).toEqual({ replaced: [false, true], graphics: [[null, true, false]] })
+})
+
+test("a free graphic written to take its secondary point's place stays fresh at the level that hides the point's text", { timeout: 20_000 }, async () => {
+  const over = { ...ON_SPACE, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.35 }, replacesText: true }
+  const { highlights, folder, outlines } = await withGraphics([onSpace({ pointId: "pb", from: "light", spec: over })])
+  // both points secondary: at light neither's text is drawn
+  await storePoints(outlines, folder, [{ ...pointOn("pa", 0, 2), importance: "secondary" }, { ...pointOn("pb", 3, 4), importance: "secondary" }])
+  await highlights.addFromWords(folder, CLIP_ID, [0, 1], 12, "beat-1", "pa")
+  await highlights.addFromWords(folder, CLIP_ID, [3], 12, "beat-1", "pb")
+  const at = async (level: "light" | "medium") => {
+    const preview = await highlights.preview(folder, DEFAULT_CUT_RULES, { ...GRAPHICS_ON, flair: { ...GRAPHICS_ON.flair, level } })
+    return { replaced: preview.groups.map((group) => group.replaced), graphics: preview.graphics.map((graphic) => [graphic.replaces, graphic.stale]) }
+  }
+  expect(await at("light")).toEqual({ replaced: [], graphics: [[true, false]] })
+  expect(await at("medium")).toEqual({ replaced: [false, true], graphics: [[true, false]] })
+})
+
+test("a free graphic over what the picture keeps clear plays 1.5 s at the most, and says so", { timeout: 20_000 }, async () => {
+  // a face across the lower half of the frame for the whole clip, where the graphic on อวกาศ is drawn: it was written for 1.7 s
+  const { highlights, folder } = await withReplacing([onSpace({ pointId: "pb", from: "medium", spec: { ...ON_SPACE, replacesText: false } })], { scenes: [scene(0, 31, { fromY: 0.5, toY: 0.75 })] })
+  const { graphics } = await highlights.preview(folder, DEFAULT_CUT_RULES, GRAPHICS_ON)
+  expect(graphics.map((graphic) => [graphic.coversKeep, graphic.durationUs])).toEqual([[true, 1_500_000]])
+  // clear of the face, it plays its length
+  const clear = await withReplacing([onSpace({ pointId: "pb", from: "medium", spec: { ...ON_SPACE, replacesText: false } })], { scenes: [scene(0, 31, { fromY: 0.8, toY: 0.95 })] })
+  expect((await clear.highlights.preview(clear.folder, DEFAULT_CUT_RULES, GRAPHICS_ON)).graphics.map((graphic) => [graphic.coversKeep, graphic.durationUs])).toEqual([[false, 1_700_000]])
+})
+
+test("at the loudest level a free graphic is judged against the text as it is shown, which is every point's: the same as against the text laid out with every point shown", { timeout: 20_000 }, async () => {
+  const over = { ...ON_SPACE, box: { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.35 }, replacesText: true }
+  const { highlights, folder } = await withReplacing([onSpace({ pointId: "pb", from: "medium", spec: over }), graphicAt(s(19.0), { from: "light", spec: { ...SPEC, box: { x0: 0.1, y0: 0.45, x1: 0.9, y1: 0.55 }, replacesText: false } })])
+  const at = async (level: "medium" | "heavy") => {
+    const preview = await highlights.preview(folder, DEFAULT_CUT_RULES, { ...GRAPHICS_ON, flair: { ...GRAPHICS_ON.flair, level } })
+    return { replaced: preview.groups.map((group) => group.replaced), graphics: preview.graphics.map(({ render: _render, poster: _poster, error: _error, ...graphic }) => graphic) }
+  }
+  // both points are key, so the middle level shows every point too, and lays the text out again to judge by
+  const heavy = await at("heavy")
+  expect(heavy.replaced).toEqual([false, true])
+  expect(heavy).toEqual(await at("medium"))
+})
+
+test("a free graphic tied to a point whose words are cut away is hidden; one tied to no point still plays", { timeout: 20_000 }, async () => {
+  const beside = { ...ON_SPACE, replacesText: false }
+  const { highlights, folder, outlines, service } = await withReplacing([onSpace({ pointId: "pc", from: "medium", spec: beside }), graphicAt(s(19.0), { from: "medium", spec: { ...SPEC, box: { x0: 0.1, y0: 0.45, x1: 0.9, y1: 0.55 }, replacesText: false } })])
+  await storePoints(outlines, folder, [pointOn("pa", 0, 2), pointOn("pb", 3, 4), pointOn("pc", 8, 9)])
+  const shown = async () => (await highlights.preview(folder, DEFAULT_CUT_RULES, GRAPHICS_ON)).graphics.map((graphic) => graphic.pointId ?? null)
+  // the second plays beside the first, lower, so neither gives way to the other
+  expect(await shown()).toEqual(["pc", null])
+  // pc's word, สาม at 22.62 s, is cut: pc is on the rough cut no more
+  await service.decide(folder, CLIP_ID, { type: "words", indexes: [8], keep: false })
+  expect(await shown()).toEqual([null])
+})
+
 // many whole fixtures in one test: more than the default five seconds on a cold start
 test("a graphic that is not written, stale, switched off, with no room on the frame or made for no point leaves its point's text drawn", { timeout: 20_000 }, async () => {
   const replaced = async (graphics: GraphicCue[], extra: Parameters<typeof withGraphics>[1] = {}) => {
@@ -1881,4 +1999,221 @@ test("the graphics are worked out once for a look at the preview, before the gro
   expect(styleOf).toHaveBeenCalledTimes(1)
   expect(renderer.ensure).toHaveBeenCalledTimes(1)
   expect(renderer.ensure).toHaveBeenCalledWith([spaceJob()], folder)
+})
+
+/* composed sounds */
+
+/** A moment of speech of the fixture's one beat. */
+const said = (sourceUs: number) => ({ kind: "speech" as const, videoId: CLIP_ID, sourceUs, beatId: "beat-1" })
+/** A sound Claude composed on อวกาศ, 1.07 s into the rough cut, for 1.2 s: อวกาศ as it starts and ใน 0.92 s in are said in it, as they still are. */
+const SPACE_SOUND: ComposedSound = {
+  anchor: said(s(18.08)),
+  from: "medium",
+  role: "เสียงวูบขึ้นตอนพูดว่าอวกาศ",
+  loudness: "normal",
+  seconds: 1.2,
+  words: [
+    { text: "อวกาศ", atS: 0 },
+    { text: "ใน", atS: 0.92 },
+  ],
+  code: "function compose(ctx, cue, kit) {}",
+  version: SOUND_VERSION,
+  off: false,
+}
+/** One for the second countdown, on สาม at 2.92 s, for 2 s, where สอง comes 1.26 s in; it plays at the loudest level only. */
+const COUNT_SOUND: ComposedSound = { ...SPACE_SOUND, anchor: said(s(22.62)), from: "heavy", seconds: 2, words: [{ text: "สาม", atS: 0 }, { text: "สอง", atS: 1.26 }] }
+/** One switched off on สอง at 4.18 s, never composed, which would play at every level. */
+const OFF_SOUND: ComposedSound = { ...SPACE_SOUND, anchor: said(s(23.88)), from: "light", seconds: 0.5, words: [], code: null, off: true }
+
+/** A renderer status that answers ready for every sound, and keeps what it was asked about. */
+function readySounds() {
+  const asked: ComposedSound[] = []
+  const status: SoundStatus = (placed) => (asked.push(placed.sound), { state: "ready", error: null })
+  return { status, asked }
+}
+
+/** The fixture with these composed sounds and graphics stored, its graphics drawn in the test style, and a library of one free sound. */
+async function withComposed(composed: ComposedSound[], extra: { status?: SoundStatus; graphics?: GraphicCue[]; ensure?: (jobs: SoundJob[]) => Promise<void>; problem?: string } = {}) {
+  const base = await setup({})
+  const highlights = createHighlightService({
+    outlines: base.outlines,
+    timeline: base.service,
+    footage: base.deps,
+    sounds: { list: async () => [FREE_SOUND] },
+    graphics: fakeRenderer(),
+    styleOf: async () => STYLE,
+    graphicsReady: async () => true,
+    ...(extra.status ? { soundStatus: extra.status } : {}),
+    ...(extra.ensure || extra.problem ? { soundRenderer: { ensure: extra.ensure ?? (async () => {}), environmentProblem: () => extra.problem ?? null } } : {}),
+  })
+  await base.outlines.update(base.folder, (stored) => ({ ...stored!, flair: { looks: {}, composed, graphics: extra.graphics ?? [] } }))
+  return { ...base, highlights }
+}
+
+test("the preview lists the sounds Claude composed that play at the level in force, then the switched-off ones, with what the renderer made of each", async () => {
+  const { status, asked } = readySounds()
+  const { highlights, folder } = await withComposed([COUNT_SOUND, OFF_SOUND, SPACE_SOUND], { status })
+  const preview = await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(preview.composed).toEqual([
+    {
+      anchor: SPACE_SOUND.anchor,
+      // its piece ends at 2.77 s, which leaves it the 1.2 s it was composed for
+      atUs: 1_070_000,
+      durationUs: 1_200_000,
+      beatId: "beat-1",
+      role: "เสียงวูบขึ้นตอนพูดว่าอวกาศ",
+      from: "medium",
+      loudness: "normal",
+      graphic: null,
+      written: true,
+      stale: null,
+      writeFailed: null,
+      instruction: null,
+      editFailed: null,
+      canUndo: false,
+      off: false,
+      render: "ready",
+      error: null,
+    },
+    expect.objectContaining({ anchor: OFF_SOUND.anchor, atUs: 4_180_000, durationUs: 500_000, from: "light", written: false, off: true, render: "pending" }),
+  ])
+  // only the one that plays as it was composed is asked about
+  expect(asked).toEqual([SPACE_SOUND])
+  // the countdown's plays at the loudest level, its words said as they were
+  const heavy = await highlights.preview(folder, DEFAULT_CUT_RULES, { ...SOUNDS_ON, flair: { ...SOUNDS_ON.flair, level: "heavy" } })
+  expect(heavy.composed.map((sound) => [sound.atUs, sound.durationUs, sound.stale, sound.off])).toEqual([
+    [1_070_000, 1_200_000, null, false],
+    [2_920_000, 2_000_000, null, false],
+    [4_180_000, 500_000, null, true],
+  ])
+  // with the sounds switched off none is listed
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, VIEW)).composed).toEqual([])
+})
+
+test("a machine a sound's render found unfit says why while the sounds are on, and nothing while they are off or nothing is known", async () => {
+  const problem = "the sound page could not be opened: the app's ffmpeg is missing"
+  const { highlights, folder } = await withComposed([SPACE_SOUND], { problem })
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)).soundsProblem).toBe(problem)
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, VIEW)).soundsProblem).toBeNull()
+  const fit = await withComposed([SPACE_SOUND], { ensure: async () => {} })
+  expect((await fit.highlights.preview(fit.folder, DEFAULT_CUT_RULES, SOUNDS_ON)).soundsProblem).toBeNull()
+  const unwired = await withComposed([SPACE_SOUND])
+  expect((await unwired.highlights.preview(unwired.folder, DEFAULT_CUT_RULES, SOUNDS_ON)).soundsProblem).toBeNull()
+})
+
+test("a composed sound that no longer plays as it was composed for is listed stale and waits; with no renderer status every one waits", async () => {
+  const { status, asked } = readySounds()
+  // composed when nothing was said after อวกาศ
+  const reworded = { ...SPACE_SOUND, words: [{ text: "อวกาศ", atS: 0 }] }
+  const { highlights, folder } = await withComposed([reworded], { status })
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)).composed).toMatchObject([{ written: true, stale: "cut", render: "pending", error: null }])
+  expect(asked).toEqual([])
+  const unwired = await withComposed([SPACE_SOUND])
+  expect((await unwired.highlights.preview(unwired.folder, DEFAULT_CUT_RULES, SOUNDS_ON)).composed).toMatchObject([{ written: true, stale: null, render: "pending", error: null }])
+})
+
+test("a sound tied to a graphic is listed where the graphic plays, named by the graphic's idea; it is off while the graphic is, gone while graphics are, and stale once the graphic is written again", async () => {
+  const tied: ComposedSound = { ...SPACE_SOUND, graphic: onSpace().anchor, graphicHtml: hashOfHtml(FRAGMENT) }
+  const { highlights, folder, outlines } = await withComposed([tied], { graphics: [onSpace()], status: readySounds().status })
+  const listed = async (options = GRAPHICS_ON) => (await highlights.preview(folder, DEFAULT_CUT_RULES, options)).composed.map((sound) => [sound.atUs, sound.durationUs, sound.graphic, sound.stale, sound.off, sound.render])
+  expect(await listed()).toEqual([[1_070_000, 1_200_000, { summary: "จรวดพุ่งขึ้นไปอวกาศ" }, null, false, "ready"]])
+  expect(await listed(GRAPHICS_OFF)).toEqual([])
+  const graphics = async (graphic: GraphicCue) => outlines.update(folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, graphics: [graphic] } }))
+  await graphics(onSpace({ off: true, edited: true }))
+  expect(await listed()).toEqual([[1_070_000, 1_200_000, { summary: "จรวดพุ่งขึ้นไปอวกาศ" }, null, true, "pending"]])
+  await graphics(onSpace({ spec: { ...ON_SPACE, html: `${FRAGMENT}<i></i>` } }))
+  expect(await listed()).toEqual([[1_070_000, 1_200_000, { summary: "จรวดพุ่งขึ้นไปอวกาศ" }, "picture", false, "pending"]])
+})
+
+test("the user's own CapCut sounds that still play are listed by name, to be taken off; Claude's are not, though they still play", async () => {
+  const base = await withComposed([])
+  const [first, next] = (await base.highlights.preview(base.folder, DEFAULT_CUT_RULES, SOUNDS_ON)).slots
+  const cues = [
+    { anchor: first!.anchor, effectId: FREE_SOUND.effectId, edited: false },
+    { anchor: next!.anchor, effectId: FREE_SOUND.effectId, edited: true },
+  ]
+  await base.outlines.update(base.folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, cues } }))
+  const preview = await base.highlights.preview(base.folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(preview.ownSounds).toEqual([{ anchor: next!.anchor, atUs: next!.atUs, name: FREE_SOUND.use ?? FREE_SOUND.name }])
+  expect(preview.cues.map((cue) => cue.edited)).toEqual([false, true])
+  expect((await base.highlights.preview(base.folder, DEFAULT_CUT_RULES, VIEW)).ownSounds).toEqual([])
+})
+
+test("what plays on each point counts the composed sounds on it that are not switched off", async () => {
+  const { highlights, folder, outlines } = await withComposed([{ ...SPACE_SOUND, pointId: "p1" }, { ...OFF_SOUND, pointId: "p1" }, { ...COUNT_SOUND, from: "medium", pointId: "p2" }])
+  await storePoints(outlines, folder, fixturePoints())
+  const preview = await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(preview.emphasis.points.map((point) => [point.id, point.items.sound])).toEqual([
+    ["p1", 1],
+    ["p2", 1],
+  ])
+})
+
+test("the composed sounds are handed to whoever writes or composes them as the preview places them, under the rules and options given", async () => {
+  const tied: ComposedSound = { ...SPACE_SOUND, anchor: onSpace().anchor, graphic: onSpace().anchor, graphicHtml: hashOfHtml(FRAGMENT), seconds: 1 }
+  const { highlights, folder } = await withComposed([COUNT_SOUND, OFF_SOUND, tied], { graphics: [onSpace()] })
+  const placed = await highlights.composedSounds(folder, DEFAULT_CUT_RULES, GRAPHICS_ON)
+  expect(placed.kept.map((sound) => [sound.sound, sound.atUs, sound.durationUs, sound.graphic?.cue.anchor, sound.wordsNow, sound.stale])).toEqual([
+    [tied, 1_070_000, 1_000_000, onSpace().anchor, [{ text: "อวกาศ", atS: 0 }, { text: "ใน", atS: 0.92 }], null],
+  ])
+  expect(placed.off.map((sound) => sound.sound)).toEqual([OFF_SOUND])
+  expect(placed.unplaced).toBe(0)
+  // planning asks at the loudest level, where the countdown's plays too
+  const loudest = await highlights.composedSounds(folder, DEFAULT_CUT_RULES, { ...GRAPHICS_ON, flair: { ...GRAPHICS_ON.flair, level: "heavy" } })
+  expect(loudest.kept.map((sound) => sound.sound)).toEqual([tied, COUNT_SOUND])
+  // with the graphics switched off the tied one is left out, as the user chose, and not counted as having no place
+  const bare = await highlights.composedSounds(folder, DEFAULT_CUT_RULES, GRAPHICS_OFF)
+  expect([bare.kept, bare.unplaced]).toEqual([[], 0])
+})
+
+test("a composed sound with no place on the rough cut is counted with the stored sounds not playing; one bound to no point whose word the cut took out has none", async () => {
+  // the first สาม (19.78 s) is cut as a retake
+  const onCutWord = { ...SPACE_SOUND, anchor: said(s(19.78)) }
+  const { highlights, folder } = await withComposed([SPACE_SOUND, onCutWord, { ...onCutWord, anchor: said(s(20.66)), off: true }])
+  const preview = await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(preview.composed.map((sound) => sound.anchor)).toEqual([SPACE_SOUND.anchor])
+  // the switched-off one is not counted
+  expect(preview.unusedSounds).toEqual({ unplaced: 1, missing: 0, lost: 0, pro: 0 })
+  // with the sounds off nothing is
+  expect((await highlights.preview(folder, DEFAULT_CUT_RULES, VIEW)).unusedSounds.unplaced).toBe(0)
+})
+
+test("the preview starts the renders of the written, fresh sounds that play and have no file, in the background, and asks no more of one already under way", async () => {
+  const waiting: (() => void)[] = []
+  const asked: SoundJob[][] = []
+  const ensure = (jobs: SoundJob[]) => {
+    asked.push(jobs)
+    return new Promise<void>((resolve) => waiting.push(resolve))
+  }
+  // nothing is made: every sound waits, unless it has failed
+  const states = new Map<string, "pending" | "failed" | "ready">()
+  const status: SoundStatus = (placed) => ({ state: states.get(placed.sound.role) ?? "pending", error: null })
+  const failed = { ...SPACE_SOUND, anchor: said(s(17.16)), role: "พัง", words: [{ text: "ขึ้น", atS: 0 }, { text: "ไป", atS: 0.28 }, { text: "ใน", atS: 0.52 }, { text: "อวกาศ", atS: 0.92 }] }
+  states.set("พัง", "failed")
+  const stale = { ...COUNT_SOUND, from: "medium" as const, words: [] }
+  const { highlights, folder, outlines } = await withComposed([SPACE_SOUND, OFF_SOUND, stale, failed], { status, ensure })
+  // the preview does not wait for the render it started
+  const shown = await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(shown.composed.map((sound) => [sound.role, sound.stale, sound.render])).toEqual([
+    ["พัง", null, "failed"],
+    ["เสียงวูบขึ้นตอนพูดว่าอวกาศ", null, "pending"],
+    ["เสียงวูบขึ้นตอนพูดว่าอวกาศ", "cut", "pending"],
+    ["เสียงวูบขึ้นตอนพูดว่าอวกาศ", null, "pending"],
+  ])
+  // only the written, fresh one that plays and waits for its file, with its words as they fall now
+  expect(asked).toEqual([[{ code: SPACE_SOUND.code, seconds: 1.2, words: SPACE_SOUND.words, loudness: "normal" }]])
+  // while that render is under way, another preview asks nothing more
+  await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(asked).toHaveLength(1)
+  // once it is over, a sound still without a file is asked for again; a made one is not
+  waiting.shift()!()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(asked).toHaveLength(2)
+  waiting.shift()!()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  states.set(SPACE_SOUND.role, "ready")
+  await outlines.update(folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, composed: [SPACE_SOUND] } }))
+  await highlights.preview(folder, DEFAULT_CUT_RULES, SOUNDS_ON)
+  expect(asked).toHaveLength(2)
 })

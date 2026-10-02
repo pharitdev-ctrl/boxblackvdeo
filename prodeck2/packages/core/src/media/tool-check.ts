@@ -1,7 +1,7 @@
 import { ProcessError, runProcess } from "./process.ts"
 
-/** What the analysis runs through ffmpeg: the signal filters, frame export and audio extraction. */
-const REQUIRED_FILTERS = ["scdet", "blackdetect", "freezedetect", "blurdetect", "silencedetect", "fps", "scale", "metadata"]
+/** What the analysis runs through ffmpeg: the signal filters, frame export and audio extraction; and ebur128, which measures each composed sound's loudness. */
+const REQUIRED_FILTERS = ["scdet", "blackdetect", "freezedetect", "blurdetect", "silencedetect", "fps", "scale", "metadata", "ebur128"]
 /** wrapped_avframe is what `-f null` encodes the video into while the signal filters run; prores_ks makes the graphics, png their posters */
 const REQUIRED_ENCODERS = ["mjpeg", "flac", "pcm_s16le", "wrapped_avframe", "prores_ks", "png"]
 /** frames, extracted speech, the loudness pipe, the null sink the signal filters write to, and the .mov the graphics land in */

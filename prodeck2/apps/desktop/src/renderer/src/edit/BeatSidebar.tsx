@@ -45,7 +45,8 @@ export interface BeatSidebarProps {
 const MARKS: Record<PostTab, (keyof BeatCounts)[]> = {
   cut: [],
   emphasis: ["emphasis"],
-  graphics: ["text", "zoom", "insert", "graphic"],
+  techniques: ["text", "zoom", "insert"],
+  graphics: ["graphic"],
   sound: ["sound"],
   subtitles: ["subtitles"],
 }
