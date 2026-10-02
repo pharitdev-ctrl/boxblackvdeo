@@ -32,7 +32,8 @@ body { padding-inline: 16px; padding-block: 20px 32px; }
 
 /* header */
 .top { position: absolute; left: 72px; right: 64px; top: 40px; height: 56px; display: flex; align-items: center; gap: 22px; }
-.mark { width: 44px; height: 44px; border-radius: 11px; background: linear-gradient(150deg, #2973ff, #7333e6); position: relative; flex: none; }
+.mark { width: 44px; height: 44px; border-radius: 11px; background: url(app-icon.png) center / 125% no-repeat; position: relative; flex: none; }
+.mark > *, .appicon > * { display: none; }
 .mark i { position: absolute; height: 7px; border-radius: 3px; background: #fff; }
 .mark b { position: absolute; left: 21px; top: 9px; width: 3px; height: 26px; border-radius: 2px; background: #ffd140; }
 .top .name { font-weight: 600; font-size: 26px; letter-spacing: .02em; }
@@ -64,7 +65,7 @@ body { padding-inline: 16px; padding-block: 20px 32px; }
 .win { position: absolute; background: #fff; border-radius: 12px; box-shadow: 0 0 0 .5px rgba(0,0,0,.2), 0 24px 60px rgba(0,0,0,.25); overflow: hidden; }
 .win .tbar { height: 46px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #3a3a3c; border-bottom: 1px solid rgba(0,0,0,.08); background: #f6f6f6; position: relative; }
 .win .tbar .lights { left: 16px; top: 16px; }
-.appicon { width: 128px; height: 128px; border-radius: 29px; background: linear-gradient(150deg, #2973ff, #7333e6); position: relative; box-shadow: 0 8px 20px rgba(60, 40, 160, .3); }
+.appicon { width: 128px; height: 128px; border-radius: 29px; background: url(app-icon.png) center / 125% no-repeat; position: relative; box-shadow: 0 8px 20px rgba(0, 0, 0, .3); }
 .appicon i { position: absolute; height: 18px; border-radius: 6px; background: rgba(255,255,255,.93); }
 .appicon b { position: absolute; left: 62px; top: 26px; width: 5px; height: 72px; border-radius: 3px; background: #ffd140; }
 .folder { width: 128px; height: 104px; position: relative; margin-top: 12px; }
@@ -215,7 +216,7 @@ body.rec { padding: 0; } body.rec .wrap { max-width: none; } body.rec .viewport 
                 <div class="sect">Security</div>
                 <div class="grp">
                   <div><span>Allow applications from</span><span style="color:#8e8e93">App Store &amp; Known Developers ⌄</span></div>
-                  <div id="openany-row"><span>“BOXBLACK” was blocked to protect your Mac.</span><span class="sm" id="openany" data-box="openany">Open Anyway</span></div>
+                  <div id="openany-row" data-box="openany_row"><span>“BOXBLACK” was blocked to protect your Mac.</span><span class="sm" id="openany" data-box="openany">Open Anyway</span></div>
                 </div>
                 <div class="grp"><div><span>FileVault</span><span style="color:#8e8e93">On</span></div><div><span>Lockdown Mode</span><span style="color:#8e8e93">Off</span></div></div>
               </div>
@@ -326,7 +327,7 @@ const S = [
     cur: [[0, [900, 700]], [4.5, 'done', true]], ring: [[1.5, 4.3, 'done']], zoom: [[0, 1, [720, 450]], [1.4, 1.6, [720, 380]]] },
   { ch: 0, title: 'กด Open Anyway', mock: 'privacy', dur: 10, chrome: false,
     body: 'ไปที่ <b>System Settings → Privacy &amp; Security</b> เลื่อนลงไปที่ส่วน Security จะเห็นว่า BOXBLACK ถูกบล็อก กด <b>Open Anyway</b>',
-    cur: [[0, [700, 300]], [6.5, 'openany', true]], ring: [[2.5, 6.3, 'openany']], zoom: [[0, 1, [720, 450]], [2, 1.7, 'openany']] },
+    cur: [[0, [700, 300]], [6.5, 'openany', true]], ring: [[2.5, 6.3, 'openany_row']], zoom: [[0, 1, [720, 450]], [2, 1.7, 'openany']] },
   { ch: 0, title: 'ใส่รหัสผ่านเครื่อง', mock: 'password', dur: 7, chrome: false,
     body: 'ใส่รหัสผ่านของเครื่อง แล้วกด <b>Open</b> ทำแค่ครั้งเดียว ครั้งต่อไปเปิดจาก Applications ได้ตามปกติ',
     cur: [[0, [900, 650]], [4.2, 'pw_open', true]], type: [1, 3], zoom: [[0, 1, [720, 450]], [0.8, 1.6, [720, 400]]] },
@@ -355,7 +356,7 @@ const S = [
     cur: [[0, [900, 700]], [4.5, 'card', true]], ring: [[1.5, 4.3, 'card']] },
   { ch: 2, title: 'เลือกวิดีโอแล้วเริ่มวิเคราะห์', dur: 9, shots: [[0, 'prepare']],
     body: 'ติ๊กวิดีโอที่ให้ AI ใช้ · ด้านล่างบอกว่า Claude จะดูภาพกี่ภาพ ใช้ประมาณกี่ token · กด <b>เริ่มวิเคราะห์</b>',
-    cur: [[0, [700, 600]], [1.5, 'prep_check'], [7.5, 'start', true]], ring: [[0.6, 3, 'prep_list'], [3.6, 6.4, 'estimate']], zoom: [[0, 1, [720, 450]], [3.4, 1.8, [400, 860]], [6.6, 1, [720, 450]]] },
+    cur: [[0, [700, 600]], [1.5, 'prep_check'], [7.5, 'start', true]], ring: [[0.6, 3, 'prep_list'], [3.6, 6.4, 'estimate']], zoom: [[0, 1, [720, 450]]] },
   { ch: 2, title: 'ถอดเสียงและดูภาพ', dur: 12, shots: [[0, 'seq:analyse:20:0.38'], [7.8, 'analysed'], [9.4, 'peek']],
     body: 'แอปถอดเสียงภาษาไทย แล้วให้ Claude ดูภาพทีละไฟล์ · เสร็จแล้วกด <b>ดู</b> เพื่อเช็กคำพูดและฉากที่ AI อ่านได้',
     cur: [[0, 'start'], [9, 'peek', true]], ring: [[9.6, 11.8, 'peek_pop']], zoom: [[0, 1, [720, 450]], [9.2, 1.7, [1150, 330]]] },
@@ -426,12 +427,32 @@ function track(keys, t, get, blend) {
 }
 const lerp = (a, b, k) => a + (b - a) * k;
 
-let cur = -1, curShot = null;
+let cur = -1, curShot = null, fitPending = false;
+// Each camera hold is checked against what the step shows meanwhile (its rings and click targets): the zoom drops
+// until all of it fits with a margin, and the centre moves so none of it is cut off.
+function fitZoom(s) {
+  const keys = s.zoom || [[0, 1, [720, 450]]];
+  return keys.map((k, j) => {
+    const from = k[0], to = j + 1 < keys.length ? keys[j + 1][0] : s.dur;
+    const boxes = (s.ring || []).filter((q) => q[0] < to && q[1] > from).map((q) => B[q[2]]);
+    for (const c of s.cur || []) if (c[0] >= from - .1 && c[0] <= to) boxes.push(typeof c[1] === 'string' ? B[c[1]] : [c[1][0] - 20, c[1][1] - 20, 40, 40]);
+    let [z, c] = [k[1], pt(k[2])];
+    if (!boxes.length || z <= 1) return [k[0], z, c];
+    const M = 50, x0 = Math.min(...boxes.map((b) => b[0])) - M, y0 = Math.min(...boxes.map((b) => b[1])) - M;
+    const x1 = Math.max(...boxes.map((b) => b[0] + b[2])) + M, y1 = Math.max(...boxes.map((b) => b[1] + b[3])) + M;
+    z = Math.max(1, Math.min(z, 1440 / (x1 - x0), 900 / (y1 - y0)));
+    const hw = 720 / z, hh = 450 / z; let [cx, cy] = c;
+    if (x0 < cx - hw) cx = x0 + hw; if (x1 > cx + hw) cx = x1 - hw;
+    if (y0 < cy - hh) cy = y0 + hh; if (y1 > cy + hh) cy = y1 - hh;
+    return [k[0], z, [cx, cy]];
+  });
+}
 function render(t) {
   let i = S.findIndex((s) => t >= s.start && t < s.end); if (i < 0) i = S.length - 1;
   const s = S[i], local = t - s.start;
   if (i !== cur) {
     cur = i;
+    fitPending = true;
     document.getElementById('card-intro').classList.toggle('on', s.card === 'intro');
     document.getElementById('card-outro').classList.toggle('on', s.card === 'outro');
     document.querySelectorAll('.mock').forEach((m) => m.classList.toggle('on', m.id === 'm-' + s.mock));
@@ -451,7 +472,8 @@ function render(t) {
   }
   if (want !== curShot) { if (curShot) imgs[curShot].classList.remove('on'); if (want) imgs[want].classList.add('on'); curShot = want; }
   // camera
-  const zk = s.zoom || [[0, 1, [720, 450]]];
+  if (fitPending) { s._zoom = fitZoom(s); fitPending = false; }
+  const zk = s._zoom;
   const [z, cx, cy] = track(zk, local, (k) => [k[1], ...pt(k[2])], (a, b, e) => a.map((v, j) => lerp(v, b[j], e)));
   const sc = 0.86 * z, W = 1238, H = 774;
   const tx = Math.min(0, Math.max(W - 1440 * sc, W / 2 - cx * sc)), ty = Math.min(0, Math.max(H - 900 * sc, H / 2 - cy * sc));
