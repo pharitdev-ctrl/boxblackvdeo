@@ -28,3 +28,33 @@ test("with the graphics written while the sounds are composed, the strip says ho
   // four of the six works are over
   expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(String(Math.round((4 / 6) * 100)))
 })
+
+/* the mascot beside the strip: thinking while the run goes, sorry when a work of it failed */
+
+const mascots = () => [...document.querySelectorAll<HTMLImageElement>(".plan-strip img.mascot")]
+const poseOf = (image: HTMLImageElement) => [...image.classList].find((name) => name.startsWith("mascot-"))
+
+test("while a run goes the mascot thinks beside the strip, and says nothing a screen reader needs", () => {
+  render(<PlanStrip run={{ running: true, states: { emphasis: { state: "running" } } }} current={["emphasis"]} />)
+  expect(mascots().map(poseOf)).toEqual(["mascot-think"])
+  expect(mascots()[0]!.getAttribute("alt")).toBe("")
+})
+
+test("a run that is over with a work failed has the mascot say oops, not think", () => {
+  render(
+    <PlanStrip
+      run={{ running: false, states: { emphasis: { state: "done", count: 2, dropped: 0 }, graphics: { state: "failed", error: "Claude broke" } } }}
+      current={["emphasis", "graphics"]}
+    />,
+  )
+  expect(mascots().map(poseOf)).toEqual(["mascot-oops"])
+  expect(mascots()[0]!.getAttribute("alt")).toBe("")
+})
+
+test("a run that went well, or one the user stopped, leaves no mascot beside the strip", () => {
+  render(<PlanStrip run={{ running: false, states: { emphasis: { state: "done", count: 2, dropped: 0 } } }} current={["emphasis"]} />)
+  expect(mascots()).toEqual([])
+  cleanup()
+  render(<PlanStrip run={{ running: false, states: { emphasis: { state: "failed", error: "the run was cancelled" } } }} current={["emphasis"]} />)
+  expect(mascots()).toEqual([])
+})

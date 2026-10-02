@@ -13,6 +13,7 @@ import { Sheet } from "./Sheet.tsx"
 import { Switch } from "./Switch.tsx"
 import { TabPanel, Tabs } from "./Tabs.tsx"
 import { Toast } from "./Toast.tsx"
+import { Mascot } from "./Mascot.tsx"
 
 afterEach(cleanup)
 
@@ -279,4 +280,21 @@ test("an empty state explains itself and can offer a way out", () => {
   expect(screen.getByText("ยังไม่มีข้อความเด่น")).toBeTruthy()
   expect(screen.getByText("กด Aa เน้น ที่ประโยคไหนก็ได้")).toBeTruthy()
   expect(screen.getByRole("button", { name: "ให้ AI เลือก" })).toBeTruthy()
+})
+
+test("the mascot is a picture of its pose that says nothing a screen reader needs, sized as asked", () => {
+  render(<Mascot pose="think" size={32} />)
+  const image = document.querySelector("img")!
+  expect(image.className).toBe("mascot mascot-think")
+  expect(image.getAttribute("alt")).toBe("")
+  expect(image.getAttribute("src")).toMatch(/mascot-think/)
+  expect(image.getAttribute("height")).toBe("32")
+})
+
+test("a toast shows the mascot only in the pose it is given", () => {
+  render(<Toast message="เขียนแล้ว" pose="done" onDone={() => {}} />)
+  expect([...document.querySelectorAll(".toast img.mascot")].map((image) => image.className)).toEqual(["mascot mascot-done"])
+  cleanup()
+  render(<Toast message="บันทึกแล้ว" onDone={() => {}} />)
+  expect(document.querySelector(".toast img")).toBeNull()
 })

@@ -719,10 +719,22 @@
   white-space: nowrap;
 }
 
+/* the mascot at work in the reason's place while a write runs: it gives way as the reason does, so the bar
+   neither grows nor moves its buttons, and where the bar is full it is not drawn at all (the button says กำลังเขียน…) */
+.write-mascot {
+  display: flex;
+  flex: 0 1000 auto;
+  min-width: 0;
+  /* room for its small bob, which the clip would otherwise cut */
+  padding: 2px 0;
+  overflow: hidden;
+}
+
 /* where the bar is full (the stage chips give up their names here too) there is no room left to say it in:
    the button's title and its description (this element, hidden but still named by aria-describedby) say it */
 @media (max-width: 1060px) {
-  .write-reason {
+  .write-reason,
+  .write-mascot {
     display: none;
   }
 }
@@ -761,6 +773,18 @@
   display: grid;
   gap: 6px;
   padding-top: 8px;
+}
+
+/* the mascot, when there is one, before the strip's lines */
+.plan-said {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-said > .plan-lines {
+  flex: 1;
+  min-width: 0;
 }
 
 .plan-lines {

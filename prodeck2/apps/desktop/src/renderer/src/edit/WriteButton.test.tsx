@@ -1111,3 +1111,37 @@ test("with nothing failed, the page shows no notice of a failed read", async () 
   expect(notices()).toEqual([])
   expect(document.querySelector(".read-failed")).toBeNull()
 })
+
+/* the mascot: at work beside the bar's button while a write runs, glad in the toast of one that went well, sorry in one that failed */
+
+const poseOf = (image: Element) => [...image.classList].find((name) => name.startsWith("mascot-"))
+const barMascots = () => [...bar().querySelectorAll("img.mascot")].map(poseOf)
+const toastMascots = () => [...document.querySelectorAll(".toast img.mascot")]
+
+test("the mascot works on the bar while a write runs, and is gone before and after it", async () => {
+  let answer!: (result: WriteResult) => void
+  renderButton({ writeTimeline: () => new Promise<WriteResult>((resolve) => (answer = resolve)) })
+  await waitFor(() => expect(writeButton()).toHaveProperty("disabled", false))
+  expect(barMascots()).toEqual([])
+  await writeNow()
+  expect(writingButton()).toHaveProperty("disabled", true)
+  expect(barMascots()).toEqual(["mascot-work"])
+  expect(bar().querySelector("img.mascot")!.getAttribute("alt")).toBe("")
+  const result = await writeResult()
+  await act(async () => answer(result))
+  await waitFor(() => expect(againButton()).toHaveProperty("disabled", false))
+  expect(barMascots()).toEqual([])
+})
+
+test("the toast of a write that went well has the mascot glad, and the toast of one that failed has it sorry", async () => {
+  renderButton()
+  await writeNow()
+  await waitFor(() => expect(toastMascots().map(poseOf)).toEqual(["mascot-done"]))
+  expect(toastMascots()[0]!.getAttribute("alt")).toBe("")
+  cleanup()
+
+  renderButton({ writeTimeline: () => Promise.reject(new Error("CapCut is running")) })
+  await writeNow()
+  await waitFor(() => expect(toastMascots().map(poseOf)).toEqual(["mascot-oops"]))
+  expect(toastMascots()[0]!.getAttribute("alt")).toBe("")
+})

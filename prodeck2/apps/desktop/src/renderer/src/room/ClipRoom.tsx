@@ -1047,8 +1047,8 @@ export function ClipRoom({ api, project: initialProject, stored, capcutRunning, 
   return (
     <RoomContext.Provider value={value}>
       {children}
-      {told && <Toast message={toldMessage(told)} ms={toldIsLong(told) ? ACTION_TOAST_MS : undefined} onDone={toldDone} />}
-      {writeFailed !== null && <Toast message={t("write.failed", { message: writeFailed })} ms={ACTION_TOAST_MS} onDone={writeFailedDone} />}
+      {told && <Toast message={toldMessage(told)} ms={toldIsLong(told) ? ACTION_TOAST_MS : undefined} pose="done" onDone={toldDone} />}
+      {writeFailed !== null && <Toast message={t("write.failed", { message: writeFailed })} ms={ACTION_TOAST_MS} pose="oops" onDone={writeFailedDone} />}
     </RoomContext.Provider>
   )
 }

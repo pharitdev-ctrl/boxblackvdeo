@@ -447,6 +447,38 @@ p {
   transform: translateX(-50%);
 }
 
+/* the mascot beside a toast's words: it stands in the toast's padding, so a toast with it is no taller than one without */
+.toast .mascot {
+  margin: -10px -4px -10px -8px;
+}
+
+/* the mascot */
+
+/* small, beside a line that says what is going on: it keeps its own size, and has no box of its own on either theme */
+.mascot {
+  flex: none;
+  object-fit: contain;
+}
+
+/* while Claude thinks or a write runs it bobs a little, and stands still for those who ask for less motion */
+.mascot-think,
+.mascot-work {
+  animation: mascot-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes mascot-bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-think,
+  .mascot-work {
+    animation: none;
+  }
+}
+
 /* progress */
 
 .progress {

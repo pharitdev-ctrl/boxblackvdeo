@@ -4,6 +4,7 @@ import { formatDuration } from "../format.ts"
 import { t, type MessageKey } from "../i18n.ts"
 import { useClipRoom, type ClipRoomValue, type RoomRead } from "../room/ClipRoom.tsx"
 import { Button } from "../ui/Button.tsx"
+import { Mascot } from "../ui/Mascot.tsx"
 import { Sheet } from "../ui/Sheet.tsx"
 import { cueKey } from "./FlairTab.tsx"
 import { FAILED_READ_WORDS, writeHold } from "./writeHold.ts"
@@ -20,11 +21,18 @@ const whyHeld = (room: ClipRoomValue): MessageKey | null => (room.writing ? null
 const saidBeside = (why: MessageKey | null): why is MessageKey => why !== null && why !== "write.check.planning"
 
 /**
- * Why the write button is off, in a line beside it. It is drawn before the AI menu, at the left of what the
- * page puts on the bar, so that it comes and goes without moving the buttons after it.
+ * Why the write button is off, in a line beside it, or the mascot at work while a write runs. It is drawn before
+ * the AI menu, at the left of what the page puts on the bar, so that it comes and goes without moving the buttons after it.
  */
 export function WriteReason(): ReactElement | null {
   const room = useClipRoom()
+  // while a write runs there is no reason to give, and the mascot stands in its place, at work
+  if (room.writing)
+    return (
+      <span className="write-mascot">
+        <Mascot pose="work" />
+      </span>
+    )
   const why = whyHeld(room)
   if (!saidBeside(why)) return null
   return (

@@ -59,5 +59,5 @@ export function WriteEndToast({ projectName, end, onDone }: { projectName: strin
   // the same words as the room's own toast, and as long: what the write left out is told wherever the user is
   const message = end.state === "done" ? toldMessage(end.result) : t("write.failed", { message: end.error })
   const long = end.state === "failed" || toldIsLong(end.result)
-  return <Toast message={t("write.away", { project: projectName, message })} ms={long ? ACTION_TOAST_MS : undefined} onDone={onDone} />
+  return <Toast message={t("write.away", { project: projectName, message })} ms={long ? ACTION_TOAST_MS : undefined} pose={end.state === "done" ? "done" : "oops"} onDone={onDone} />
 }

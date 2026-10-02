@@ -3,6 +3,7 @@ import type { DesktopApi, ProjectList, ProjectStage, ProjectSummary } from "../.
 import { formatDate, formatDay, formatDuration } from "../format.ts"
 import { t, type MessageKey } from "../i18n.ts"
 import { Empty } from "../ui/Empty.tsx"
+import mascotWave from "../assets/mascot-wave.png"
 
 function Cover({ api, project }: { api: DesktopApi; project: ProjectSummary }) {
   const [src, setSrc] = useState<string | null>(null)
@@ -65,7 +66,9 @@ export function ProjectsScreen({ api, onOpen }: { api: DesktopApi; onOpen: (fold
   return (
     <section className="screen projects">
       <div className="screen-head">
-        <div>
+        {/* the mascot waves hello where every session starts; it says nothing a screen reader needs */}
+        <img className="mascot" src={mascotWave} alt="" width={56} height={72} />
+        <div className="projects-title">
           <h1>{t("projects.title")}</h1>
           <p className="hint">{list ? `${t("projects.subtitle")} · ${t("projects.count", { count: list.projects.length })}` : t("projects.subtitle")}</p>
         </div>

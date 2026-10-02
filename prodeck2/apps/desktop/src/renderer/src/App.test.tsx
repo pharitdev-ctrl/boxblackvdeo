@@ -93,6 +93,14 @@ test("the project list has no stage to point at; opening a project starts at เ
 
 const backToProjects = () => screen.getByRole("button", { name: new RegExp(t("nav.projects")) })
 
+test("the project list's head has the waving mascot beside its title, hidden from screen readers", async () => {
+  render(<App api={fakeApi()} pollMs={10} />)
+  const heading = await screen.findByRole("heading", { name: t("projects.title") })
+  const mascot = heading.closest(".screen-head")?.querySelector("img.mascot")
+  expect(mascot?.getAttribute("alt")).toBe("")
+  expect(mascot?.getAttribute("src")).toMatch(/mascot-wave/)
+})
+
 test("a project that is open can be left for the list, and another one opened", async () => {
   const api = fakeApi()
   render(<App api={api} pollMs={10} />)
@@ -390,6 +398,23 @@ test("a write that went well is told on the project list too", async () => {
   const result = await fakeApi().writeTimeline("/drafts/0815", settingsView().cut, 0, null, null)
   act(() => api.emit({ type: "timeline-write", folder: "/drafts/0815", state: "done", result }))
   expect(await screen.findByText(t("write.away", { project: "0815", message: t("write.done", { pieces: 5, duration: "0:12" }) }))).toBeTruthy()
+})
+
+test("the toast of a write that ends away from its room has the mascot glad when it went well, and sorry when it failed", async () => {
+  const api = fakeApi()
+  render(<App api={api} pollMs={10} />)
+  await screen.findByRole("heading", { name: t("projects.title") })
+  const poses = () => [...document.querySelectorAll(".toast img.mascot")].map((image) => [image.className, image.getAttribute("alt")])
+  const result = await fakeApi().writeTimeline("/drafts/0815", settingsView().cut, 0, null, null)
+  act(() => api.emit({ type: "timeline-write", folder: "/drafts/0815", state: "done", result }))
+  await waitFor(() => expect(poses()).toEqual([["mascot mascot-done", ""]]))
+  cleanup()
+
+  const failing = fakeApi()
+  render(<App api={failing} pollMs={10} />)
+  await screen.findByRole("heading", { name: t("projects.title") })
+  act(() => failing.emit({ type: "timeline-write", folder: "/drafts/0815", state: "failed", error: "CapCut is running" }))
+  await waitFor(() => expect(poses()).toEqual([["mascot mascot-oops", ""]]))
 })
 
 test("a write that ends while no room of its draft is open tells what it left out too, and stays as long as those notes take to read", async () => {
