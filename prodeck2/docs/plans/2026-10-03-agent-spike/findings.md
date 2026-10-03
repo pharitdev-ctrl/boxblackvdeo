@@ -84,4 +84,4 @@ audio; ffmpeg's own scale/crop expressions are not needed. In the app the files 
 of the graphics does not matter.
 
 Still open: one fresh export of this exact draft, to check graphic placement and the sounds against CapCut frame by
-frame; then a fresh export of this exact draft to compare frame by frame.
+frame.
