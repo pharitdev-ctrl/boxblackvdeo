@@ -38,12 +38,12 @@ test("the drawing code uses nothing from outside itself: run from its source tex
     {
       label: "1.25s",
       layers: [
-        { kind: "video", file: "/v.mov", photo: false, sourceUs: 0, native: { width: 1080, height: 1920 }, look, overlay: false, src: "data:image/jpeg;base64,AA" },
+        { kind: "video", segmentId: "s1", speed: 1, file: "/v.mov", photo: false, sourceUs: 0, native: { width: 1080, height: 1920 }, look, overlay: false, src: "data:image/jpeg;base64,AA" },
         { kind: "shape", width: 540, height: 120, color: "rgba(255,224,0,1)", roundness: 50, look: { ...look, y: -0.2 } },
         { kind: "text", lines: [[{ text: "ราคา ", color: [1, 1, 1], stroke: { width: 0.08, color: [0, 0, 0] } }, { text: "5", color: [1, 0, 0], stroke: null }]], sizePx: 72, font: "Mali-Bold", fontFile: "/f/Mali-Bold.ttf", subtitle: false, look: { ...look, y: 0.6, scale: 2 } },
       ],
     },
-    { label: "1.75s", layers: [{ kind: "video", file: "/v.mov", photo: false, sourceUs: 0, native: { width: 1080, height: 1920 }, look, overlay: false, src: "data:bad" }] },
+    { label: "1.75s", layers: [{ kind: "video", segmentId: "s1", speed: 1, file: "/v.mov", photo: false, sourceUs: 0, native: { width: 1080, height: 1920 }, look, overlay: false, src: "data:bad" }] },
   ]
   const { calls, canvas } = recordingCanvas()
   await draw(canvas, tiles, { canvas: { width: 1080, height: 1920 }, tile: { width: 288, height: 512 }, columns: 4, fonts: ["Mali-Bold"], fallbackFont: "Thonburi" })

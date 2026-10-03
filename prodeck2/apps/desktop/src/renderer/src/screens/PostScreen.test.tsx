@@ -22,7 +22,7 @@ import type {
   WriteResult,
   ZoomView,
 } from "../../../shared/api.ts"
-import { mediaUrl } from "../../../shared/media-url.ts"
+import { mediaUrl, previewMediaUrl } from "../../../shared/media-url.ts"
 import { agentView, cutPlan, detail, emphasisView, fakeApi, highlightGroups, highlightPreview, settingsView, subtitleLines } from "../../test/fake-api.ts"
 import { renderRoom } from "../../test/room.tsx"
 import { MOTION_VERSION, type MotionSpec } from "@boxblack/core/graphics/plan"
@@ -4648,4 +4648,21 @@ test("the tab shows the sheets Claude last looked at, read again when it looks",
   act(() => api.emit({ type: "agent", view: agentView(opened![1] as string, { looks: 1 }) }))
   expect(await screen.findByText(t("agent.look", { what: "ช่วง 4.75–5.25 วิ · 2 ภาพ" }))).toBeTruthy()
   expect(screen.getByAltText(t("agent.lookSheet", { n: 1 }))).toBeTruthy()
+})
+
+test("the preview button makes the conversation's preview and plays it in a sheet: its frames over its sound, with the note on what it does not show", async () => {
+  const { api } = renderScreen()
+  await ready()
+  await openTab("agent")
+  expect(await screen.findByText(t("agent.empty"))).toBeTruthy()
+  await userEvent.click(screen.getByRole("button", { name: t("agent.preview") }))
+  expect(calls(api, "agentPreview")).toHaveLength(1)
+  const frame = await screen.findByAltText(t("player.frame", { at: "0.0" }))
+  expect(frame.getAttribute("src")).toBe(previewMediaUrl("0123456789abcdef01234567", "00001.jpg"))
+  expect(document.querySelector("audio")?.getAttribute("src")).toBe(previewMediaUrl("0123456789abcdef01234567", "audio.wav"))
+  expect(screen.getByRole("button", { name: t("player.play") })).toBeTruthy()
+  expect(screen.getAllByText(t("agent.lookNote")).length).toBeGreaterThan(0)
+  // seeking shows the frame of that moment
+  fireEvent.change(screen.getByLabelText(t("player.seek")), { target: { value: "1" } })
+  expect(screen.getByAltText(t("player.frame", { at: "1.0" })).getAttribute("src")).toBe(previewMediaUrl("0123456789abcdef01234567", "00016.jpg"))
 })

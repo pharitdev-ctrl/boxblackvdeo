@@ -31,6 +31,9 @@ export interface PreviewRun {
 export type PreviewLayer =
   | {
       kind: "video"
+      /** the segment's id: the frames of one segment are pulled in one go for the user's preview */
+      segmentId: string
+      speed: number
       /** the file on this machine */
       file: string
       /** a still picture: any time of it is the same */
@@ -229,7 +232,7 @@ export function readPreviewDraft(info: DraftInfo, local: (path: string) => strin
         }
         if (isMain && m.type !== "photo") sounds.push({ file, startUs: base.startUs, durationUs: base.durationUs, sourceUs: base.sourceStartUs, volume: segment.volume ?? 1 })
         const native = { width: Number(m.width) || canvas.width, height: Number(m.height) || canvas.height }
-        placed.push({ ...base, order, layer: (sourceUs, look) => ({ kind: "video", file, photo: m.type === "photo", sourceUs, native, look, overlay: !isMain }) })
+        placed.push({ ...base, order, layer: (sourceUs, look) => ({ kind: "video", segmentId: String(segment.id), speed: base.speed, file, photo: m.type === "photo", sourceUs, native, look, overlay: !isMain }) })
       } else if (kind === "texts") {
         const { lines, size, font, fontFile } = linesOf(m)
         if (lines.length === 0) continue

@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises"
 import { extname } from "node:path"
 import { Readable } from "node:stream"
 import type { ProjectDetail } from "../shared/api.ts"
-import { parseMediaUrl } from "../shared/media-url.ts"
+import { parseMediaUrl, parsePreviewUrl } from "../shared/media-url.ts"
 
 type Inspect = (folder: string) => Promise<ProjectDetail>
 
@@ -30,6 +30,8 @@ const CONTENT_TYPES: Record<string, string> = {
   ".m4v": "video/mp4",
   ".mov": "video/quicktime",
   ".webm": "video/webm",
+  ".jpg": "image/jpeg",
+  ".wav": "audio/wav",
 }
 
 /** The one byte range a Range header asks for, clamped to the file; null for anything else, which gets the whole file. */
@@ -68,10 +70,14 @@ export async function fileResponse(path: string, rangeHeader: string | null): Pr
   })
 }
 
-/** Answers the renderer's media requests: registered videos only, in byte ranges. */
-export function createMediaHandler(inspect: Inspect) {
+/**
+ * Answers the renderer's media requests: registered videos only, in byte ranges, and the files of the agent tab's
+ * preview, which `previewFile` names only for a preview's own frames and sound.
+ */
+export function createMediaHandler(inspect: Inspect, previewFile?: (id: string, name: string) => string | null) {
   return async (request: Request): Promise<Response> => {
-    const path = await resolveMediaPath(request.url, inspect)
+    const preview = parsePreviewUrl(request.url)
+    const path = preview ? (previewFile?.(preview.id, preview.name) ?? null) : await resolveMediaPath(request.url, inspect)
     return path ? fileResponse(path, request.headers.get("range")) : new Response("not found", { status: 404 })
   }
 }

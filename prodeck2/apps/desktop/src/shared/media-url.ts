@@ -23,3 +23,20 @@ export function parseMediaUrl(url: string): { folder: string; videoId: string } 
     return null
   }
 }
+
+/** A file of the agent tab's preview (a frame, its sound), which the main process serves from its own folder. */
+export function previewMediaUrl(id: string, name: string): string {
+  return `${MEDIA_SCHEME}://preview/${encodeURIComponent(id)}/${encodeURIComponent(name)}`
+}
+
+export function parsePreviewUrl(url: string): { id: string; name: string } | null {
+  const prefix = `${MEDIA_SCHEME}://preview/`
+  if (!url.startsWith(prefix)) return null
+  const parts = url.slice(prefix.length).split(/[?#]/)[0]!.split("/")
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null
+  try {
+    return { id: decodeURIComponent(parts[0]), name: decodeURIComponent(parts[1]) }
+  } catch {
+    return null
+  }
+}

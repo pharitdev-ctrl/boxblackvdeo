@@ -1079,3 +1079,28 @@ h2.tab-section {
   max-height: 200px;
   overflow: auto;
 }
+
+/* the agent tab's preview: frames over a sound, in a sheet */
+.preview-player {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.preview-player img {
+  max-height: 62vh;
+  max-width: 100%;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.preview-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.preview-controls input[type="range"] {
+  flex: 1;
+}

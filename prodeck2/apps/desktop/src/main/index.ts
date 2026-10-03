@@ -63,6 +63,7 @@ import { createSealedPage } from "./sound-window.ts"
 import { createDrawPage } from "./preview-window.ts"
 import { createPreviewFrames } from "./preview-frames.ts"
 import { createPreview } from "./preview.ts"
+import { createPreviewVideo } from "./preview-video.ts"
 import { soundStatusOf } from "./composed-cues.ts"
 
 /** The license server fixed at build time; while developing, BOXBLACK_LICENSE_SERVER can point elsewhere. */
@@ -420,6 +421,10 @@ void app.whenReady().then(async () => {
   // cancelAi stops it, between two works too
   const post = createPostPlanService({ outlines, emphasis, highlights, flair, timeline, send, stopSignal: () => aiCalls.signal() })
 
+  // the agent editor's previews: Claude's looks and the user's playable one, drawn from the timeline in memory
+  const preview = createPreview({ frames: createPreviewFrames({ ffmpeg: tools.ffmpeg ?? "ffmpeg", dir: join(workDir, "preview-frames") }), page: drawPage })
+  const previews = tools.ffmpeg ? createPreviewVideo({ ffmpeg: tools.ffmpeg, dir: join(workDir, "previews"), page: drawPage, draftOf: preview.draftOf }) : undefined
+
   // the agent editor: a conversation with Claude per project, on its own working timeline
   const agentWiring = createAgentWiring({
     timeline,
@@ -438,12 +443,7 @@ void app.whenReady().then(async () => {
     clip: (folder) => agentWiring.clip(folder),
     makers: (folder) => agentWiring.makers(folder),
     send: (view) => send({ type: "agent", view }),
-    look: tools.ffmpeg
-      ? (() => {
-          const preview = createPreview({ frames: createPreviewFrames({ ffmpeg: tools.ffmpeg, dir: join(workDir, "preview-frames") }), page: drawPage })
-          return (folder, agentTimeline, span, signal) => preview.look(folder, agentTimeline, span, signal)
-        })()
-      : undefined,
+    look: tools.ffmpeg ? (folder, agentTimeline, span, signal) => preview.look(folder, agentTimeline, span, signal) : undefined,
   })
 
   const thumbnail = createThumbnailer({
@@ -451,7 +451,7 @@ void app.whenReady().then(async () => {
     extract: (input, atUs) => (tools.ffmpeg ? frameFiles.one(input, atUs) : Promise.reject(new Error("ffmpeg-missing"))),
   })
 
-  protocol.handle(MEDIA_SCHEME, createMediaHandler((folder) => projects.inspectProject(folder)))
+  protocol.handle(MEDIA_SCHEME, createMediaHandler((folder) => projects.inspectProject(folder), (id, name) => previews?.fileOf(id, name) ?? null))
 
   const updater = createUpdater({
     feedUrl: app.isPackaged && __UPDATE_URL__ ? __UPDATE_URL__ : null,
@@ -479,7 +479,7 @@ void app.whenReady().then(async () => {
       ...createClaudeCodeApi({ claudeCode }),
       ...createTimelineApi({ timeline }),
       ...createHighlightApi({ highlights, flair, emphasis, post }),
-      ...createAgentApi({ agent, wiring: agentWiring, timeline }),
+      ...createAgentApi({ agent, wiring: agentWiring, timeline, previews }),
       ...(license ? createLicenseApi({ license }) : noLicenseApi()),
       cancelAi: async () => aiCalls.cancel(),
       updateState: async () => updater.state(),

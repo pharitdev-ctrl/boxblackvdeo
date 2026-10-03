@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react"
-import type { AgentRequest, AgentTurn, AgentView } from "../../../shared/api.ts"
+import type { AgentPreview, AgentRequest, AgentTurn, AgentView } from "../../../shared/api.ts"
 import { formatDuration } from "../format.ts"
 import { t, type MessageKey } from "../i18n.ts"
 import { useClipRoom } from "../room/ClipRoom.tsx"
 import { Button } from "../ui/Button.tsx"
 import { Sheet } from "../ui/Sheet.tsx"
 import { mainText } from "./postTabs.ts"
+import { PreviewPlayer } from "./PreviewPlayer.tsx"
 
 const KIND_NAMES: Record<string, MessageKey> = {
   caption: "agent.kind.caption",
@@ -57,6 +58,7 @@ export function AgentTab(): ReactElement {
   const [written, setWritten] = useState<string | null>(null)
   const [segments, setSegments] = useState(project.timelineSegmentCount)
   const [look, setLook] = useState<{ what: string; sheets: string[] } | null>(null)
+  const [playable, setPlayable] = useState<AgentPreview | "making" | null>(null)
   const end = useRef<HTMLLIElement>(null)
 
   const request: AgentRequest | null = useMemo(
@@ -137,6 +139,15 @@ export function AgentTab(): ReactElement {
     )
   }
 
+  const showPreview = () => {
+    setError(null)
+    setPlayable("making")
+    api.agentPreview(folder).then(setPlayable, (e: Error) => {
+      setPlayable(null)
+      setError(mainText(e.message))
+    })
+  }
+
   if (!ready) return <p className="hint">{t("edit.busy")}</p>
   if (!view) return error ? <p className="notice error">{t("error.generic", { message: error })}</p> : <p className="hint">{t("agent.opening")}</p>
   const running = view.running
@@ -194,6 +205,9 @@ export function AgentTab(): ReactElement {
       <div className="agent-pieces">
         <div className="agent-pieces-head">
           <h3>{t("agent.pieces", { count: view.pieces.length })}</h3>
+          <Button size="sm" disabled={running || playable === "making"} onClick={showPreview}>
+            {playable === "making" ? t("agent.previewMaking") : t("agent.preview")}
+          </Button>
           <Button size="sm" variant="primary" disabled={running} onClick={() => setAsking("write")}>
             {t("agent.write")}
           </Button>
@@ -231,6 +245,16 @@ export function AgentTab(): ReactElement {
           {t("agent.reset")}
         </Button>
       </div>
+
+      <Sheet open={playable !== null && playable !== "making"} title={t("agent.previewTitle")} onClose={() => setPlayable(null)} footer={<Button onClick={() => setPlayable(null)}>{t("agent.previewClose")}</Button>}>
+        {playable && playable !== "making" && (
+          <>
+            <PreviewPlayer preview={playable} />
+            <p className="hint">{t("agent.lookNote")}</p>
+            {playable.skipped.length > 0 && <p className="hint">{t("agent.previewSkipped", { count: playable.skipped.length })}</p>}
+          </>
+        )}
+      </Sheet>
 
       <Sheet
         open={asking !== null}

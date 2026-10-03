@@ -68,6 +68,7 @@ export const API_METHODS = [
   "agentRemove",
   "agentWrite",
   "agentLook",
+  "agentPreview",
   "cancelPlanning",
   "beatThumbnail",
   "previewCut",
@@ -225,6 +226,8 @@ export interface DesktopApi {
   agentWrite(folder: string, expectedSegments: number): Promise<{ backup: BackupInfo; durationUs: number; segmentCount: number }>
   /** The last look Claude had at the project: what it shows and its sheets as data URLs; null before any. */
   agentLook(folder: string): Promise<{ what: string; sheets: string[] } | null>
+  /** Makes (or finds) the preview of the conversation's timeline the user plays: frames and a sound served on the media scheme (`previewMediaUrl`). */
+  agentPreview(folder: string): Promise<AgentPreview>
   cancelPlanning(): Promise<void>
   /** A JPEG data URL of the frame at `atUs`, or null when it cannot be made. */
   beatThumbnail(folder: string, videoId: string, atUs: number): Promise<string | null>
@@ -1191,6 +1194,17 @@ export interface AgentView {
   summed: boolean
   /** how many looks Claude has had at the project since the app started: the tab reads the last one when this changes */
   looks: number
+}
+
+/** The user's preview of the agent's timeline: `frames` JPEGs at `fps` (00001.jpg on) and, with `audio`, audio.wav. */
+export interface AgentPreview {
+  id: string
+  durationUs: number
+  frames: number
+  fps: number
+  audio: boolean
+  /** what could not be drawn, one line each */
+  skipped: string[]
 }
 
 export type { AgentTurn } from "@boxblack/core/agent"

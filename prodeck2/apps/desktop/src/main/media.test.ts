@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ProjectDetail } from "../shared/api.ts"
-import { mediaUrl, parseMediaUrl } from "../shared/media-url.ts"
+import { mediaUrl, parseMediaUrl, previewMediaUrl } from "../shared/media-url.ts"
 import { createMediaHandler, createThumbnailer, fileResponse, resolveMediaPath } from "./media.ts"
 
 const project: ProjectDetail = {
@@ -148,4 +148,16 @@ test("the media handler serves ranges of registered videos only", async () => {
   expect(await bytesOf(partial)).toEqual([50, 51])
   expect((await handler(new Request(mediaUrl(project.folder, "v-2")))).status).toBe(404)
   expect((await handler(new Request(mediaUrl("/etc", "v-1")))).status).toBe(404)
+})
+
+test("the media handler serves a preview's frames and sound only as the preview maker names them", async () => {
+  const path = await numberedFile()
+  const named: [string, string][] = []
+  const handler = createMediaHandler(inspect, (id, name) => (named.push([id, name]), id === "0123456789abcdef01234567" && name === "00001.jpg" ? path : null))
+  const frame = await handler(new Request(previewMediaUrl("0123456789abcdef01234567", "00001.jpg")))
+  expect(frame.status).toBe(200)
+  expect((await handler(new Request(previewMediaUrl("0123456789abcdef01234567", "../../etc/passwd")))).status).toBe(404)
+  expect(named.at(-1)).toEqual(["0123456789abcdef01234567", "../../etc/passwd"])
+  // without a preview maker no preview is served
+  expect((await createMediaHandler(inspect)(new Request(previewMediaUrl("0123456789abcdef01234567", "00001.jpg")))).status).toBe(404)
 })
