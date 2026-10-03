@@ -35,7 +35,7 @@ export interface AgentWiringDeps {
   settings: Pick<SettingsStore, "read">
   highlightAssets?: HighlightAssets
   sounds?: Pick<SoundLibrary, "list">
-  graphics?: Pick<GraphicsRenderer, "wait" | "rendered">
+  graphics?: Pick<GraphicsRenderer, "wait" | "rendered" | "hashOf" | "failureOf">
   soundRenderer?: Pick<SoundRenderer, "check" | "ensure" | "statusOf" | "fileOf">
   /** the editing Claude, for writing graphics and composing sounds */
   llm: () => Promise<{ transport: LlmTransport; model: string }>
@@ -143,15 +143,35 @@ export function createAgentWiring(deps: AgentWiringDeps) {
           const { width, height } = stageBox(shareBox, canvas)
           const seconds = Math.floor(durationUs / 1_000) / 1_000
           const llm = await deps.llm()
+          const renderer = deps.graphics
+          const jobOf = (html: string) => {
+            const spec: MotionSpec = { kind: "motion", version: MOTION_VERSION, box: shareBox, seconds, why: "", idea, words, html }
+            return { spec, canvas, fps, font: { family: FONT_FAMILY[style.font], file: HIGHLIGHT_FONTS[style.font] }, palette: style.palette, times: words.map((word) => word.atS) }
+          }
           const written = await writePiece(
             { stage: { width, height }, seconds, words, idea, about: [stored.outline.title, stored.outline.summary].filter(Boolean).join(": "), ...(stored.outline.direction ? { direction: stored.outline.direction } : {}) },
-            // rendered once below; a render that fails comes back to Claude, which can ask again
-            { ...llm, render: async () => [], signal },
+            {
+              ...llm,
+              // rendered and inspected as "ทำทั้งหมด" does (flair.ts renderProblems): a fragment that fails goes back to its writer once
+              render: async (html) => {
+                try {
+                  const job = jobOf(html)
+                  const hash = renderer.hashOf(job)
+                  const { ready, failed } = await renderer.wait([job], folder)
+                  if (ready.includes(hash)) return []
+                  if (!failed.includes(hash)) return null
+                  const problems = (renderer.failureOf(hash) ?? "").split("\n").filter((line) => line.trim() !== "")
+                  return problems.length > 0 ? problems : ["the render failed"]
+                } catch {
+                  return null
+                }
+              },
+              signal,
+            },
           )
           if (!("html" in written)) return { ok: false, why: written.failed }
-          const spec: MotionSpec = { kind: "motion", version: MOTION_VERSION, box: shareBox, seconds, why: "", idea, words, html: written.html }
-          const job = { spec, canvas, fps, font: { family: FONT_FAMILY[style.font], file: HIGHLIGHT_FONTS[style.font] }, palette: style.palette, times: words.map((word) => word.atS) }
-          await deps.graphics.wait([job], folder)
+          const job = jobOf(written.html)
+          await renderer.wait([job], folder)
           const file = await deps.graphics.rendered(job)
           if (!file) return { ok: false, why: "เรนเดอร์ไม่สำเร็จ" }
           const draft = await loadDraft(folder)

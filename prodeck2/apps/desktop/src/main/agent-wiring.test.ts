@@ -1,5 +1,6 @@
 import { expect, test } from "vitest"
 import { DEFAULT_CUT_RULES } from "@boxblack/core/cut/rules"
+import type { LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
 import { createAgentWiring } from "./agent-wiring.ts"
 import { setup } from "./timeline-fixture.ts"
 
@@ -49,4 +50,43 @@ test("the agent is told the scenes the prepare step saw, and its checks keep off
   // a push held to the piece's end moves the band where the text and graphics must keep off
   const pushed = clip.room.keepIn({ startUs: 0, endUs: 1_000_000 }, [{ cut: 0, startUs: 0, poses: [pose(0, 1), pose(0.5, 1.2)] }])
   expect(pushed[0]!.y0).toBeLessThan(0.1)
+})
+
+test("a graphic Claude asks for is rendered and inspected as \"ทำทั้งหมด\" does: one that fails goes back to its writer once, and the mended one is placed", async () => {
+  const GOOD = '<style>.n{animation:up 1s both}@keyframes up{from{opacity:0}}</style><div class="n">5 บาท</div>'
+  const MENDED = '<style>.m{animation:in 1s both}@keyframes in{from{opacity:0}}</style><div class="m">5 บาท</div>'
+  const { service, folder, deps } = await setup()
+  const asked: string[] = []
+  const answers = [GOOD, MENDED]
+  const transport: LlmTransport = {
+    id: "anthropic-api",
+    async generate<T>(request: LlmRequest<T>): Promise<LlmResponse<T>> {
+      asked.push(request.content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n"))
+      return { output: answers[asked.length - 1] as T, usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } }
+    },
+  }
+  const rendered: string[] = []
+  const wiring = createAgentWiring({
+    timeline: service,
+    outlines: deps.outlines,
+    settings: deps.settings,
+    llm: async () => ({ transport, model: "claude-opus-5-5" }),
+    graphics: {
+      hashOf: (job) => (job.spec as { html: string }).html,
+      wait: async (jobs) => {
+        const html = (jobs[0]!.spec as { html: string }).html
+        rendered.push(html)
+        return html === GOOD ? { ready: [], failed: [html] } : { ready: [html], failed: [] }
+      },
+      failureOf: () => "nothing was drawn: every frame is empty",
+      rendered: async () => ({ hash: "h", path: "/Users/x/Movies/CapCut/BOXBLACK/graphics/h.mov", width: 600, height: 300, durationUs: 1_500_000, place: { scale: 0.6, x: 0, y: 0.5 } }),
+    },
+  })
+  wiring.remember(folder, { rules: DEFAULT_CUT_RULES, subtitles: null, highlights: null })
+  const made = await wiring.makers(folder).graphic({ atUs: 1_000_000, durationUs: 1_500_000, box: [0.2, 0.1, 0.8, 0.3], idea: "ป้ายราคา 5 บาท", words: [] })
+  expect(made).toMatchObject({ ok: true, graphic: { atUs: 1_000_000, path: "/Users/x/Movies/CapCut/BOXBLACK/graphics/h.mov" } })
+  // written, rendered and refused, written again with the render's problem, rendered and passed, then placed
+  expect(asked).toHaveLength(2)
+  expect(asked[1]).toContain("nothing was drawn: every frame is empty")
+  expect(rendered).toEqual([GOOD, MENDED, MENDED])
 })
