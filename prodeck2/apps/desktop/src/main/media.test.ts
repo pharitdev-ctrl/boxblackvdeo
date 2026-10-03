@@ -1,9 +1,9 @@
 import { expect, test } from "vitest"
-import { mkdtemp, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ProjectDetail } from "../shared/api.ts"
-import { mediaUrl, parseMediaUrl, previewMediaUrl } from "../shared/media-url.ts"
+import { MEDIA_SCHEME, mediaUrl, parseMediaUrl, previewMediaUrl } from "../shared/media-url.ts"
 import { createMediaHandler, createThumbnailer, fileResponse, resolveMediaPath } from "./media.ts"
 
 const project: ProjectDetail = {
@@ -160,4 +160,12 @@ test("the media handler serves a preview's frames and sound only as the preview 
   expect(named.at(-1)).toEqual(["0123456789abcdef01234567", "../../etc/passwd"])
   // without a preview maker no preview is served
   expect((await createMediaHandler(inspect)(new Request(previewMediaUrl("0123456789abcdef01234567", "00001.jpg")))).status).toBe(404)
+})
+
+test("the window's content policy lets pictures load from the media scheme, which the agent tab's preview frames come from", async () => {
+  const html = await readFile(join(import.meta.dirname, "../renderer/index.html"), "utf8")
+  const csp = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(html)![1]!
+  const directive = (name: string) => csp.split(";").map((part) => part.trim().split(/\s+/)).find((part) => part[0] === name)?.slice(1) ?? []
+  expect(directive("img-src")).toContain(`${MEDIA_SCHEME}:`)
+  expect(directive("media-src")).toContain(`${MEDIA_SCHEME}:`)
 })
