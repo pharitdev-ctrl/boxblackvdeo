@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto"
 import { basename } from "node:path"
 import type { AgentFootage } from "@boxblack/core/agent"
-import { binVideos, loadDraft } from "@boxblack/core/capcut"
+import { loadDraft } from "@boxblack/core/capcut"
 import { binIdOf, graphicBinItem, soundBinItem } from "@boxblack/core/capcut/bin"
 import type { CutRules } from "@boxblack/core/cut"
-import { zoomCap } from "@boxblack/core/flair/moves"
 import { stageBox } from "@boxblack/core/graphics/framing"
 import { MOTION_VERSION, type MotionSpec } from "@boxblack/core/graphics/plan"
 import { HIGHLIGHT_FONTS, styleFor } from "@boxblack/core/highlights/styles"
@@ -26,6 +25,8 @@ import type { SoundLibrary } from "./sound-library.ts"
 import type { SoundRenderer } from "./sound-render.ts"
 import { spokenSentences, wordsIn } from "./spoken.ts"
 import { wordsOnCutAt } from "./composed-cues.ts"
+import { scenesOnCut } from "./graphics-cues.ts"
+import { agentKeepIn, agentMoveWhy, withFacesKnown } from "./move-cues.ts"
 import type { TimelineService } from "./timeline.ts"
 
 export interface AgentWiringDeps {
@@ -78,7 +79,7 @@ export function createAgentWiring(deps: AgentWiringDeps) {
     },
 
     async footage(folder: string): Promise<AgentFootage> {
-      const { stored, plan, words } = await project(folder)
+      const { stored, plan, clips, words } = await project(folder)
       const at = timelineOf(plan)
       let cut = 0
       const beats = plan.beats.flatMap((beat) => {
@@ -94,24 +95,23 @@ export function createAgentWiring(deps: AgentWiringDeps) {
         summary: [stored.outline.summary, stored.outline.direction ? `แนวทางตกแต่ง: ${stored.outline.direction}` : ""].filter(Boolean).join(" · "),
         beats,
         words: words.map(({ text, atUs }) => ({ text, atUs })),
+        // what the prepare step saw, faces marked as the techniques call is told them
+        scenes: scenesOnCut(plan, withFacesKnown(clips)),
         sounds,
         brief: { videoType: stored.brief.videoType, instructions: stored.brief.instructions },
       }
     },
 
     async clip(folder: string): Promise<AgentClip> {
-      const { stored, plan, canvas, words } = await project(folder)
+      const { stored, plan, clips, canvas, words } = await project(folder)
       if (!canvas) throw new Error("the rough cut is empty")
-      const draft = await loadDraft(folder)
-      const videos = new Map(binVideos(draft.meta).map((video) => [video.id, video]))
-      let at = 0
-      const cuts = plan.cuts.map((cut) => {
-        const startUs = at
-        at += cut.sourceDurationUs
-        const video = videos.get(cut.binId)
-        // faces are not known here yet: the move checks then keep only the zoom cap and the edges (phase 4 adds them)
-        return { startUs, durationUs: cut.sourceDurationUs, cap: video ? zoomCap(video, canvas) : 1, faces: null, shown: [] }
-      })
+      const at = timelineOf(plan)
+      const cuts = plan.cuts.map((cut, index) => ({ startUs: at(index, cut.sourceStartUs), durationUs: cut.sourceDurationUs }))
+      // the checks of "ทำทั้งหมด", on the faces and things the prepare step found
+      const room: AgentClip["room"] = {
+        moveWhy: (cut, startUs, poses, others) => agentMoveWhy({ plan, clips, canvas, at, cut, startUs, poses, others }),
+        keepIn: (span, moves) => agentKeepIn({ plan, clips, canvas, at, span, moves }),
+      }
       const settings = await deps.settings.read()
       const style = styleFor(styleInForce(stored.highlights), settings.highlights.custom)
       const request = requestOf(folder)
@@ -128,7 +128,7 @@ export function createAgentWiring(deps: AgentWiringDeps) {
             },
           }
         : null
-      return { canvas, durationUs: plan.durationUs, words, cuts, highlight }
+      return { canvas, durationUs: plan.durationUs, words, cuts, room, highlight }
     },
 
     makers(folder: string): AgentMakers {

@@ -3,6 +3,7 @@ import type { CutClip, CutPlan } from "@boxblack/core/cut"
 import { FLAIR_LEVELS, type FlairLevel, type FlairOptions } from "@boxblack/core/flair/catalogue"
 import { checkMove, faceAfter, isMove, poseAt, zoomCap, type Look, type MoveCue, type Pose, type ShareBox } from "@boxblack/core/flair/moves"
 import type { CueAnchor, PlacedInsert, PlacedZoom } from "@boxblack/core/flair/plan"
+import type { TimelineMove } from "@boxblack/core/capcut/moves"
 import type { GraphicBox } from "@boxblack/core/graphics/plan"
 import { pointFilter, type PlacedPoint, type PointFilter } from "@boxblack/core/emphasis"
 import type { TimedGroup } from "@boxblack/core/highlights"
@@ -524,4 +525,55 @@ export function moveAt(named: MoveAnchor): { anchor: CueAnchor; insert: boolean 
  */
 export function withoutStrandedMoves<T extends { anchor: CueAnchor; insert?: boolean; edited?: boolean }>(moves: T[], inserts: { anchor: CueAnchor }[]): T[] {
   return moves.filter((move) => move.insert !== true || move.edited === true || inserts.some((insert) => samePlace(insert.anchor, move.anchor)))
+}
+
+/**
+ * The agent's moves (`TimelineMove`s on main pieces) placed as the checks here take them: each from its start on its
+ * piece, running to its last pose or the piece's end, its poses cut there. Pieces are where `at` puts them.
+ */
+function placedFromTimeline(moves: TimelineMove[], pieces: Piece[]): PlacedMove[] {
+  return moves.flatMap((move) => {
+    const piece = pieces[move.cut]
+    if (!piece || move.poses.length === 0) return []
+    const roomUs = Math.max(0, piece.endUs - piece.atUs - move.startUs)
+    const durationUs = Math.max(0, Math.min(Math.round(move.poses.at(-1)!.s * 1_000_000), roomUs))
+    // a placed move needs a cue and a beat only to be found by an edit, which the agent's moves are not
+    return [{ cue: { poses: move.poses } as unknown as MoveCue, beatId: "", atUs: piece.atUs + move.startUs, durationUs, startUs: move.startUs, poses: cutAt(move.poses, durationUs / 1_000_000), cut: move.cut }]
+  })
+}
+
+/**
+ * Why the agent's move may not play on main piece `cut` from `startUs` (after the piece's start) beside the agent's
+ * other moves (`others`, none on the same stretch of that piece), or null when it may: judged as "ทำทั้งหมด" judges a
+ * move (`judgeOnPiece`), against the faces and shown things of the scenes it plays over and, held afterwards, of those
+ * up to the next move or the piece's end.
+ */
+export function agentMoveWhy(input: { plan: CutPlan; clips: CutClip[]; canvas: Canvas; at: (cut: number, sourceUs: number) => number; cut: number; startUs: number; poses: Pose[]; others: TimelineMove[] }): string | null {
+  const pieces = piecesOf(input.plan, input.clips, input.at)
+  const piece = pieces[input.cut]
+  if (!piece) return "it has no piece to play on"
+  const [placed] = placedFromTimeline([{ cut: input.cut, startUs: input.startUs, poses: input.poses }], pieces)
+  if (!placed) return "it has no poses"
+  const kept = playedByPiece(placedFromTimeline(input.others.filter((move) => move.cut === input.cut), pieces)).get(input.cut) ?? []
+  return judgeOnPiece(placed, piece, kept, input.canvas, true).why
+}
+
+/** The faces and shown things on screen over a span of the rough cut with the agent's moves played (`faceBoxesIn`), in frame shares. */
+export function agentKeepIn(input: { plan: CutPlan; clips: CutClip[]; canvas: Canvas; at: (cut: number, sourceUs: number) => number; span: Span; moves: TimelineMove[] }): GraphicBox[] {
+  const placed = placedFromTimeline(input.moves, piecesOf(input.plan, input.clips, input.at))
+  return faceBoxesIn(input.span, placed, input.plan, input.clips, input.canvas, input.at)
+}
+
+/**
+ * The clips with their faces as the techniques call is told them: a clip whose objects pass is of another version than
+ * OBJECTS_VERSION, made before faces, has every keep object marked a face, since a face not known is taken to be one
+ * (spec §8), as the moves are checked (`move-cues.ts`). A clip of a current pass is as it is, one that marked no face
+ * having none, and so is a clip the pass has not run on.
+ */
+export function withFacesKnown(clips: CutClip[]): CutClip[] {
+  return clips.map((clip) => {
+    const objects = clip.objects
+    if (!objects || objects.version === OBJECTS_VERSION) return clip
+    return { ...clip, objects: { ...objects, scenes: objects.scenes.map((scene) => scene.map((object) => (object.kind === "keep" ? { ...object, face: true } : object))) } }
+  })
 }

@@ -41,6 +41,19 @@ const footage: AgentFootage = {
     { text: "สวัสดี", atUs: 270_000 },
     { text: "ครับ", atUs: 700_000 },
   ],
+  scenes: [
+    {
+      startUs: 0,
+      endUs: 2_500_000,
+      kind: "talking",
+      description: "ผู้หญิงถือช็อกโกแลตยิ้มให้กล้อง",
+      keepClear: { fromY: 0.18, toY: 0.55 },
+      objects: [
+        { kind: "keep", face: true, what: "หน้าผู้พูด", box: { x0: 0.3, y0: 0.18, x1: 0.7, y1: 0.45 }, still: false },
+        { kind: "keep", face: false, what: "ช็อกโกแลต", box: { x0: 0.4, y0: 0.5, x1: 0.6, y1: 0.62 }, still: false },
+      ],
+    },
+  ],
   sounds: ["ติ๊ง", "วูบ"],
   brief: { videoType: "review", instructions: "" },
 }
@@ -51,6 +64,9 @@ test("the footage numbers every word with its time, and lists the beats and the 
   expect(text).toContain("1. 0.00s เปิด: ทักทาย")
   expect(text).toContain("ติ๊ง · วูบ")
   expect(text).toContain("คำสั่งเพิ่มเติมของผู้ใช้: ไม่มี")
+  expect(text).toContain("- 0.00s–2.50s talking · ผู้หญิงถือช็อกโกแลตยิ้มให้กล้อง · keepClear [0.18, 0.55]")
+  expect(text).toContain("keep หน้า “หน้าผู้พูด” [0.3, 0.18, 0.7, 0.45]")
+  expect(describeFootage({ ...footage, scenes: [] })).toContain("ฉาก ไม่มี")
 })
 
 test("the request keeps the footage first and cached, and the timeline and the ask last", () => {

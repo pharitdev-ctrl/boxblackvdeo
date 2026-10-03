@@ -5,15 +5,24 @@ import { pipelinePieces, TIMELINE_VERSION, type AgentTimeline } from "@boxblack/
 import { runAction, type AgentClip, type AgentMakers } from "./agent-actions.ts"
 
 const s = (seconds: number) => Math.round(seconds * 1_000_000)
+const seen: { cut: number; startUs: number; others: number }[] = []
 
 const clip: AgentClip = {
   canvas: { width: 1080, height: 1920 },
   durationUs: s(10),
   words: ["สวัสดี", "ครับ", "วันนี้", "ราคา", "ห้า", "บาท"].map((text, i) => ({ text, atUs: s(i * 1.5), endUs: s(i * 1.5 + 1) })),
   cuts: [
-    { startUs: 0, durationUs: s(5), cap: 1.3, faces: [{ x0: 0.3, y0: 0.2, x1: 0.7, y1: 0.5 }], shown: [] },
-    { startUs: s(5), durationUs: s(5), cap: 1.3, faces: null, shown: [] },
+    { startUs: 0, durationUs: s(5) },
+    { startUs: s(5), durationUs: s(5) },
   ],
+  // a face in the middle of the frame for the first 5 s; a move is refused past 130% (the cap), and is told the moves beside it
+  room: {
+    moveWhy: (cut, startUs, poses, others) => {
+      seen.push({ cut, startUs, others: others.length })
+      return Math.max(...poses.map((pose) => pose.scale)) > 1.3 ? "past the zoom cap" : null
+    },
+    keepIn: (span) => (span.startUs < s(5) ? [{ x0: 0.3, y0: 0.4, x1: 0.7, y1: 0.6 }] : []),
+  },
   highlight: { font: "mali", look: { fontPath: "/fonts/Mali-Bold.ttf", strokeWidth: 0.08, barRoundness: 50, palette: {}, animation: null } as unknown as HighlightLook, subtitlesOn: true },
 }
 
@@ -43,12 +52,13 @@ function timeline(extra: Partial<AgentTimeline> = {}): AgentTimeline {
 
 const calls: string[] = []
 const makers: AgentMakers = {
-  async graphic({ atUs, durationUs, idea, words }) {
+  async graphic({ atUs, durationUs, box, idea, words }) {
     calls.push(`graphic ${idea} ${words.map((w) => w.text).join(" ")}`)
     if (idea.includes("พัง")) return { ok: false, why: "render failed" }
     return {
       ok: true,
-      graphic: { atUs, durationUs, binId: `bin-${idea}`, path: `/g/${idea}.mov`, name: `${idea}.mov`, width: 400, height: 300, durationOfFileUs: durationUs, place: { scale: 0.4, x: 0, y: 0.6 } },
+      // rendered at the box's own pixels, drawn where the box is
+      graphic: { atUs, durationUs, binId: `bin-${idea}`, path: `/g/${idea}.mov`, name: `${idea}.mov`, width: (box[2] - box[0]) * 1080, height: (box[3] - box[1]) * 1920, durationOfFileUs: durationUs, place: { scale: 1, x: (box[0] + box[2] - 1), y: 1 - (box[1] + box[3]) } },
       binItem: { id: `bin-${idea}` } as never,
     }
   },
@@ -150,4 +160,31 @@ test("the direction is set, and a question changes nothing", async () => {
   expect(directed.timeline.direction).toBe("สดใส")
   const asked = await runAction(directed.timeline, action({ type: "ask_user", text: "เอาเสียงไหม" }), clip, makers)
   expect(asked).toEqual({ timeline: directed.timeline, result: { ok: true, message: "ถามผู้ใช้: เอาเสียงไหม" } })
+})
+
+test("what the picture shows is kept clear: text is laid off the face, a graphic over it longer than allowed is refused before it is made, a move is checked beside the others", async () => {
+  // text while the face is on screen sits outside its band (y is in half-frames, up from the middle)
+  const text = await runAction(timeline(), action({ type: "add_text", fromWord: 1, toWord: 2, lines: ["สวัสดี"] }), clip, makers)
+  const share = 0.5 - text.timeline.highlights!.groups[0]!.item.lines[0]!.y / 2
+  expect(share < 0.4 || share > 0.6).toBe(true)
+
+  calls.length = 0
+  const over = await runAction(timeline(), action({ type: "add_graphic", atS: 1, seconds: 3, box: [0.2, 0.35, 0.8, 0.55], idea: "ดาว" }), clip, makers)
+  expect(over.result.ok).toBe(false)
+  expect(over.result.message).toContain("ทับหน้าคนหรือของที่โชว์ที่ [0.3, 0.4, 0.7, 0.6]")
+  expect(calls).toEqual([])
+  // briefly over it is allowed, as "ทำทั้งหมด" allows; after 5 s nothing is there
+  expect((await runAction(timeline(), action({ type: "add_graphic", atS: 1, seconds: 1.5, box: [0.2, 0.35, 0.8, 0.55], idea: "ดาว" }), clip, makers)).result.ok).toBe(true)
+  const later = await runAction(timeline(), action({ type: "add_graphic", atS: 6, seconds: 3, box: [0.2, 0.35, 0.8, 0.55], idea: "ดาว" }), clip, makers)
+  expect(later.result.ok).toBe(true)
+  // moved in time onto the face, the same graphic is refused
+  expect((await runAction(later.timeline, action({ type: "edit_piece", id: "graphic-1", atS: 1 }), clip, makers)).result.message).toContain("ทับหน้าคน")
+
+  seen.length = 0
+  const first = await runAction(timeline(), action({ type: "add_move", atS: 0.5, poses: [pose(0, 1), pose(0.5, 1.1)] }), clip, makers)
+  await runAction(first.timeline, action({ type: "add_move", atS: 3, poses: [pose(0, 1.1), pose(0.5, 1.2)] }), clip, makers)
+  expect(seen).toEqual([
+    { cut: 0, startUs: s(0.5), others: 0 },
+    { cut: 0, startUs: s(3), others: 1 },
+  ])
 })

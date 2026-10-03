@@ -1,3 +1,4 @@
+import { sceneLines, type TechniqueScene } from "../flair/direct.ts"
 import type { LlmContent } from "../llm/types.ts"
 
 /** One word as it plays on the rough cut. */
@@ -13,6 +14,8 @@ export interface AgentFootage {
   /** the outline's beats, in playing order, with where each starts on the rough cut */
   beats: { name: string; purpose: string; startUs: number }[]
   words: AgentWord[]
+  /** what the prepare step saw, scene by scene on the rough cut: what each shows, the band to keep clear, the faces and things with their boxes */
+  scenes: TechniqueScene[]
   /** the sound library's names Claude may pick from */
   sounds: string[]
   /** the brief's video type and instructions, as the user gave them */
@@ -30,7 +33,7 @@ export const HISTORY_BUDGET = 24_000
 
 const sec = (us: number) => (us / 1_000_000).toFixed(2)
 
-/** The footage block: the outline, the beats, every word numbered with its time, the sounds. Exported for tests. */
+/** The footage block: the outline, the beats, every word numbered with its time, the scenes, the sounds. Exported for tests. */
 export function describeFootage(footage: AgentFootage): string {
   return [
     "โครงเรื่อง",
@@ -44,6 +47,8 @@ export function describeFootage(footage: AgentFootage): string {
     "",
     "คำพูด (เลขคำ เวลาเป็นวินาทีบนคลิปที่ตัดแล้ว)",
     ...(footage.words.length ? [footage.words.map((word, i) => `w${i + 1}@${sec(word.atUs)} ${word.text}`).join(" · ")] : ["ไม่มีคำพูด"]),
+    "",
+    ...(footage.scenes.length ? ["ฉาก (ของในภาพ: กรอบ [ซ้าย, บน, ขวา, ล่าง] สัดส่วนของภาพ, keep คือห้ามบัง)", ...footage.scenes.flatMap((scene) => sceneLines(scene, (us) => `${sec(us)}s`))] : ["ฉาก ไม่มี"]),
     "",
     "เสียงในคลัง",
     footage.sounds.length ? footage.sounds.join(" · ") : "ไม่มี",

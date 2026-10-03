@@ -252,6 +252,18 @@ export function acceptTechniques(reply: TechniquesReply, clip: Pick<TechniqueCli
 }
 
 /**
+ * A scene as Claude is shown it, in two lines: its times (`time`), kind, description and keepClear band, then the
+ * things in it, a face marked `หน้า`, with their boxes. The techniques call and the agent both show scenes so.
+ */
+export function sceneLines(scene: TechniqueScene, time: (us: number) => string): string[] {
+  const things = scene.objects === null ? "ไม่ได้จด" : scene.objects.map((object) => `${object.kind}${object.face ? " หน้า" : ""} “${object.what}” ${boxText(object.box)}${object.still ? " นิ่ง" : ""}`).join(" · ") || "ไม่มี"
+  return [
+    `- ${time(scene.startUs)}–${time(scene.endUs)} ${scene.kind} · ${scene.description} · ${scene.keepClear ? `keepClear ${band(scene.keepClear.fromY, scene.keepClear.toY)}` : "keepClear ไม่มี"}`,
+    `    ของ: ${things}`,
+  ]
+}
+
+/**
  * The request text: the brief and the level, then every list under its heading, one line to an item with its
  * times on the rough cut (`clock`). Words and points are numbered from 1, as the answer names them; a piece
  * says how far it may be zoomed; a scene has a second line with the things in it, a face marked `หน้า`, as
@@ -259,8 +271,6 @@ export function acceptTechniques(reply: TechniquesReply, clip: Pick<TechniqueCli
  */
 export function describeTechniques(clip: TechniqueClip): string {
   const list = <T>(heading: string, items: T[], line: (item: T, i: number) => string[]) => (items.length === 0 ? [`${heading} ไม่มี`] : [heading, ...items.flatMap(line)])
-  const things = (objects: SceneObject[] | null) =>
-    objects === null ? "ไม่ได้จด" : objects.map((object) => `${object.kind}${object.face ? " หน้า" : ""} “${object.what}” ${boxText(object.box)}${object.still ? " นิ่ง" : ""}`).join(" · ") || "ไม่มี"
   const said = (point: TechniquePoint) => (point.kind === "scene" ? `ภาพ: ${point.text}` : `“${point.text}”`)
   return [
     "brief",
@@ -276,10 +286,7 @@ export function describeTechniques(clip: TechniqueClip): string {
     "",
     ...list("ชิ้นวิดีโอ", clip.pieces, (piece) => [`- ${clock(piece.atUs)}–${clock(piece.atUs + piece.durationUs)} ซูมได้ไม่เกิน ${Math.round(piece.cap * 100)}%`]),
     "",
-    ...list("ฉาก", clip.scenes, (scene) => [
-      `- ${clock(scene.startUs)}–${clock(scene.endUs)} ${scene.kind} · ${scene.description} · ${scene.keepClear ? `keepClear ${band(scene.keepClear.fromY, scene.keepClear.toY)}` : "keepClear ไม่มี"}`,
-      `    ของ: ${things(scene.objects)}`,
-    ]),
+    ...list("ฉาก", clip.scenes, (scene) => sceneLines(scene, clock)),
     "",
     ...list("รูปที่แทรกได้", clip.media, (picture, i) => [`${i + 1}. ${picture.what || picture.name}${picture.kind === "video" ? " (คลิป)" : ""}`]),
   ].join("\n")

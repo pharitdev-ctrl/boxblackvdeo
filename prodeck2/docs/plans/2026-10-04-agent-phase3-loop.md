@@ -115,7 +115,7 @@ confirmed outline; 25 rounds per message then ask "ทำต่อไหม"; Op
   the agent's write), 2 tab. `npm test`: 3,153 passed, the same 10 known failures; `npm run typecheck`: the same 8
   known errors. The tab was looked at in the UI harness, light and dark (`2026-10-03-agent-spike/agent-tab.png`).
 - **Known gaps, for phase 4 or later:**
-  - Faces are not handed to the move checks yet (`faces: null`): a move keeps the zoom cap and the edges, not faces.
+  - Faces are not handed to the move checks yet (`faces: null`): a move keeps the zoom cap and the edges, not faces. **Closed in phase 3b** (`2026-10-04-agent-phase3b-scenes.md`).
   - A graphic is written without the render-and-repair loop the pipeline has: it is written once, rendered once,
     and a failed render goes back to Claude as a failed action.
   - After the agent writes, the page's own write button still holds the segment count from before; it then refuses

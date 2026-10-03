@@ -20,7 +20,6 @@ import {
   type TechniqueScene,
 } from "@boxblack/core/flair/direct"
 import { isMove, type MoveCue, type Pose } from "@boxblack/core/flair/moves"
-import { OBJECTS_VERSION } from "@boxblack/core/vision"
 import { DEFAULT_LOOK, ZOOM_KINDS, type CueAnchor, type GroupLook, type InsertCue, type PieceAnchor, type ZoomCue, type ZoomKind } from "@boxblack/core/flair/plan"
 import { stageBox } from "@boxblack/core/graphics/framing"
 import { planFreeGraphics, type FreeClip } from "@boxblack/core/graphics/motion/free"
@@ -38,7 +37,7 @@ import { hashOfHtml, wordsOnCutAt, type CutWordAt } from "./composed-cues.ts"
 import { admitFree, boxesOverlap, framesWanted, MOTION_RUN_ON_US, graphicPoints, isGraphicEntry, ownBandsIn, renderSeconds, scenesOnCut, sentenceOf, textBands, textGroupsIn, wordsSaidFrom, zoomedFaces, type FreeRoom } from "./graphics-cues.ts"
 import type { GraphicsRenderer, RenderJob } from "./graphics-render.ts"
 import { answerOnBeats, everyPointShown, looksInForce, placedPoints, placeStored, pointAnchor, pointText, showRulesOver, styleInForce, timelineOf, type ShowRules } from "./highlight-state.ts"
-import { moveAt, movesOnCut, pieceCap, sameMove, withoutStrandedMoves, type OffMove, type PlacedMove } from "./move-cues.ts"
+import { moveAt, movesOnCut, pieceCap, sameMove, withFacesKnown, withoutStrandedMoves, type OffMove, type PlacedMove } from "./move-cues.ts"
 import { heldMoments, punchMoment, samePlace, slotsFor, startMoment, withoutSoundsOn } from "./sound-cues.ts"
 import { itemPlaceOf, placeOf, withDescriptions, type SpareMedia } from "./insert-media.ts"
 import { writeAll, writePiece, type PieceToWrite, type Written } from "./motion-write.ts"
@@ -277,19 +276,6 @@ function freeBrief(graphic: PlacedGraphic, box: MotionSpec["box"], stageHeight: 
   return { text, ...(under ? { captionsFromPx: Math.max(0, Math.round(((captionsFromY - box.y0) / (box.y1 - box.y0)) * stageHeight)) } : {}) }
 }
 
-/**
- * The clips with their faces as the techniques call is told them: a clip whose objects pass is of another version than
- * OBJECTS_VERSION, made before faces, has every keep object marked a face, since a face not known is taken to be one
- * (spec §8), as the moves are checked (`move-cues.ts`). A clip of a current pass is as it is, one that marked no face
- * having none, and so is a clip the pass has not run on.
- */
-function withFacesKnown(clips: CutClip[]): CutClip[] {
-  return clips.map((clip) => {
-    const objects = clip.objects
-    if (!objects || objects.version === OBJECTS_VERSION) return clip
-    return { ...clip, objects: { ...objects, scenes: objects.scenes.map((scene) => scene.map((object) => (object.kind === "keep" ? { ...object, face: true } : object))) } }
-  })
-}
 
 /**
  * The clip as the techniques call is shown it, but for the brief, the level and the pictures: every placed point, and,

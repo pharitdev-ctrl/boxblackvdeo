@@ -11,8 +11,7 @@ with `keepClear: null`, and a graphic's box was not checked against anything. Th
 (`packages/core/src/vision/`) stores per clip `insight.scenes` (description, kind, issues, `keepClear` band) and
 `objects.scenes` (keep/other boxes, faces marked).
 
-**Not in this phase:** the preview of the edited result (phase 4); faces where a move has pushed them (the agent's
-checks use faces as the prepare step found them, unzoomed — written down as a known gap).
+**Not in this phase:** the preview of the edited result (phase 4).
 
 **Tech Stack:** TypeScript, vitest. Done means `npm test` (no new failures against the 10 known ones), `npm run
 typecheck` (no new errors against the 8 known ones).
@@ -31,20 +30,36 @@ typecheck` (no new errors against the 8 known ones).
 
 ## Tasks
 
-- [ ] **1. Core: scenes in the footage.** `TechniqueScene` lines out of `describeTechniques` into an exported
+- [x] **1. Core: scenes in the footage.** `TechniqueScene` lines out of `describeTechniques` into an exported
   `sceneLines(scene, clock)` in `flair/direct.ts` (its text unchanged; its test still passes). `AgentFootage.scenes:
   TechniqueScene[]`; `describeFootage` adds "ฉาก" after the words ("ฉาก ไม่มี" when empty). Prompt paragraph,
   version bump. Tests: describeFootage shows a scene and its face; exact prompt test updated.
-- [ ] **2. Desktop: scenes and boxes from the wiring.** `withFacesKnown` moves from `flair.ts` to `move-cues.ts`
+- [x] **2. Desktop: scenes and boxes from the wiring.** `withFacesKnown` moves from `flair.ts` to `move-cues.ts`
   (exported, flair imports it); `boxesOf` and `pieceBase` exported. `agent-wiring.ts`: `footage` adds `scenes`;
   `clip` gives each cut its `base`, `scenes` (faces/shown per scene, on the piece's clock), and `keepClear` per scene.
   Test: the wiring's clip carries a face of a prepared clip.
-- [ ] **3. Desktop: the checks.** `agent-actions.ts`: `placeMove` as decision 2; `textGroup` with the band of
+- [x] **3. Desktop: the checks.** `agent-actions.ts`: `placeMove` as decision 2; `textGroup` with the band of
   decision 3; `add_graphic` and an `edit_piece` that moves or re-boxes a graphic checked as decision 4. Tests: a move
   that pushes a face out of frame is refused (and its hold after); text over a top face goes below it; a graphic over
   a face for 3 s is refused with the reason, over one for less than `COVER_MAX_US` is made.
-- [ ] **4. Check and push.** Full tests, typecheck, plan doc results, commit, push.
+- [x] **4. Check and push.** Full tests, typecheck, plan doc results, commit, push.
 
 ## Results
 
-(filled in when done)
+Done. One change from the plan: rather than copying face boxes into `AgentClip`, the wiring hands the actions an
+`AgentRoom` built on the pipeline's own functions — `agentMoveWhy` (wraps `judgeOnPiece`, with the hold) and
+`agentKeepIn` (wraps `faceBoxesIn`), both new exports of `move-cues.ts` that take the agent's `TimelineMove`s. So the
+faces are where the agent's moves have pushed them, the gap the plan had written down is closed, and a clip the objects
+pass has not run on falls back to the scene's keepClear band exactly as "ทำทั้งหมด" does.
+
+- Footage: `AgentFootage.scenes` from `scenesOnCut(plan, withFacesKnown(clips))`; "ฉาก" list via the shared
+  `sceneLines` (`flair/direct.ts`), text unchanged for the techniques call. Prompt `agent-2026-10-04-scenes`.
+- Text: laid with the band of `keepIn` over its span (`layoutGroup` keepClear).
+- Graphics: `graphicCovers` before making; an `edit_piece` that only moves one in time is checked from its written
+  box (`boxOfGraphic`, the inverse of `placeOnCanvas`).
+- Moves: the overlap with another move is checked first, then `room.moveWhy` with the other moves.
+- Tests: 3,155 passed; the same 10 known failures (one run showed an 11th, a timing flake, not repeated); typecheck
+  the 8 known errors only.
+
+**Still open:** a move added after text or a graphic can push a face under them; the text and graphic checks run when
+those are placed, not again after later moves. The preview of phase 4 is where Claude would see that.

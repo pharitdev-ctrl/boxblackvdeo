@@ -14,10 +14,11 @@ const clip: AgentClip = {
   canvas: { width: 1080, height: 1920 },
   durationUs: s(10),
   words: ["สวัสดี", "ครับ", "วันนี้", "ราคา", "ห้า", "บาท"].map((text, i) => ({ text, atUs: s(i * 1.5), endUs: s(i * 1.5 + 1) })),
-  cuts: [{ startUs: 0, durationUs: s(10), cap: 1.3, faces: null, shown: [] }],
+  cuts: [{ startUs: 0, durationUs: s(10) }],
+  room: { moveWhy: () => null, keepIn: () => [] },
   highlight: { font: "mali", look: { fontPath: "/f.ttf", strokeWidth: 0.08, barRoundness: 50, palette: {}, animation: null } as unknown as HighlightLook, subtitlesOn: false },
 }
-const footage: AgentFootage = { title: "t", summary: "", beats: [], words: clip.words, sounds: [], brief: { videoType: null, instructions: "" } }
+const footage: AgentFootage = { title: "t", summary: "", beats: [], words: clip.words, scenes: [], sounds: [], brief: { videoType: null, instructions: "" } }
 const makers: AgentMakers = {
   graphic: async () => ({ ok: false, why: "no renderer" }),
   composeSound: async () => ({ ok: false, why: "no renderer" }),

@@ -5,8 +5,9 @@ import type { TimelineComposedSound } from "@boxblack/core/capcut/composed-sound
 import type { TimelineGraphic } from "@boxblack/core/capcut/graphics"
 import type { HighlightLook, TimelineHighlightGroup } from "@boxblack/core/capcut"
 import type { TimelineSoundCue } from "@boxblack/core/capcut/sounds"
-import { checkMove, type Pose, type ShareBox } from "@boxblack/core/flair/moves"
-import type { MotionWord } from "@boxblack/core/graphics/plan"
+import type { TimelineMove } from "@boxblack/core/capcut/moves"
+import type { Pose } from "@boxblack/core/flair/moves"
+import { boxText, COVER_MAX_US, type GraphicBox, type MotionWord } from "@boxblack/core/graphics/plan"
 import { layoutGroup } from "@boxblack/core/highlights"
 import type { HighlightFontId } from "@boxblack/core/highlights/styles"
 import type { AgentTimeline, Piece, PieceAuthor } from "@boxblack/core/timeline"
@@ -17,10 +18,20 @@ export interface AgentClip {
   durationUs: number
   /** every word the rough cut plays, in order: Claude's w1 is the first */
   words: { text: string; atUs: number; endUs: number }[]
-  /** the main track's pieces, in order, with what a move on each may do */
-  cuts: { startUs: number; durationUs: number; cap: number; faces: ShareBox[] | null; shown: ShareBox[] }[]
+  /** the main track's pieces, in order */
+  cuts: { startUs: number; durationUs: number }[]
+  /** what the picture shows where, from the prepare step, as "ทำทั้งหมด" checks against it */
+  room: AgentRoom
   /** how highlight text looks in this project; null when it cannot be drawn (no fonts) */
   highlight: { font: HighlightFontId; look: HighlightLook; subtitlesOn: boolean } | null
+}
+
+/** The checks against what the picture shows: the faces and the things being shown, and where the moves take them. */
+export interface AgentRoom {
+  /** why a move may not play on piece `cut` from `startUs` after its start beside the other moves (`others`), or null when it may: the zoom cap, the frame's edges, the faces in frame while it plays and while its last pose is held */
+  moveWhy(cut: number, startUs: number, poses: Pose[], others: TimelineMove[]): string | null
+  /** the faces and shown things on screen over a span of the rough cut with `moves` played, in shares of the frame */
+  keepIn(span: { startUs: number; endUs: number }, moves: TimelineMove[]): GraphicBox[]
 }
 
 /** What makes the pieces that need rendering or a library: a graphic, a composed sound, a library sound. */
@@ -102,14 +113,15 @@ function timeOf(clip: AgentClip, at: { word: number } | { s: number }): { ok: tr
   return atUs >= 0 && atUs < clip.durationUs ? { ok: true, atUs } : { ok: false, why: `เวลา ${at.s}s อยู่นอกคลิป (ยาว ${clock(clip.durationUs)})` }
 }
 
-function textGroup(clip: AgentClip, fromWord: number, toWord: number, lines: string[], tone: "base" | "accent" | "alt" | null): { ok: true; group: TimelineHighlightGroup } | { ok: false; why: string } {
+function textGroup(clip: AgentClip, timeline: AgentTimeline, fromWord: number, toWord: number, lines: string[], tone: "base" | "accent" | "alt" | null): { ok: true; group: TimelineHighlightGroup } | { ok: false; why: string } {
   if (!clip.highlight) return { ok: false, why: "โปรเจคนี้วาดข้อความเด่นไม่ได้ (ไม่มีฟอนต์)" }
   const first = clip.words[fromWord - 1]
   const last = clip.words[toWord - 1]
   if (!first || !last) return { ok: false, why: `ไม่มีคำที่ w${first ? toWord : fromWord} (มี ${clip.words.length} คำ)` }
   const span = toWord - fromWord + 1
-  const laid = layoutGroup(lines, clip.highlight.font, clip.canvas, { kind: "auto", keepClear: null, keepSubtitleRoom: clip.highlight.subtitlesOn }, "stack").lines
   const endUs = Math.min(clip.durationUs, Math.max(last.endUs + TEXT_TAIL_US, first.atUs + TEXT_MIN_US))
+  // laid off the faces and shown things on screen while it plays, as "ทำทั้งหมด" lays its text
+  const laid = layoutGroup(lines, clip.highlight.font, clip.canvas, { kind: "auto", keepClear: bandOf(clip.room.keepIn({ startUs: first.atUs, endUs }, movesOf(timeline))), keepSubtitleRoom: clip.highlight.subtitlesOn }, "stack").lines
   return {
     ok: true,
     group: {
@@ -119,6 +131,30 @@ function textGroup(clip: AgentClip, fromWord: number, toWord: number, lines: str
       lines: lines.map((text, i) => ({ startUs: clip.words[fromWord - 1 + Math.floor((i * span) / lines.length)]!.atUs, text, ...laid[i]!, tone: tone ?? "base", accent: null })),
     },
   }
+}
+
+const movesOf = (timeline: AgentTimeline): TimelineMove[] => timeline.moves.map((p) => p.item)
+
+/** The band of the frame boxes take, top to bottom; null for none. */
+const bandOf = (boxes: GraphicBox[]) => (boxes.length === 0 ? null : boxes.reduce((band, box) => ({ fromY: Math.min(band.fromY, box.y0), toY: Math.max(band.toY, box.y1) }), { fromY: 1, toY: 0 }))
+
+/**
+ * Why a graphic may not go in `box` from `atUs` for `durationUs`, or null when it may: over a face or a thing being
+ * shown it may play COVER_MAX_US at most, as "ทำทั้งหมด" allows. Checked before it is made, so a refusal costs nothing.
+ */
+function graphicCovers(clip: AgentClip, timeline: AgentTimeline, atUs: number, durationUs: number, box: [number, number, number, number]): string | null {
+  if (durationUs <= COVER_MAX_US) return null
+  const own = { x0: box[0], y0: box[1], x1: box[2], y1: box[3] }
+  const covered = clip.room.keepIn({ startUs: atUs, endUs: atUs + durationUs }, movesOf(timeline)).filter((keep) => own.x0 < keep.x1 && keep.x0 < own.x1 && own.y0 < keep.y1 && keep.y0 < own.y1)
+  if (covered.length === 0) return null
+  return `กล่อง ${boxText(own)} ทับหน้าคนหรือของที่โชว์ที่ ${covered.map(boxText).join(", ")} ช่วง ${clock(atUs)}–${clock(atUs + durationUs)} · ทับได้ไม่เกิน ${COVER_MAX_US / 1_000_000}s ย้าย box หรือสั้นลง`
+}
+
+/** Where a written graphic sits, as a box in shares of the frame: its file is drawn at its own pixel size, its centre at `place`. */
+function boxOfGraphic(graphic: TimelineGraphic, canvas: { width: number; height: number }): [number, number, number, number] {
+  const cx = (graphic.place.x / 2 + 0.5) * canvas.width
+  const cy = (0.5 - graphic.place.y / 2) * canvas.height
+  return [(cx - graphic.width / 2) / canvas.width, (cy - graphic.height / 2) / canvas.height, (cx + graphic.width / 2) / canvas.width, (cy + graphic.height / 2) / canvas.height]
 }
 
 /** Highlight groups share one place on screen: a new one may not play while another does. */
@@ -133,12 +169,12 @@ function placeMove(clip: AgentClip, timeline: AgentTimeline, atUs: number, poses
   if (cut < 0) return { ok: false, why: `ไม่มีชิ้นวิดีโอที่ ${clock(atUs)}` }
   const piece = clip.cuts[cut]!
   const startUs = atUs - piece.startUs
-  const lengthS = (piece.durationUs - startUs) / 1_000_000
-  const check = checkMove({ poses }, { canvas: clip.canvas, cap: piece.cap, lengthS, faces: piece.faces, shown: piece.shown, card: null })
-  if (!check.ok) return { ok: false, why: `การเคลื่อนภาพไม่ผ่าน: ${check.why}` }
   const endUs = startUs + (poses.at(-1)?.s ?? 0) * 1_000_000
-  const clash = timeline.moves.find((m) => m.id !== except && m.item.cut === cut && m.item.startUs < endUs && startUs < m.item.startUs + (m.item.poses.at(-1)?.s ?? 0) * 1_000_000)
+  const others = timeline.moves.filter((m) => m.id !== except)
+  const clash = others.find((m) => m.item.cut === cut && m.item.startUs < endUs && startUs < m.item.startUs + (m.item.poses.at(-1)?.s ?? 0) * 1_000_000)
   if (clash) return { ok: false, why: `ซ้อนเวลากับการเคลื่อนภาพ ${clash.id} บนชิ้นวิดีโอเดียวกัน` }
+  const why = clip.room.moveWhy(cut, startUs, poses, others.map((m) => m.item))
+  if (why) return { ok: false, why: `การเคลื่อนภาพไม่ผ่าน: ${why}` }
   return { ok: true, cut, startUs }
 }
 
@@ -161,7 +197,7 @@ export async function runAction(timeline: AgentTimeline, action: Action, clip: A
       return done(timeline, `ถามผู้ใช้: ${action.question}`)
 
     case "add_text": {
-      const made = textGroup(clip, action.fromWord, action.toWord, action.lines, action.tone)
+      const made = textGroup(clip, timeline, action.fromWord, action.toWord, action.lines, action.tone)
       if (!made.ok) return refuse(made.why)
       const clash = textClash(timeline, made.group)
       if (clash) return refuse(clash)
@@ -184,6 +220,8 @@ export async function runAction(timeline: AgentTimeline, action: Action, clip: A
       const atUs = secondsToUs(action.atS)
       const durationUs = secondsToUs(action.seconds)
       if (atUs < 0 || atUs + durationUs > clip.durationUs) return refuse(`กราฟิก ${clock(atUs)}–${clock(atUs + durationUs)} ต้องอยู่ในคลิป (ยาว ${clock(clip.durationUs)})`)
+      const covers = graphicCovers(clip, timeline, atUs, durationUs, action.box)
+      if (covers) return refuse(covers)
       const made = await makers.graphic({ atUs, durationUs, box: action.box, idea: action.idea, words: wordsIn(clip, atUs, durationUs), signal })
       if (!made.ok) return refuse(`ทำกราฟิกไม่สำเร็จ: ${made.why}`)
       const id = nextId(timeline, "graphic")
@@ -247,7 +285,7 @@ async function editPiece(timeline: AgentTimeline, id: string, changes: Partial<O
     const fromWord = changes.fromWord ?? wordAt(p.item.lines[0]!.startUs)
     const toWord = changes.toWord ?? Math.max(fromWord, clip.words.findLastIndex((w) => w.endUs <= p.item.endUs) + 1)
     const lines = changes.lines ?? p.item.lines.map((line) => line.text)
-    const made = textGroup(clip, fromWord, toWord, lines, changes.tone ?? (p.item.lines[0]?.tone as "base" | "accent" | "alt" | undefined) ?? null)
+    const made = textGroup(clip, rest, fromWord, toWord, lines, changes.tone ?? (p.item.lines[0]?.tone as "base" | "accent" | "alt" | undefined) ?? null)
     if (!made.ok) return refuse(made.why)
     const clash = textClash(rest, made.group)
     if (clash) return refuse(clash)
@@ -268,6 +306,9 @@ async function editPiece(timeline: AgentTimeline, id: string, changes: Partial<O
     const atUs = changes.atS != null ? secondsToUs(changes.atS) : p.item.atUs
     const durationUs = changes.seconds != null ? secondsToUs(changes.seconds) : p.item.durationUs
     if (atUs < 0 || atUs + durationUs > clip.durationUs) return refuse(`กราฟิกต้องอยู่ในคลิป (ยาว ${clock(clip.durationUs)})`)
+    const box = (changes.box as [number, number, number, number] | null | undefined) ?? boxOfGraphic(p.item, clip.canvas)
+    const covers = graphicCovers(clip, rest, atUs, durationUs, box)
+    if (covers) return refuse(covers)
     // a new idea, box or length is a new graphic, written and rendered again; a new time only moves it
     if (changes.idea || changes.box || changes.seconds != null) {
       if (!changes.box) return refuse("แก้ idea หรือความยาวของกราฟิกต้องส่ง box มาด้วย")
