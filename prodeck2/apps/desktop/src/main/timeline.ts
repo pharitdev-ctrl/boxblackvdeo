@@ -663,6 +663,8 @@ export function createTimelineService(deps: TimelineDeps) {
     let graphicsSkipped = unmade
     // the graphics laid, which the sounds tied to them need
     const graphicsLaid: PlacedGraphic[] = []
+    // what each laid graphic shows, in Claude's words, for the agent's list of pieces
+    const graphicNotes: string[] = []
     for (const { graphic, job } of waitedFor) {
       const file = deps.graphics ? await deps.graphics.rendered(job) : null
       // its render failed, or it was made and its file is gone since
@@ -677,6 +679,7 @@ export function createTimelineService(deps: TimelineDeps) {
       idOfPath.set(file.path, binId)
       binItems.push(graphicBinItem({ id: binId, path: file.path, width: file.width, height: file.height, durationUs: file.durationUs, nowMs: time.getTime() }))
       graphicsLaid.push(graphic)
+      graphicNotes.push("idea" in graphic.cue.spec && typeof graphic.cue.spec.idea === "string" ? graphic.cue.spec.idea : "")
       graphics.push({
         atUs: played(graphic.atUs),
         durationUs: graphic.durationUs,
@@ -738,7 +741,7 @@ export function createTimelineService(deps: TimelineDeps) {
       moves: pipelinePieces("move", moves),
       zooms: pipelinePieces("zoom", beside),
       inserts: pipelinePieces("insert", inserts),
-      graphics: pipelinePieces("graphic", graphics, (graphic) => graphic.name),
+      graphics: pipelinePieces("graphic", graphics).map((piece, i) => ({ ...piece, note: graphicNotes[i] || piece.item.name })),
       composed: pipelinePieces("composed", composed),
       sounds: pipelinePieces("sound", sounds.cues),
       binItems,

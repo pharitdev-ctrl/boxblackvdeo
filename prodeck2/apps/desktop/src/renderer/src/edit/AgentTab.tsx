@@ -17,6 +17,9 @@ const KIND_NAMES: Record<string, MessageKey> = {
   composed: "agent.kind.composed",
   sound: "agent.kind.sound",
 }
+/** A time on the rough cut to a tenth of a second, as Claude names times: pieces a second apart or less still read apart. */
+const seconds = (us: number) => (us / 1_000_000).toFixed(1)
+
 const BY_NAMES: Record<AgentView["pieces"][number]["by"], MessageKey> = { pipeline: "agent.by.pipeline", claude: "agent.by.claude", user: "agent.by.user" }
 
 function Turn({ turn }: { turn: AgentTurn }): ReactElement {
@@ -184,13 +187,11 @@ export function AgentTab(): ReactElement {
         <ul className="agent-piece-list">
           {view.pieces.map((piece) => (
             <li key={piece.id} className={piece.locked ? "agent-piece locked" : "agent-piece"}>
-              <span className="mono hint">
-                {formatDuration(piece.startUs)}–{formatDuration(piece.endUs)}
-              </span>
-              <span className="agent-piece-text">
+              <span className="mono hint">{t("agent.span", { from: seconds(piece.startUs), to: seconds(piece.endUs) })}</span>
+              <span className="agent-piece-text" title={piece.label}>
                 <strong>{t(KIND_NAMES[piece.kind] ?? "agent.kind.other")}</strong> {piece.label}
               </span>
-              <span className="chip">{t(BY_NAMES[piece.by])}</span>
+              <span className="agent-by hint">{t(BY_NAMES[piece.by])}</span>
               <Button size="xs" variant="ghost" disabled={running} aria-pressed={piece.locked} onClick={() => call(() => api.agentLock(folder, piece.id, !piece.locked))}>
                 {piece.locked ? t("agent.unlock") : t("agent.lock")}
               </Button>

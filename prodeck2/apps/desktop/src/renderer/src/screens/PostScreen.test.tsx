@@ -4596,6 +4596,9 @@ test("the agent tab opens a conversation with the write button's request, sends 
   )
   expect(screen.getByText(new RegExp(t("agent.round", { round: 3, rounds: 25 })))).toBeTruthy()
   expect(screen.getByText(/ป้ายราคา 5 บาท/)).toBeTruthy()
+  // to a tenth of a second, and who made it is a word, not a button
+  expect(screen.getByText(t("agent.span", { from: "20.7", to: "22.0" }))).toBeTruthy()
+  expect(screen.queryByRole("button", { name: t("agent.by.claude") })).toBeNull()
   await userEvent.click(screen.getByRole("button", { name: t("agent.stop") }))
   expect(calls(api, "agentStop")).toHaveLength(1)
 

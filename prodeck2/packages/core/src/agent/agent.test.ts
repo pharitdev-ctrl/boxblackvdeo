@@ -88,5 +88,6 @@ test("a long conversation keeps its newest turns and says how many older ones we
 test("the prompt names every action and the rules that matter", () => {
   for (const type of ["set_direction", "add_text", "add_move", "add_graphic", "add_sound", "edit_piece", "remove_piece", "ask_user"]) expect(AGENT_PROMPT.system).toContain(`- ${type}:`)
   expect(AGENT_PROMPT.system).toContain("ห้ามแก้หรือลบชิ้นที่ล็อก")
+  expect(AGENT_PROMPT.system).toContain("ให้ลงมือทำเลยในรอบนี้")
   expect(AGENT_PROMPT.system).toContain("ถ้าขัดกับสิ่งที่ผู้ใช้พิมพ์ ทำตามผู้ใช้")
 })

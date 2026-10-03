@@ -1037,6 +1037,12 @@ h2.tab-section {
   background: var(--warn-soft);
 }
 
+/* who made the piece: a word, not a button */
+.agent-by {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .agent-piece-text {
   overflow: hidden;
   text-overflow: ellipsis;
