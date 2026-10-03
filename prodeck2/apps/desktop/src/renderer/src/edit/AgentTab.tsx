@@ -89,7 +89,10 @@ export function AgentTab(): ReactElement {
       }),
     [api, folder],
   )
-  useEffect(() => end.current?.scrollIntoView?.({ block: "end" }), [view?.turns.length])
+  useEffect(() => {
+    // in braces: a newer Chromium's scrollIntoView answers a promise, which React would take for the effect's cleanup
+    void end.current?.scrollIntoView?.({ block: "end" })
+  }, [view?.turns.length])
 
   const call = (work: () => Promise<AgentView | void>) => {
     setError(null)

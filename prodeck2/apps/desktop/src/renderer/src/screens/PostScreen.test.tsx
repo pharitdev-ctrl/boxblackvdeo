@@ -4614,3 +4614,23 @@ test("the agent's timeline is written after asking, with the project's segment c
   expect(calls(api, "agentWrite")).toEqual([["agentWrite", detail().folder, detail().timelineSegmentCount]])
   expect(await screen.findByText(t("agent.written", { duration: "0:22", segments: 51 }))).toBeTruthy()
 })
+
+test("the chat follows new turns where scrolling answers a promise, as a newer Chromium's does, without breaking the tab", async () => {
+  const before = Element.prototype.scrollIntoView
+  Element.prototype.scrollIntoView = function () {
+    return Promise.resolve() as unknown as void
+  }
+  try {
+    const { api } = renderScreen()
+    await ready()
+    await openTab("agent")
+    expect(await screen.findByText(t("agent.empty"))).toBeTruthy()
+    const [opened] = calls(api, "agentOpen")
+    const folder = opened![1] as string
+    act(() => api.emit({ type: "agent", view: agentView(folder, { turns: [{ role: "user", text: "ใส่ป้ายราคา" }] }) }))
+    act(() => api.emit({ type: "agent", view: agentView(folder, { turns: [{ role: "user", text: "ใส่ป้ายราคา" }, { role: "claude", say: "ได้เลย", actions: [] }] }) }))
+    expect(screen.getByText("ได้เลย")).toBeTruthy()
+  } finally {
+    Element.prototype.scrollIntoView = before
+  }
+})
