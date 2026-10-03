@@ -4,6 +4,7 @@ import { AiMenu, type AiItem } from "../edit/AiMenu.tsx"
 import { BeatPanel } from "../edit/BeatPanel.tsx"
 import { BeatSidebar, type BeatCounts, type SidebarBeat } from "../edit/BeatSidebar.tsx"
 import { byBeat, emptyFlair, wholeClip, type BeatFlair } from "../edit/byBeat.ts"
+import { AgentTab } from "../edit/AgentTab.tsx"
 import { EmphasisTab } from "../edit/EmphasisTab.tsx"
 import { GraphicTab } from "../edit/GraphicTab.tsx"
 import { PlanStrip } from "../edit/PlanStrip.tsx"
@@ -213,6 +214,7 @@ export function PostScreen({ onEditOutline }: PostScreenProps): ReactElement {
             {tab === "graphics" &&
               (preview ? <GraphicTab flair={shown} beatId={chosen?.beatId ?? null} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
             {tab === "sound" && (preview ? <SoundTab flair={shown} beatId={chosen?.beatId ?? null} points={emphasis?.points ?? []} busy={busy || room.placing} /> : <p className="hint">{t("edit.busy")}</p>)}
+            {tab === "agent" && <AgentTab />}
             {tab === "subtitles" && subtitles && highlights && (
               <>
                 <SubtitleSettings

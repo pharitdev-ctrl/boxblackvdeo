@@ -49,6 +49,8 @@ const MARKS: Record<PostTab, (keyof BeatCounts)[]> = {
   graphics: ["graphic"],
   sound: ["sound"],
   subtitles: ["subtitles"],
+  // the agent works on the whole clip, on its own timeline: no marks per beat
+  agent: [],
 }
 const SYMBOLS: Record<keyof BeatCounts, string> = { text: "Aa", sound: "🔊", zoom: "⤢", insert: "🖼", graphic: "📊", emphasis: "★", subtitles: "CC" }
 

@@ -2,7 +2,7 @@ import { POST_WORKS, type EmphasisPointView, type PostRunView, type PostWork } f
 import { t, type MessageKey } from "../i18n.ts"
 
 /** The six tabs of the post-production page, in the order of the work. */
-export const POST_TABS = ["cut", "emphasis", "techniques", "graphics", "sound", "subtitles"] as const
+export const POST_TABS = ["cut", "emphasis", "techniques", "graphics", "sound", "subtitles", "agent"] as const
 export type PostTab = (typeof POST_TABS)[number]
 
 /** Which tab each work of the run fills: the highlight text and the zooms and cutaways one, the graphics their own. */

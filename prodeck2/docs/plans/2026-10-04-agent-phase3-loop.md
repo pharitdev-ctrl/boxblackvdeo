@@ -66,45 +66,62 @@ confirmed outline; 25 rounds per message then ask "ทำต่อไหม"; Op
 
 ## Task 1: core (pure)
 
-- [ ] Reply schema and action schemas; unknown fields refused; numbers bounded (at most 12 poses, `seconds` 0.3–8, box inside 0–1).
-- [ ] `AGENT_PROMPT`: who Claude is, the clip it gets, the actions and their rules, "follow the direction, the user's words win", "don't touch locked pieces", "say what you did in Thai, short", "set `done` when the clip is finished or you need the user".
-- [ ] `agentRequest({ footage, outline, history, timeline, userMessage })` → `LlmContent[]`.
-- [ ] Tests: schema accepts a good reply and refuses bad ones with a readable message; the request puts the cached part first and the timeline last; history over its budget keeps the newest turns and a one-line summary of the rest.
+- [x] Reply schema and action schemas; unknown fields refused; numbers bounded (at most 12 poses, `seconds` 0.3–8, box inside 0–1).
+- [x] `AGENT_PROMPT`: who Claude is, the clip it gets, the actions and their rules, "follow the direction, the user's words win", "don't touch locked pieces", "say what you did in Thai, short", "set `done` when the clip is finished or you need the user".
+- [x] `agentRequest({ footage, outline, history, timeline, userMessage })` → `LlmContent[]`.
+- [x] Tests: schema accepts a good reply and refuses bad ones with a readable message; the request puts the cached part first and the timeline last; history over its budget keeps the newest turns and a one-line summary of the rest.
 
 ## Task 2: dry assemble and agent write (main)
 
-- [ ] Split `assemble` out of `writeNow` further so it runs without a CapCut check and without waiting for renders that are not made (unmade graphics are left out of the dry timeline and listed).
-- [ ] `writeAgentTimeline`: CapCut closed, segment count, `writeTimeline`, backup, `writeDraft`, store as last write.
-- [ ] Tests: a dry assemble of a project equals the timeline a write of it stores; `writeAgentTimeline` refuses with CapCut open and writes the same draft as `writeNow` for an unedited dry timeline.
+- [x] Split `assemble` out of `writeNow` further so it runs without a CapCut check and without waiting for renders that are not made (unmade graphics are left out of the dry timeline and listed).
+- [x] `writeAgentTimeline`: CapCut closed, segment count, `writeTimeline`, backup, `writeDraft`, store as last write.
+- [x] Tests: a dry assemble of a project equals the timeline a write of it stores; `writeAgentTimeline` refuses with CapCut open and writes the same draft as `writeNow` for an unedited dry timeline.
 
 ## Task 3: action executors (main)
 
-- [ ] One function per action over `{ timeline, plan, clips, canvas, style, deps }`; pure where it can be (text, move, edit, remove), with the renderer and Claude passed in for graphic and sound.
-- [ ] Tests per action: a good one adds a piece with the right times; each check refuses with its reason; a locked piece is refused; a graphic whose render fails comes back as failed, with no piece.
+- [x] One function per action over `{ timeline, plan, clips, canvas, style, deps }`; pure where it can be (text, move, edit, remove), with the renderer and Claude passed in for graphic and sound.
+- [x] Tests per action: a good one adds a piece with the right times; each check refuses with its reason; a locked piece is refused; a graphic whose render fails comes back as failed, with no piece.
 
 ## Task 4: the loop (main)
 
-- [ ] `send(folder, text)`: appends the message, then rounds: request → reply → execute actions in order → results appended → events → until `done`, an `ask_user`, the stop, or 25 rounds (then the summary call).
-- [ ] Usage summed per message and per session; cost shown from the model's price.
-- [ ] A reply that fails the schema is answered once with the error; a second failure ends the round with a message to the user.
-- [ ] Tests with a scripted fake transport: a two-round session adds pieces and ends on `done`; the 25-round limit ends with a summary and no actions; stop ends at once; a refused action reaches Claude's next request.
+- [x] `send(folder, text)`: appends the message, then rounds: request → reply → execute actions in order → results appended → events → until `done`, an `ask_user`, the stop, or 25 rounds (then the summary call).
+- [x] Usage summed per message and per session; cost shown from the model's price.
+- [x] A reply that fails the schema is answered once with the error; a second failure ends the round with a message to the user.
+- [x] Tests with a scripted fake transport: a two-round session adds pieces and ends on `done`; the 25-round limit ends with a summary and no actions; stop ends at once; a refused action reaches Claude's next request.
 
 ## Task 5: API
 
-- [ ] Methods and event in `shared/api.ts`; wiring in `index.ts` with the editing Claude (`editingLlm`), the renderers and the stores.
+- [x] Methods and event in `shared/api.ts`; wiring in `index.ts` with the editing Claude (`editingLlm`), the renderers and the stores.
 
 ## Task 6: the tab
 
-- [ ] A tab "คุยกับ AI" in the post-production page, enabled when the outline is confirmed.
-- [ ] Left: chat (user, Claude's `say`, each action as a short line with ✓ or ✗ and its reason), input, stop, round counter "รอบ 7/25", cost so far. "ทำต่อ" after a summary.
-- [ ] Right: the pieces in time order (from the working timeline), each with lock and remove; "เขียนลง CapCut" with the same confirm sheet as today; "เริ่มใหม่จาก ทำทั้งหมด".
-- [ ] Tests (React Testing Library) with the fake API; harness screenshots, light and dark.
+- [x] A tab "คุยกับ AI" in the post-production page, enabled when the outline is confirmed.
+- [x] Left: chat (user, Claude's `say`, each action as a short line with ✓ or ✗ and its reason), input, stop, round counter "รอบ 7/25", cost so far. "ทำต่อ" after a summary.
+- [x] Right: the pieces in time order (from the working timeline), each with lock and remove; "เขียนลง CapCut" with the same confirm sheet as today; "เริ่มใหม่จาก ทำทั้งหมด".
+- [x] Tests (React Testing Library) with the fake API; harness screenshots, light and dark.
 
 ## Check
 
-- [ ] `npm test`, `npm run typecheck`.
+- [x] `npm test`, `npm run typecheck`.
 - [ ] On the Mac, with the user: open "1003 (1)" in the tab, ask for one change ("ใส่ป้ายราคาตอนท้ายให้ใหญ่ขึ้น"), write to CapCut, look.
-- [ ] Commit and push on `claude/quirky-wozniak-3fhi7t`.
+- [x] Commit and push on `claude/quirky-wozniak-3fhi7t`.
+
+## Result (2026-10-04)
+
+- Built: `packages/core/src/agent/` (reply schema, action checks, prompt, request), `apps/desktop/src/main/agent-actions.ts`,
+  `agent.ts` (sessions and the loop), `agent-wiring.ts` (the app's services for the agent), `agent-api.ts`, the
+  `assemble` split in `timeline.ts` (dry assemble, `writeTimeline`), and the 7th tab `edit/AgentTab.tsx`.
+- Tests: 6 core, 7 executors, 5 loop (scripted Claude), 1 wiring on the fixture project, 2 timeline (dry assemble and
+  the agent's write), 2 tab. `npm test`: 3,153 passed, the same 10 known failures; `npm run typecheck`: the same 8
+  known errors. The tab was looked at in the UI harness, light and dark (`2026-10-03-agent-spike/agent-tab.png`).
+- **Known gaps, for phase 4 or later:**
+  - Faces are not handed to the move checks yet (`faces: null`): a move keeps the zoom cap and the edges, not faces.
+  - A graphic is written without the render-and-repair loop the pipeline has: it is written once, rendered once,
+    and a failed render goes back to Claude as a failed action.
+  - After the agent writes, the page's own write button still holds the segment count from before; it then refuses
+    with "the timeline changed" and asks to check again, which is safe but clumsy.
+  - The tab sits under the beat heading of the page although it works on the whole clip.
+  - Nothing has run against the real Claude yet: the prompt is untested on real projects.
 
 ## Risks
 

@@ -3,8 +3,8 @@ import type { EmphasisPointView } from "../../../shared/api.ts"
 import { t } from "../i18n.ts"
 import { failureText, mainText, pointLabel, POST_TABS, TAB_OF_WORK, tabRuns, wasStopped } from "./postTabs.ts"
 
-test("the six tabs are in the order of the work, and each work of the run fills one of them: the text and the techniques one tab, the graphics their own", () => {
-  expect(POST_TABS).toEqual(["cut", "emphasis", "techniques", "graphics", "sound", "subtitles"])
+test("the six tabs are in the order of the work, then the agent's; each work of the run fills one of them: the text and the techniques one tab, the graphics their own", () => {
+  expect(POST_TABS).toEqual(["cut", "emphasis", "techniques", "graphics", "sound", "subtitles", "agent"])
   expect(TAB_OF_WORK).toEqual({ emphasis: "emphasis", text: "techniques", techniques: "techniques", graphics: "graphics", sounds: "sound", subtitles: "subtitles" })
 })
 
@@ -26,6 +26,7 @@ test("a tab spins while a work of it runs, is flagged when one failed, and is id
     graphics: { state: "idle" },
     sound: { state: "idle" },
     subtitles: { state: "failed", error: "timed out" },
+    agent: { state: "idle" },
   })
 })
 

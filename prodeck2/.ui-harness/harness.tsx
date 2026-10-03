@@ -207,6 +207,16 @@ let cc: any = fresh ? { supported: true, path: null, version: null, account: nul
 const capcut = { running: q.has("capcut") }
 let state: any = null
 
+const agentBase = (folder: string): any => ({
+  folder, turns: [], running: false, round: 0, rounds: 25, costUsd: 0, summed: false,
+  usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  direction: "สดใส จังหวะเร็ว ช่วงผลลัพธ์และโปรลด 50% เป็นไฮไลต์",
+  pieces: [
+    { id: "caption-1", kind: "caption", startUs: 300_000, endUs: 1_900_000, label: "ผิวแห้งจนแต่งหน้าไม่ติด", by: "pipeline", locked: false },
+    { id: "move-1", kind: "move", startUs: 2_100_000, endUs: 3_000_000, label: "ดันเข้าช้าๆ ตอนเล่าปัญหา", by: "pipeline", locked: false },
+  ],
+})
+let agent: any = null
 const api: any = fakeApi({
   ...modes(),
   listProjects: async () => ({
@@ -251,6 +261,33 @@ const api: any = fakeApi({
   planOutline: async (_f: string, _ids: string[], brief: any) => { await sleep(2600); return (outline = makeStored(brief)) },
   reviseOutline: async (_f: string, _i: string, brief: any) => { await sleep(1800); return (outline = makeStored(brief, false, BEATS.filter((b) => b.id !== "b4").concat([]))) },
   saveOutlineEdits: async (_f: string, ids: string[], confirmed: boolean) => (outline = { ...outline, outline: { ...outline.outline, beats: ids.map((id) => BEATS.find((b) => b.id === id)!) }, confirmed }),
+  agentOpen: async (folder: string) => (agent = { ...agentBase(folder), ...agent, folder }),
+  agentSend: async (folder: string, text: string) => {
+    const said = [...agent.turns, { role: "user", text }]
+    const step = (extra: any) => { agent = { ...agent, ...extra }; api.emit({ type: "agent", view: agent }); return agent }
+    step({ turns: said, running: true, round: 1 })
+    await sleep(900)
+    const pieces = [
+      ...agent.pieces,
+      { id: "highlight-1", kind: "highlight", startUs: 17_800_000, endUs: 19_400_000, label: "ลด 50%", by: "claude", locked: false },
+      { id: "graphic-1", kind: "graphic", startUs: 23_700_000, endUs: 26_200_000, label: "ป้ายราคา ฿990 ขีดฆ่า แล้ว ฿495 เด้งขึ้นตัวใหญ่", by: "claude", locked: false },
+      { id: "composed-1", kind: "composed", startUs: 24_100_000, endUs: 24_900_000, label: "กริ๊งเครื่องคิดเงินตอนราคาเด้ง", by: "claude", locked: false },
+    ]
+    step({
+      round: 2,
+      pieces,
+      costUsd: 0.31,
+      turns: [
+        ...said,
+        { role: "claude", say: "ใส่ข้อความ ลด 50% ตอนพูดถึงโปร แล้วทำกราฟิกป้ายราคาตัวใหญ่ตอนท้ายพร้อมเสียงกริ๊ง", actions: ["add_text", "add_graphic", "add_sound"] },
+        { role: "results", lines: ["✓ add_text: ใส่ข้อความ highlight-1 ที่ 17.80s", "✓ add_graphic: ใส่กราฟิก graphic-1 ที่ 23.70s", "✓ add_sound: แต่งเสียง composed-1 ที่ 24.10s"] },
+      ],
+    })
+    await sleep(700)
+    return step({ running: false, costUsd: 0.38, turns: [...agent.turns, { role: "claude", say: "เสร็จแล้วครับ ป้ายราคาขึ้นตอน 0:23.7 นาน 2.5 วินาที ลองดูแล้วบอกได้ว่าอยากปรับอะไร", actions: [] }] })
+  },
+  agentLock: async (_f: string, id: string, locked: boolean) => (agent = { ...agent, pieces: agent.pieces.map((p: any) => (p.id === id ? { ...p, locked } : p)) }),
+  agentRemove: async (_f: string, id: string) => (agent = { ...agent, pieces: agent.pieces.filter((p: any) => p.id !== id) }),
   saveOutlineDirection: async (_f: string, direction: string) => (outline = { ...outline, outline: { ...outline.outline, direction: direction.trim() }, updatedAt: Date.now() }),
   unusedParts: async () => [],
   previewCut: async () => CUT,

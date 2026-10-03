@@ -932,3 +932,113 @@
 h2.tab-section {
   font-weight: inherit;
 }
+
+/* the agent tab: the conversation on the left, the pieces on the right */
+.agent-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.agent-chat,
+.agent-pieces {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-turns {
+  display: grid;
+  gap: 8px;
+  max-height: 52vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-turn {
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.agent-turn.user {
+  justify-self: end;
+  max-width: 85%;
+  background: var(--surface-2);
+}
+
+.agent-turn.results {
+  padding: 4px 12px;
+  border-style: dashed;
+}
+
+.agent-turn p {
+  margin: 0;
+}
+
+.agent-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.agent-input textarea {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.agent-pieces-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-pieces-head h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.agent-piece-list {
+  display: grid;
+  gap: 4px;
+  max-height: 52vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-piece {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+}
+
+.agent-piece:hover {
+  background: var(--row-hover);
+}
+
+.agent-piece.locked {
+  background: var(--warn-soft);
+}
+
+.agent-piece-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

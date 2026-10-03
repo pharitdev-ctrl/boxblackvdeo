@@ -23,7 +23,7 @@ import type {
   ZoomView,
 } from "../../../shared/api.ts"
 import { mediaUrl } from "../../../shared/media-url.ts"
-import { cutPlan, detail, emphasisView, fakeApi, highlightGroups, highlightPreview, settingsView, subtitleLines } from "../../test/fake-api.ts"
+import { agentView, cutPlan, detail, emphasisView, fakeApi, highlightGroups, highlightPreview, settingsView, subtitleLines } from "../../test/fake-api.ts"
 import { renderRoom } from "../../test/room.tsx"
 import { MOTION_VERSION, type MotionSpec } from "@boxblack/core/graphics/plan"
 import { DEFAULT_HIGHLIGHT_OPTIONS } from "@boxblack/core/highlights/styles"
@@ -77,13 +77,13 @@ const reasonOf = (button: HTMLElement) => document.getElementById(button.getAttr
 
 /* the page */
 
-test("the post page has six tabs in the order of the work, and the rough cut open first", async () => {
+test("the post page has six tabs in the order of the work, then the agent's, and the rough cut open first", async () => {
   renderScreen()
   await ready()
   expect(screen.getAllByRole("tab").map((one) => one.getAttribute("data-tab"))).toEqual([...POST_TABS])
   expect(screen.getAllByRole("tab").map((one) => one.childNodes[0]!.textContent)).toEqual(POST_TABS.map((id) => t(`post.tab.${id}` as MessageKey)))
-  // exactly these six, in these words: colour is not the app's work (M26 cancelled, 0.4.1), and the graphics have a tab of their own (0.7.0)
-  expect(screen.getAllByRole("tab").map((one) => one.childNodes[0]!.textContent)).toEqual(["ตัดหยาบ", "จุดเน้น", "ข้อความและเทคนิค", "กราฟิก", "เสียง", "ซับ"])
+  // exactly these, in these words: colour is not the app's work (M26 cancelled, 0.4.1), the graphics have a tab of their own (0.7.0), and the agent's is last
+  expect(screen.getAllByRole("tab").map((one) => one.childNodes[0]!.textContent)).toEqual(["ตัดหยาบ", "จุดเน้น", "ข้อความและเทคนิค", "กราฟิก", "เสียง", "ซับ", "คุยกับ AI"])
   expect(tab("cut").getAttribute("aria-selected")).toBe("true")
 })
 
@@ -4568,4 +4568,49 @@ test("with zooms on and no move yet, the techniques tab says how to get some; wi
   await screen.findByText(t("edit.flairInserts"))
   expect(screen.queryByText(t("edit.flairMoves"))).toBeNull()
   expect(screen.queryByText(MOVE.about)).toBeNull()
+})
+
+test("the agent tab opens a conversation with the write button's request, sends what the user types, follows Claude through events, and locks a piece", async () => {
+  const { api } = renderScreen()
+  await ready()
+  await openTab("agent")
+  expect(await screen.findByText(t("agent.empty"))).toBeTruthy()
+  const [opened] = calls(api, "agentOpen")
+  expect(opened![2]).toMatchObject({ rules: settingsView().cut, highlights: { groupCount: expect.any(Number) } })
+
+  await userEvent.type(screen.getByLabelText(t("agent.input")), "ใส่ป้ายราคา")
+  await userEvent.click(screen.getByRole("button", { name: t("agent.send") }))
+  expect(calls(api, "agentSend")).toEqual([["agentSend", opened![1], "ใส่ป้ายราคา"]])
+  expect(await screen.findByText("รับทราบ")).toBeTruthy()
+
+  // while Claude works the tab says which round it is on and offers to stop
+  act(() =>
+    api.emit({
+      type: "agent",
+      view: agentView(opened![1] as string, {
+        running: true,
+        round: 3,
+        pieces: [{ id: "graphic-1", kind: "graphic", startUs: 20_700_000, endUs: 22_000_000, label: "ป้ายราคา 5 บาท", by: "claude", locked: false }],
+      }),
+    }),
+  )
+  expect(screen.getByText(new RegExp(t("agent.round", { round: 3, rounds: 25 })))).toBeTruthy()
+  expect(screen.getByText(/ป้ายราคา 5 บาท/)).toBeTruthy()
+  await userEvent.click(screen.getByRole("button", { name: t("agent.stop") }))
+  expect(calls(api, "agentStop")).toHaveLength(1)
+
+  act(() => api.emit({ type: "agent", view: agentView(opened![1] as string, { pieces: [{ id: "graphic-1", kind: "graphic", startUs: 20_700_000, endUs: 22_000_000, label: "ป้ายราคา 5 บาท", by: "claude", locked: false }] }) }))
+  await userEvent.click(screen.getByRole("button", { name: t("agent.lock") }))
+  expect(calls(api, "agentLock")).toEqual([["agentLock", opened![1], "graphic-1", true]])
+})
+
+test("the agent's timeline is written after asking, with the project's segment count", async () => {
+  const { api } = renderScreen()
+  await ready()
+  await openTab("agent")
+  await screen.findByText(t("agent.empty"))
+  await userEvent.click(screen.getByRole("button", { name: t("agent.write") }))
+  await userEvent.click(screen.getByRole("button", { name: t("write.confirm") }))
+  expect(calls(api, "agentWrite")).toEqual([["agentWrite", detail().folder, detail().timelineSegmentCount]])
+  expect(await screen.findByText(t("agent.written", { duration: "0:22", segments: 51 }))).toBeTruthy()
 })
