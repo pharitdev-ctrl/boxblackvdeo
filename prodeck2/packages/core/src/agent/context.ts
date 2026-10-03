@@ -87,11 +87,28 @@ export function historyText(turns: AgentTurn[], budget = HISTORY_BUDGET): string
  * session, marked for caching), the conversation so far, then the timeline as it is now and what is asked of this
  * round last, since those change every round.
  */
-export function agentRequest(args: { footage: AgentFootage; turns: AgentTurn[]; timeline: string; ask?: string }): LlmContent[] {
+export function agentRequest(args: { footage: AgentFootage; turns: AgentTurn[]; timeline: string; ask?: string; pictures?: AgentPictures | null }): LlmContent[] {
+  const pictures = args.pictures
   return [
     { type: "text", text: describeFootage(args.footage), cache: true },
     { type: "text", text: `การคุยที่ผ่านมา\n\n${historyText(args.turns) || "ยังไม่มี"}` },
     { type: "text", text: `ไทม์ไลน์ตอนนี้\n${args.timeline}` },
+    ...(pictures && pictures.sheets.length > 0
+      ? [
+          { type: "text" as const, text: `${PICTURES_NOTE}\n${pictures.what}` },
+          ...pictures.sheets.map((data) => ({ type: "image" as const, mediaType: "image/jpeg" as const, data })),
+        ]
+      : []),
     { type: "text", text: args.ask ?? "ทำงานรอบนี้ต่อ" },
   ]
 }
+
+/** The pictures of a look, for the next request only: what they show in a line, and the sheets as base64 JPEG. */
+export interface AgentPictures {
+  what: string
+  sheets: string[]
+}
+
+/** What the pictures are and are not, said with every look. */
+export const PICTURES_NOTE =
+  "ภาพตัวอย่างของคลิปตามไทม์ไลน์ตอนนี้ แผ่นละ 8 ภาพ เวลาบนคลิปเขียนไว้มุมซ้ายบนของแต่ละภาพ · ภาพนี้แอปวาดเลียน CapCut: วิดีโอ การเคลื่อนภาพ กราฟิก ข้อความเด่น และแถบรองตรงกับของจริง ซับใช้ฟอนต์ใกล้เคียง · ไม่มีแอนิเมชันเข้าออกของข้อความ ข้อความจึงขึ้นเต็มตั้งแต่เฟรมแรก · ไม่มีเสียง (ดูเสียงจากไทม์ไลน์)"

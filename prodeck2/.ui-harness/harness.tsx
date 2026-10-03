@@ -208,7 +208,7 @@ const capcut = { running: q.has("capcut") }
 let state: any = null
 
 const agentBase = (folder: string): any => ({
-  folder, turns: [], running: false, round: 0, rounds: 25, costUsd: 0, summed: false,
+  folder, turns: [], running: false, round: 0, rounds: 25, costUsd: 0, summed: false, looks: 0,
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
   direction: "สดใส จังหวะเร็ว ช่วงผลลัพธ์และโปรลด 50% เป็นไฮไลต์",
   pieces: [
@@ -284,8 +284,19 @@ const api: any = fakeApi({
       ],
     })
     await sleep(700)
-    return step({ running: false, costUsd: 0.38, turns: [...agent.turns, { role: "claude", say: "เสร็จแล้วครับ ป้ายราคาขึ้นตอน 0:23.7 นาน 2.5 วินาที ลองดูแล้วบอกได้ว่าอยากปรับอะไร", actions: [] }] })
+    // the app looks at what changed before the message ends, and Claude fixes what it sees
+    step({ round: 3, looks: agent.looks + 1, costUsd: 0.36, turns: [...agent.turns, { role: "results", lines: ["ตรวจภาพก่อนจบ: ช่วง 17.55–26.45 วิ · 18 ภาพ"] }] })
+    await sleep(700)
+    step({
+      round: 4,
+      costUsd: 0.41,
+      pieces: agent.pieces.map((p: any) => (p.id === "graphic-1" ? { ...p, label: "ป้ายราคา ฿990 ขีดฆ่า แล้ว ฿495 เด้งขึ้นตัวใหญ่ (ย้ายลงใต้หน้า)" } : p)),
+      turns: [...agent.turns, { role: "claude", say: "ป้ายราคาบังคางอยู่ครึ่งวินาที ย้ายลงไปใต้หน้า", actions: ["edit_piece"] }, { role: "results", lines: ["✓ edit_piece: แก้ graphic-1 แล้ว"] }],
+    })
+    await sleep(500)
+    return step({ running: false, costUsd: 0.43, turns: [...agent.turns, { role: "claude", say: "เสร็จแล้วครับ ป้ายราคาขึ้นตอน 23.7 วินาที อยู่ใต้หน้า นาน 2.5 วินาที ลองดูแล้วบอกได้ว่าอยากปรับอะไร", actions: [] }] })
   },
+  agentLook: async () => ({ what: "ช่วง 17.55–26.45 วิ · 18 ภาพ", sheets: [frame("promo", 1152, 1024), frame("talk", 1152, 1024)] }),
   agentLock: async (_f: string, id: string, locked: boolean) => (agent = { ...agent, pieces: agent.pieces.map((p: any) => (p.id === id ? { ...p, locked } : p)) }),
   agentRemove: async (_f: string, id: string) => (agent = { ...agent, pieces: agent.pieces.filter((p: any) => p.id !== id) }),
   saveOutlineDirection: async (_f: string, direction: string) => (outline = { ...outline, outline: { ...outline.outline, direction: direction.trim() }, updatedAt: Date.now() }),

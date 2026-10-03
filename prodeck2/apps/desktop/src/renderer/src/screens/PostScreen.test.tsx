@@ -4637,3 +4637,15 @@ test("the chat follows new turns where scrolling answers a promise, as a newer C
     Element.prototype.scrollIntoView = before
   }
 })
+
+test("the tab shows the sheets Claude last looked at, read again when it looks", async () => {
+  const { api } = renderScreen({ agentLook: async () => ({ what: "ช่วง 4.75–5.25 วิ · 2 ภาพ", sheets: ["data:image/jpeg;base64,AA"] }) })
+  await ready()
+  await openTab("agent")
+  expect(await screen.findByText(t("agent.empty"))).toBeTruthy()
+  expect(screen.queryByText(t("agent.look", { what: "ช่วง 4.75–5.25 วิ · 2 ภาพ" }))).toBeNull()
+  const [opened] = calls(api, "agentOpen")
+  act(() => api.emit({ type: "agent", view: agentView(opened![1] as string, { looks: 1 }) }))
+  expect(await screen.findByText(t("agent.look", { what: "ช่วง 4.75–5.25 วิ · 2 ภาพ" }))).toBeTruthy()
+  expect(screen.getByAltText(t("agent.lookSheet", { n: 1 }))).toBeTruthy()
+})

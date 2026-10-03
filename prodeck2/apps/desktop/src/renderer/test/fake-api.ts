@@ -358,6 +358,7 @@ export function fakeApi(overrides: Partial<RendererApi> = {}, capcut = { running
     agentReset: async (folder) => agentView(folder),
     agentLock: async (folder) => agentView(folder),
     agentRemove: async (folder) => agentView(folder),
+    agentLook: async () => null,
     agentWrite: async () => ({ backup: { id: "b1", createdAt: "2026-10-04T00:00:00.000Z", segmentCount: 0, durationUs: 0 } as never, durationUs: 22_000_000, segmentCount: 51 }),
     saveOutlineDirection: async (_folder, direction) => {
       const base = storedOutline()
@@ -453,6 +454,7 @@ export function agentView(folder: string, extra: Partial<AgentView> = {}): Agent
     folder,
     turns: [],
     running: false,
+    looks: 0,
     round: 0,
     rounds: 25,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },

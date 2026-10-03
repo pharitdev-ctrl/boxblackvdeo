@@ -1037,6 +1037,30 @@ h2.tab-section {
   background: var(--warn-soft);
 }
 
+/* the sheets Claude last looked at */
+.agent-look {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.agent-look summary {
+  cursor: pointer;
+}
+
+/* the sheets scroll in a box of their own, so the list of pieces stays in view */
+.agent-look-sheets {
+  display: grid;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.agent-look img {
+  width: 100%;
+  border-radius: var(--radius);
+}
+
 /* who made the piece: a word, not a button */
 .agent-by {
   font-size: 12px;

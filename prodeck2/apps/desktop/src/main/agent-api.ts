@@ -3,7 +3,7 @@ import type { AgentService } from "./agent.ts"
 import type { AgentWiring } from "./agent-wiring.ts"
 import type { TimelineService } from "./timeline.ts"
 
-type AgentApi = Pick<DesktopApi, "agentOpen" | "agentSend" | "agentStop" | "agentReset" | "agentLock" | "agentRemove" | "agentWrite">
+type AgentApi = Pick<DesktopApi, "agentOpen" | "agentSend" | "agentStop" | "agentReset" | "agentLock" | "agentRemove" | "agentWrite" | "agentLook">
 
 export function createAgentApi(deps: { agent: AgentService; wiring: AgentWiring; timeline: Pick<TimelineService, "writeTimeline"> }): AgentApi {
   const { agent, wiring } = deps
@@ -24,6 +24,7 @@ export function createAgentApi(deps: { agent: AgentService; wiring: AgentWiring;
     },
     agentLock: (folder, id, locked) => agent.lock(folder, id, locked === true),
     agentRemove: (folder, id) => agent.remove(folder, id),
+    agentLook: async (folder) => agent.lastLook(folder),
     async agentWrite(folder, expectedSegments) {
       if (!Number.isInteger(expectedSegments) || expectedSegments < 0) throw new Error("bad segment count")
       return deps.timeline.writeTimeline(folder, await agent.timeline(folder), expectedSegments)

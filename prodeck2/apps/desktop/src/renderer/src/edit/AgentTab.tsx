@@ -56,6 +56,7 @@ export function AgentTab(): ReactElement {
   const [asking, setAsking] = useState<"write" | "reset" | null>(null)
   const [written, setWritten] = useState<string | null>(null)
   const [segments, setSegments] = useState(project.timelineSegmentCount)
+  const [look, setLook] = useState<{ what: string; sheets: string[] } | null>(null)
   const end = useRef<HTMLLIElement>(null)
 
   const request: AgentRequest | null = useMemo(
@@ -92,6 +93,20 @@ export function AgentTab(): ReactElement {
       }),
     [api, folder],
   )
+  // what Claude last looked at, read again whenever it looks
+  const looks = view?.looks ?? 0
+  useEffect(() => {
+    if (looks === 0) return
+    let alive = true
+    api.agentLook(folder).then(
+      (found) => alive && setLook(found),
+      () => {},
+    )
+    return () => {
+      alive = false
+    }
+  }, [api, folder, looks])
+
   useEffect(() => {
     // in braces: a newer Chromium's scrollIntoView answers a promise, which React would take for the effect's cleanup
     void end.current?.scrollIntoView?.({ block: "end" })
@@ -184,6 +199,17 @@ export function AgentTab(): ReactElement {
           </Button>
         </div>
         {view.direction && <p className="hint">{t("agent.direction", { text: view.direction })}</p>}
+        {look && (
+          <details className="agent-look" open>
+            <summary className="hint">{t("agent.look", { what: look.what })}</summary>
+            <div className="agent-look-sheets">
+              {look.sheets.map((sheet, i) => (
+                <img key={i} src={sheet} alt={t("agent.lookSheet", { n: i + 1 })} />
+              ))}
+            </div>
+            <p className="hint">{t("agent.lookNote")}</p>
+          </details>
+        )}
         <ul className="agent-piece-list">
           {view.pieces.map((piece) => (
             <li key={piece.id} className={piece.locked ? "agent-piece locked" : "agent-piece"}>

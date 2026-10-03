@@ -1,7 +1,7 @@
 import { expect, test } from "vitest"
 import { replySchema } from "../llm/schema.ts"
 import { actionLabel, AgentReplySchema, parseAction, secondsToUs, type RawAction } from "./actions.ts"
-import { agentRequest, describeFootage, historyText, type AgentFootage, type AgentTurn } from "./context.ts"
+import { agentRequest, describeFootage, historyText, PICTURES_NOTE, type AgentFootage, type AgentTurn } from "./context.ts"
 import { AGENT_PROMPT } from "./prompt.ts"
 
 const raw = (fields: Partial<RawAction> & Pick<RawAction, "type">): RawAction =>
@@ -86,8 +86,20 @@ test("a long conversation keeps its newest turns and says how many older ones we
 })
 
 test("the prompt names every action and the rules that matter", () => {
-  for (const type of ["set_direction", "add_text", "add_move", "add_graphic", "add_sound", "edit_piece", "remove_piece", "ask_user"]) expect(AGENT_PROMPT.system).toContain(`- ${type}:`)
+  for (const type of ["set_direction", "add_text", "add_move", "add_graphic", "add_sound", "edit_piece", "remove_piece", "ask_user", "look"]) expect(AGENT_PROMPT.system).toContain(`- ${type}:`)
   expect(AGENT_PROMPT.system).toContain("ห้ามแก้หรือลบชิ้นที่ล็อก")
   expect(AGENT_PROMPT.system).toContain("ให้ลงมือทำเลยในรอบนี้")
   expect(AGENT_PROMPT.system).toContain("ถ้าขัดกับสิ่งที่ผู้ใช้พิมพ์ ทำตามผู้ใช้")
+})
+
+test("a look names a span or the whole clip, and its pictures go after the timeline and before the ask, with what they do not show", () => {
+  expect(parseAction(raw({ type: "look" }))).toEqual({ ok: true, action: { type: "look", fromS: null, seconds: null } })
+  expect(parseAction(raw({ type: "look", atS: 4.5, seconds: 2 }))).toEqual({ ok: true, action: { type: "look", fromS: 4.5, seconds: 2 } })
+  expect(parseAction(raw({ type: "look", seconds: 0 })).ok).toBe(false)
+  const content = agentRequest({ footage, turns: [], timeline: "Pieces:", ask: "ต่อ", pictures: { what: "ช่วง 0.25–1.75 วิ · 4 ภาพ", sheets: ["AAA", "BBB"] } })
+  expect(content.map((part) => part.type)).toEqual(["text", "text", "text", "text", "image", "image", "text"])
+  expect(content[3]).toMatchObject({ text: `${PICTURES_NOTE}\nช่วง 0.25–1.75 วิ · 4 ภาพ` })
+  expect(content[4]).toEqual({ type: "image", mediaType: "image/jpeg", data: "AAA" })
+  expect(PICTURES_NOTE).toContain("ไม่มีแอนิเมชัน")
+  expect(agentRequest({ footage, turns: [], timeline: "", pictures: null })).toHaveLength(4)
 })

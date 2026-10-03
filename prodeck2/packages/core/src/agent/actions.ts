@@ -2,7 +2,7 @@ import { z } from "zod"
 import { TONES, type Tone } from "../flair/plan.ts"
 import { EASES, type Pose } from "../flair/moves.ts"
 
-export const ACTION_TYPES = ["set_direction", "add_text", "add_move", "add_graphic", "add_sound", "edit_piece", "remove_piece", "ask_user"] as const
+export const ACTION_TYPES = ["set_direction", "add_text", "add_move", "add_graphic", "add_sound", "edit_piece", "remove_piece", "ask_user", "look"] as const
 export type ActionType = (typeof ACTION_TYPES)[number]
 export const LOUDNESSES = ["soft", "normal", "strong"] as const
 export type Loudness = (typeof LOUDNESSES)[number]
@@ -69,6 +69,8 @@ export type Action =
   | { type: "edit_piece"; id: string; changes: Partial<Omit<RawAction, "type" | "id">> }
   | { type: "remove_piece"; id: string }
   | { type: "ask_user"; question: string }
+  /** a look at the clip as it would come out: from `fromS` for `seconds`, or the whole clip when null */
+  | { type: "look"; fromS: number | null; seconds: number | null }
 
 export type Parsed = { ok: true; action: Action } | { ok: false; problem: string }
 
@@ -126,6 +128,11 @@ export function parseAction(raw: RawAction): Parsed {
       return words(raw.id) ? { ok: true, action: { type: "remove_piece", id: words(raw.id) } } : fail("ต้องมี id ของชิ้นที่จะลบ")
     case "ask_user":
       return words(raw.text) ? { ok: true, action: { type: "ask_user", question: words(raw.text) } } : fail("ต้องมี text เป็นคำถาม")
+    case "look": {
+      if (finite(raw.seconds) && raw.seconds <= 0) return fail("seconds ต้องมากกว่า 0")
+      if (finite(raw.atS) && raw.atS < 0) return fail("atS ต้องไม่ติดลบ")
+      return { ok: true, action: { type: "look", fromS: finite(raw.atS) ? raw.atS : null, seconds: finite(raw.seconds) ? raw.seconds : null } }
+    }
   }
 }
 

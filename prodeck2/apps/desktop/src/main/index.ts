@@ -60,6 +60,9 @@ import { createUpdater } from "./updater.ts"
 import { sendTo } from "./main-window.ts"
 import { createSoundRenderer } from "./sound-render.ts"
 import { createSealedPage } from "./sound-window.ts"
+import { createDrawPage } from "./preview-window.ts"
+import { createPreviewFrames } from "./preview-frames.ts"
+import { createPreview } from "./preview.ts"
 import { soundStatusOf } from "./composed-cues.ts"
 
 /** The license server fixed at build time; while developing, BOXBLACK_LICENSE_SERVER can point elsewhere. */
@@ -323,6 +326,8 @@ void app.whenReady().then(async () => {
   // the sealed hidden page composed sounds are rendered in; its window is made on the first render. Both are made
   // before the timeline and highlight services, which the renderer is handed to
   const soundPage = createSealedPage({ BrowserWindow, session })
+  // the agent's look at its own work: the frames pulled with ffmpeg, drawn in a hidden page of the app's own
+  const drawPage = createDrawPage({ BrowserWindow, session })
   // each render that ends is told to the page, which reads its sounds again: a row would otherwise stay on กำลังเรนเดอร์…
   const soundRenderer = createSoundRenderer({ dir: soundsDir, ffmpeg: () => tools.ffmpeg, page: soundPage, onSettled: () => send({ type: "sounds-rendered" }) })
   const highlightAssets = createHighlightAssets({
@@ -433,6 +438,12 @@ void app.whenReady().then(async () => {
     clip: (folder) => agentWiring.clip(folder),
     makers: (folder) => agentWiring.makers(folder),
     send: (view) => send({ type: "agent", view }),
+    look: tools.ffmpeg
+      ? (() => {
+          const preview = createPreview({ frames: createPreviewFrames({ ffmpeg: tools.ffmpeg, dir: join(workDir, "preview-frames") }), page: drawPage })
+          return (folder, agentTimeline, span, signal) => preview.look(folder, agentTimeline, span, signal)
+        })()
+      : undefined,
   })
 
   const thumbnail = createThumbnailer({
@@ -509,6 +520,7 @@ void app.whenReady().then(async () => {
     // composing waiting on its check is ended by its run's stop, which relies on aiCalls.cancel() above running first
     soundRenderer.cancel()
     soundPage.close()
+    drawPage.close()
   })
 
   // the stored choice applies as soon as it has been read; the window is already painting by then

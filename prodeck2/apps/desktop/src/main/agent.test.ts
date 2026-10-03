@@ -4,7 +4,7 @@ import type { HighlightLook } from "@boxblack/core/capcut"
 import type { LlmContent, LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm/types"
 import { pipelinePieces, TIMELINE_VERSION, type AgentTimeline } from "@boxblack/core/timeline"
 import type { AgentClip, AgentMakers } from "./agent-actions.ts"
-import { costOf, createAgentService, ROUNDS_PER_MESSAGE, type AgentSession, type AgentView } from "./agent.ts"
+import { costOf, createAgentService, REVIEW_ASK, ROUNDS_PER_MESSAGE, type AgentLook, type AgentSession, type AgentView } from "./agent.ts"
 
 const s = (seconds: number) => Math.round(seconds * 1_000_000)
 const FOLDER = "/drafts/1003"
@@ -56,7 +56,7 @@ function fakeClaude(replies: unknown[], respond?: (request: LlmRequest<unknown>)
   return { transport, requests }
 }
 
-function setup(claude: ReturnType<typeof fakeClaude>) {
+function setup(claude: ReturnType<typeof fakeClaude>, look?: (span: { startUs: number; endUs: number } | null) => Promise<AgentLook>) {
   const files = new Map<string, AgentSession>()
   const views: AgentView[] = []
   const service = createAgentService({
@@ -67,6 +67,7 @@ function setup(claude: ReturnType<typeof fakeClaude>) {
     makers: () => makers,
     send: (view) => views.push(view),
     now: () => 0,
+    ...(look ? { look: (_folder: string, _timeline: AgentTimeline, span: { startUs: number; endUs: number } | null) => look(span) } : {}),
   })
   return { service, views, files }
 }
@@ -168,4 +169,74 @@ test("the user locks a piece Claude then cannot change, and may remove it; a res
   expect((await service.remove(FOLDER, "highlight-1")).pieces).toEqual([])
   const fresh = await service.reset(FOLDER, start)
   expect(fresh.turns).toEqual([])
+})
+
+const imagesIn = (request: LlmRequest<unknown>) => request.content.filter((c) => c.type === "image").length
+const lookOf = (spans: ({ startUs: number; endUs: number } | null)[]) => async (span: { startUs: number; endUs: number } | null): Promise<AgentLook> => {
+  spans.push(span)
+  return { moments: [s(4.75), s(5.25)], sheets: [Buffer.from("sheet")] }
+}
+
+test("a look draws the span Claude names, its sheets go in the next request only, and the tab can show it", async () => {
+  const spans: ({ startUs: number; endUs: number } | null)[] = []
+  const claude = fakeClaude([
+    { say: "ขอดูก่อน", done: true, actions: [{ type: "look", atS: 4.5, seconds: 1 }] },
+    { say: "ดูแล้ว", done: false, actions: [] },
+    { say: "เสร็จ", done: true, actions: [] },
+  ])
+  const { service } = setup(claude, lookOf(spans))
+  await service.open(FOLDER, start)
+  const view = await service.send(FOLDER, "ดูช่วงราคา")
+  expect(spans).toEqual([{ startUs: s(4.5), endUs: s(5.5) }])
+  // a look ends no message, even when Claude said done with it
+  expect(claude.requests.map(imagesIn)).toEqual([0, 1, 0])
+  expect(textOf(claude.requests[1]!.content)).toContain("ช่วง 4.75–5.25 วิ · 2 ภาพ")
+  expect(view.turns.find((turn) => turn.role === "results")).toEqual({ role: "results", lines: ["✓ look: ช่วง 4.75–5.25 วิ · 2 ภาพ (ภาพมาในรอบหน้า)"] })
+  expect(view.looks).toBe(1)
+  expect(service.lastLook(FOLDER)).toEqual({ what: "ช่วง 4.75–5.25 วิ · 2 ภาพ", sheets: [`data:image/jpeg;base64,${Buffer.from("sheet").toString("base64")}`] })
+})
+
+test("before a message that changed the screen ends, the app looks at what changed once, and Claude may fix it", async () => {
+  const spans: ({ startUs: number; endUs: number } | null)[] = []
+  const claude = fakeClaude([], async (request) => {
+    const text = textOf(request.content)
+    if (text.includes(REVIEW_ASK) && !text.includes("แก้ highlight-1")) return { say: "ตัวเล็กไป ขยาย", done: true, actions: [{ type: "edit_piece", id: "highlight-1", lines: ["ราคา 5 บาท!"] }] }
+    if (text.includes(REVIEW_ASK)) return { say: "ไม่ควรถามซ้ำ", done: true, actions: [] }
+    return { say: "ใส่ราคา", done: true, actions: [{ type: "add_text", fromWord: 4, toWord: 6, lines: ["ราคา 5 บาท"] }] }
+  })
+  const { service } = setup(claude, lookOf(spans))
+  await service.open(FOLDER, start)
+  const view = await service.send(FOLDER, "ใส่ป้ายราคา")
+  // the text plays 4.5–8.8 s: looked at with half a second either side, once
+  expect(spans).toEqual([{ startUs: s(4), endUs: s(9.3) }])
+  expect(claude.requests).toHaveLength(2)
+  expect(claude.requests.map(imagesIn)).toEqual([0, 1])
+  expect(view.turns.map((turn) => (turn.role === "results" ? turn.lines[0] : turn.role))).toEqual(["user", "claude", "✓ add_text: ใส่ข้อความ highlight-1 ที่ 4.50s", "ตรวจภาพก่อนจบ: ช่วง 4.75–5.25 วิ · 2 ภาพ", "claude", "✓ edit_piece: แก้ highlight-1 แล้ว"])
+  expect(view.running).toBe(false)
+})
+
+test("no look before the end when Claude looked after its last change, when nothing on screen changed, or where no preview can be drawn", async () => {
+  const spans: ({ startUs: number; endUs: number } | null)[] = []
+  const looked = fakeClaude([
+    { say: "", done: false, actions: [{ type: "add_text", fromWord: 1, toWord: 2, lines: ["สวัสดี"] }, { type: "look", atS: null, seconds: null }] },
+    { say: "ดีแล้ว", done: true, actions: [] },
+  ])
+  const a = setup(looked, lookOf(spans))
+  await a.service.open(FOLDER, start)
+  await a.service.send(FOLDER, "ทักทาย")
+  expect(spans).toEqual([null])
+  expect(looked.requests).toHaveLength(2)
+
+  const quiet = fakeClaude([{ say: "", done: true, actions: [{ type: "set_direction", text: "สดใส" }] }])
+  const b = setup(quiet, lookOf(spans))
+  await b.service.open(FOLDER, start)
+  await b.service.send(FOLDER, "แนวสดใส")
+  expect(quiet.requests).toHaveLength(1)
+
+  const blind = fakeClaude([{ say: "", done: false, actions: [{ type: "add_text", fromWord: 1, toWord: 2, lines: ["สวัสดี"] }, { type: "look", atS: null, seconds: null }] }, { say: "", done: true, actions: [] }])
+  const c = setup(blind)
+  await c.service.open(FOLDER, start)
+  const view = await c.service.send(FOLDER, "ทักทาย")
+  expect(view.turns.find((turn) => turn.role === "results")).toMatchObject({ lines: ["✓ add_text: ใส่ข้อความ highlight-1 ที่ 0.00s", "✗ look: เครื่องนี้วาดภาพตัวอย่างไม่ได้"] })
+  expect(blind.requests).toHaveLength(2)
 })

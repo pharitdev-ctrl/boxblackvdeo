@@ -67,6 +67,7 @@ export const API_METHODS = [
   "agentLock",
   "agentRemove",
   "agentWrite",
+  "agentLook",
   "cancelPlanning",
   "beatThumbnail",
   "previewCut",
@@ -222,6 +223,8 @@ export interface DesktopApi {
   agentRemove(folder: string, id: string): Promise<AgentView>
   /** Writes the conversation's timeline to the draft, with the same checks and backup as a write. */
   agentWrite(folder: string, expectedSegments: number): Promise<{ backup: BackupInfo; durationUs: number; segmentCount: number }>
+  /** The last look Claude had at the project: what it shows and its sheets as data URLs; null before any. */
+  agentLook(folder: string): Promise<{ what: string; sheets: string[] } | null>
   cancelPlanning(): Promise<void>
   /** A JPEG data URL of the frame at `atUs`, or null when it cannot be made. */
   beatThumbnail(folder: string, videoId: string, atUs: number): Promise<string | null>
@@ -1186,6 +1189,8 @@ export interface AgentView {
   pieces: AgentPieceView[]
   /** the last message used all its rounds: the tab offers "ทำต่อ" */
   summed: boolean
+  /** how many looks Claude has had at the project since the app started: the tab reads the last one when this changes */
+  looks: number
 }
 
 export type { AgentTurn } from "@boxblack/core/agent"

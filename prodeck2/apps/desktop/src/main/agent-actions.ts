@@ -261,6 +261,10 @@ export async function runAction(timeline: AgentTimeline, action: Action, clip: A
 
     case "edit_piece":
       return editPiece(timeline, action.id, action.changes, clip, makers, signal)
+
+    case "look":
+      // a look changes nothing: the agent's loop draws it (agent.ts)
+      return done(timeline, "ดูภาพ")
   }
 }
 
