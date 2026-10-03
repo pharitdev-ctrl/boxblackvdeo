@@ -1,0 +1,52 @@
+# Agent editor phase 0: findings
+
+## Spike A: segment identity (2026-10-03, CapCut 9.5.0, project "1003 (1)")
+
+Snapshot right after BOXBLACK wrote the draft (6 tracks, 51 segments, 238 materials), then the user opened it in
+CapCut, closed it, opened it again, made the edits below and closed it. `compare` against the first snapshot:
+
+```
+draft "1003 (1)" · CapCut 9.5.0 → 9.5.0 · draft id kept
+tracks: 6 → 7, ids kept 6/6
+materials: 238 → 233, ids kept 232/238
+segments: 51 → 51 · same id 50 · gone 1 · new 1
+
+== same id, changed ==
+- video/videos IMG_9861.MOV @18.93s+3.10s
+    duration 3.10s → 2.53s
+    keyframes 120 → 120 (ids kept 116)
+- text/texts “อร่อยหรือเปล่า?” @9.53s+1.20s
+    content “อร่อยหรือเปล่า?” → “อร่อยหรือไหม?”
+    start 9.53s → 9.10s
+    duration 1.20s → 1.60s
+(48 with the same id and nothing changed)
+
+== gone ==
+- audio/audios e59bb1679d792ddc.wav @9.53s+0.80s
+
+== new ==
+- sticker/stickers 38ab879f27d1b8beb62a462a72261ade @9.50s+3.00s
+
+draft fields added: none · dropped: none
+```
+
+**What it shows**
+
+- **CapCut's own save keeps every id.** The 48 segments the user did not touch kept their ids and every field; the
+  draft id, all track ids and the materials' ids survived. The compare covers both CapCut sessions, so opening and
+  saving alone changed nothing that matters.
+- **Each user edit is readable.** Trimming the main video changed its duration; moving and rewording a text changed
+  its start, duration and words (read from its material); deleting a sound removed its segment (and its materials:
+  238 → 233); a sticker the user added came as a new segment on a new track.
+- **Keyframe ids are not stable.** Trimming the clip kept 116 of its 120 keyframe ids: CapCut regenerates the
+  keyframes it touches. The app must read keyframes back by time and value, never by id.
+
+**Decision for spec §9:** match pieces by `segmentIds`, as the spec says. Segments the app does not know are the
+user's. A known segment that is gone was deleted by the user. Keyframes are compared by content.
+
+Not tested yet: splitting a segment in two (one keeps the id, one is new?), copy and paste, undo after save, and a
+draft moved to another Mac. Worth a second round before phase 5.
+
+## Spike B: preview
+
+Waiting for the draft folder, the source video and `~/Movies/CapCut/BOXBLACK` from the user.

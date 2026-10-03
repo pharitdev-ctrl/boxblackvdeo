@@ -37,6 +37,8 @@ A snapshot keeps, per track: the track id and type, and per segment: segment id,
 | Ids change on save, materials keep theirs | match by material id |
 | Both change | match by material path or text plus nearest time; note the risk |
 
+**Result (2026-10-03):** ids survive CapCut's save and the user's edits; keyframe ids do not. See `2026-10-03-agent-spike/findings.md`.
+
 ## Spike B: preview from a draft (done here)
 
 **Script:** `scripts/preview-spike.ts <draft folder> <out folder>`
