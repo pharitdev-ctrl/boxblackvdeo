@@ -11,6 +11,7 @@ const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
 
 const CLIP: FreeClip = {
   brief: { targetSeconds: null, videoType: "review", instructions: " เน้นราคา " },
+  direction: "สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์",
   level: "medium",
   portrait: true,
   captionsFromY: 0.82,
@@ -48,7 +49,8 @@ const CLIP: FreeClip = {
 }
 
 test("the prompt goes by its version and asks for every field of the reply on a line of its own", () => {
-  expect(FREE_PLAN_PROMPT_VERSION).toBe("free-plan-2026-10-01b")
+  expect(FREE_PLAN_PROMPT_VERSION).toBe("free-plan-2026-10-03-direction")
+  expect(FREE_PLAN_PROMPT.system).toContain("\n- ทำให้เข้ากับแนวทางของคลิป ทั้งช่วงที่ควรใส่หนักหรือเบาและสไตล์ภาพ ถ้าแนวทางขัดกับคำสั่งเพิ่มเติมของผู้ใช้ ให้ทำตามคำสั่งของผู้ใช้\n")
   // a graphic tied to a point starts in that point's stretch: where its text comes up, or where it plays when it has none
   expect(FREE_PLAN_PROMPT.system).toContain("\n- ชิ้นที่เล่าเรื่องของจุดเน้นไหน ให้บอกเลขจุด ชิ้นนั้นต้องเริ่มในช่วงของจุดนั้น คือช่วงที่ข้อความเด่นของจุดขึ้น หรือช่วงที่จุดนั้นเล่นถ้าจุดไม่มีข้อความเด่น\n")
   expect(FREE_PLAN_PROMPT.version).toBe(FREE_PLAN_PROMPT_VERSION)
@@ -65,6 +67,7 @@ test("the clip is described with every list in its order, each time on the clock
       "brief",
       "- ประเภทวิดีโอ: review",
       "- คำสั่งเพิ่มเติม: เน้นราคา",
+      "- แนวทางของคลิป: สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์",
       "",
       "ระดับที่ผู้ใช้เลือก: medium",
       "จอ แนวตั้ง · ซับ: แถบ [0.82, 1] อยู่ข้างหน้ากราฟิก",
@@ -103,12 +106,13 @@ test("the clip is described with every list in its order, each time on the clock
 })
 
 test("an empty clip says so on every list, and a landscape one with no subtitles and no brief says that", () => {
-  const empty: FreeClip = { ...CLIP, brief: { targetSeconds: null, videoType: null, instructions: "  " }, level: "light", portrait: false, captionsFromY: null, words: [], points: [], texts: [], scenes: [], own: [] }
+  const empty: FreeClip = { ...CLIP, brief: { targetSeconds: null, videoType: null, instructions: "  " }, direction: undefined, level: "light", portrait: false, captionsFromY: null, words: [], points: [], texts: [], scenes: [], own: [] }
   expect(describeFreeClip(empty)).toBe(
     [
       "brief",
       "- ประเภทวิดีโอ: ไม่ระบุ",
       "- คำสั่งเพิ่มเติม: ไม่ระบุ",
+      "- แนวทางของคลิป: ไม่มี",
       "",
       "ระดับที่ผู้ใช้เลือก: light",
       "จอ แนวนอน · ไม่มีซับ",

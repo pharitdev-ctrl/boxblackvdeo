@@ -35,6 +35,7 @@ const reply: OutlineReply = {
   title: "นักบินอวกาศ",
   summary: "เล่าว่านักบินขึ้นอวกาศอย่างไร",
   omitted: "ตัดช่วงนับถอยหลังที่พูดผิด",
+  direction: "  ตื่นเต้น จังหวะเร็ว ช่วงคำตอบเป็นไฮไลต์  ",
   beats: [
     { name: "เปิดเรื่อง", purpose: "ตั้งคำถาม", clip: "v1", from: "u1", to: "u1" },
     { name: "คำตอบ", purpose: "เฉลย", clip: "v1", from: "u2", to: "u2" },
@@ -107,6 +108,32 @@ test("a revision passes the current outline and the user's instruction", async (
   expect(last).toContain("1. v1 u2–u2 · คำตอบ — เฉลย")
   expect(last).not.toContain("เปิดเรื่อง")
   expect(last).toContain("คำสั่งแก้จากผู้ใช้: เพิ่มช่วงเปิดกลับมา")
+})
+
+test("the outline keeps the planner's direction, trimmed", async () => {
+  const { transport } = fakeTransport(reply)
+  const result = await planOutline({ transport, model: "m", clips, brief: noBrief })
+  expect(result.outline.direction).toBe("ตื่นเต้น จังหวะเร็ว ช่วงคำตอบเป็นไฮไลต์")
+})
+
+test("the planner is told what the decorating adds and asked for a direction", () => {
+  const { system } = PLANNER_PROMPT
+  expect(system).toContain("ซูมและขยับภาพ แทรกรูปหรือคลิปจากโปรเจค ข้อความเด่นบนจอ กราฟิกเคลื่อนไหว เสียงประกอบ และซับ")
+  expect(system).toContain("direction คือแนวทางตกแต่งของทั้งคลิป")
+})
+
+test("a revision and a fresh take show the current direction, or none on an older outline", async () => {
+  const first = await planOutline({ ...fakeTransport(reply), model: "m", clips, brief: noBrief })
+  const revised = fakeTransport(reply)
+  await planOutline({ transport: revised.transport, model: "m", clips, brief: noBrief, previous: first.outline, instruction: "สั้นลง" })
+  const revision = texts(revised.requests[0]!.content).at(-1)!
+  expect(revision).toContain("แนวทางตกแต่งฉบับปัจจุบัน: ตื่นเต้น จังหวะเร็ว ช่วงคำตอบเป็นไฮไลต์")
+  expect(revision).toContain("คง direction ไว้ถ้าคำสั่งไม่เกี่ยวกับเรื่องนี้")
+
+  const { direction: _, ...older } = first.outline
+  const fresh = fakeTransport(reply)
+  await planOutline({ transport: fresh.transport, model: "m", clips, brief: noBrief, previous: older })
+  expect(texts(fresh.requests[0]!.content).at(-1)!).toContain("แนวทางตกแต่งฉบับปัจจุบัน: ไม่มี")
 })
 
 test("a system prompt handed in replaces the built-in one, and its version is returned", async () => {

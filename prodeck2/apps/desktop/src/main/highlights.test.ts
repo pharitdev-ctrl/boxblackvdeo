@@ -142,6 +142,13 @@ test("before any is picked there is no highlight text, the default style and a p
   })
 })
 
+test("Claude is told the outline's direction when it picks the text", async () => {
+  const { highlights, folder, claude, outlines } = await withHighlights()
+  await outlines.update(folder, (stored) => ({ ...stored!, outline: { ...stored!.outline, direction: "ลุ้น จังหวะเร็ว" } }))
+  await highlights.pick(folder, DEFAULT_CUT_RULES, VIEW)
+  expect(textOf(claude.requests[0]!.content)).toContain("\n- แนวทางของคลิป: ลุ้น จังหวะเร็ว\n")
+})
+
 test("Claude picks from the emphasis points; each group carries its point, shows where its words play, and has the look chosen with it", async () => {
   const { highlights, folder, claude, outlines } = await withHighlights()
   const { preview, dropped } = await highlights.pick(folder, DEFAULT_CUT_RULES, VIEW)

@@ -10,7 +10,7 @@ import type { EmphasisPoint } from "@boxblack/core/emphasis"
 import { SOUND_VERSION, type ComposedSound } from "@boxblack/core/sound/spec"
 import { PROMPT_VERSION, VISION_PROMPT, VISION_SAMPLING, type VideoInsight, type VisionKey } from "@boxblack/core/vision"
 import type { ProjectDetail } from "../shared/api.ts"
-import { createPlannerService, OutlineStore, type PlannerDeps } from "./planner.ts"
+import { createPlannerService, OUTLINE_DIRECTION_MAX, OutlineStore, type PlannerDeps } from "./planner.ts"
 import { POST_VERSION, withoutKitGraphics, withoutOldEffects } from "./post-cleanup.ts"
 import { SecretStore, SettingsStore, type SecretBox } from "./settings.ts"
 
@@ -47,6 +47,7 @@ const firstReply: OutlineReply = {
   title: "เรื่องแรก",
   summary: "สรุป",
   omitted: "",
+  direction: "สนุก จังหวะเร็ว",
   beats: [
     { name: "เปิด", purpose: "ดึงความสนใจ", clip: "v1", from: "u2", to: "u2" },
     { name: "ภาพ", purpose: "ประกอบ", clip: "v2", from: "s1", to: "s1" },
@@ -552,4 +553,22 @@ test("a stored composed entry that is no sound is left as it is when beats are t
   expect(next.flair!.composed).toEqual([...odd, soundOn(2_000_000, grown)])
   const left = await service.saveEdits(project.folder, [picture!.id], true)
   expect(left.flair!.composed).toEqual(odd)
+})
+
+test("the planner's direction is stored with the outline, and the user's own words replace it without touching the confirmation", async () => {
+  const { service, project } = await setup()
+  const planned = await service.plan(project.folder, ["talk", "broll"], brief)
+  expect(planned.outline.direction).toBe("สนุก จังหวะเร็ว")
+  const confirmed = await service.saveEdits(project.folder, planned.outline.beats.map((beat) => beat.id), true)
+
+  const saved = await service.saveDirection(project.folder, `  ${"ก".repeat(OUTLINE_DIRECTION_MAX + 5)}  `)
+  expect(saved.outline.direction).toBe("ก".repeat(OUTLINE_DIRECTION_MAX))
+  expect(saved.confirmed).toBe(true)
+  expect(saved.outline.beats).toEqual(confirmed.outline.beats)
+  expect((await service.get(project.folder))!.outline.direction).toBe("ก".repeat(OUTLINE_DIRECTION_MAX))
+})
+
+test("a direction cannot be saved on a project with no outline", async () => {
+  const { service, project } = await setup()
+  await expect(service.saveDirection(project.folder, "สนุก")).rejects.toThrow()
 })

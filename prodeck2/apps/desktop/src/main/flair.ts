@@ -240,6 +240,8 @@ interface WritingWork {
   llm: { transport: LlmTransport; model: string }
   canvas: { width: number; height: number }
   about: string
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   captionsFromY: number | null
   signal?: AbortSignal
 }
@@ -600,7 +602,7 @@ export function createFlairService(deps: FlairDeps) {
       ...(what !== null ? [`ท่อนนี้ขยับสื่อแทรก “${what}” ไม่ใช่ตัวคลิป`] : []),
       ...(instruction === null ? [`ทำใหม่เฉพาะท่อนที่เริ่มคำที่ ${index + 1}`] : [`แก้ท่อนที่เริ่มคำที่ ${index + 1} ตามคำสั่ง: ${instruction}`, `ท่าเดิม: ${JSON.stringify(cue.poses)}`]),
     ]
-    const clip: TechniqueClip = { brief: stored.brief, level: view.flair.level, words: shown.words.map(({ text, atUs }) => ({ text, atUs })), points: shown.points, pieces: shown.pieces, scenes: shown.scenes, media: [] }
+    const clip: TechniqueClip = { brief: stored.brief, direction: stored.outline.direction, level: view.flair.level, words: shown.words.map(({ text, atUs }) => ({ text, atUs })), points: shown.points, pieces: shown.pieces, scenes: shown.scenes, media: [] }
     progress?.(0, 1)
     const reply = await llm.transport.generate({
       model: llm.model,
@@ -691,6 +693,7 @@ export function createFlairService(deps: FlairDeps) {
       words: graphic.wordsNow ?? [],
       idea: spec.idea,
       about: work.about,
+      ...(work.direction === undefined ? {} : { direction: work.direction }),
       ...freeBrief(graphic, spec.box, height, pointText, work.captionsFromY),
     }
     // a free graphic is written to take its point's text's place exactly when it covers that text where it plays now
@@ -908,6 +911,7 @@ export function createFlairService(deps: FlairDeps) {
           transport,
           model,
           brief: stored.brief,
+          direction: stored.outline.direction,
           level: view.flair.level,
           words: shown.words.map(({ text, atUs }) => ({ text, atUs })),
           points: shown.points,
@@ -1068,6 +1072,7 @@ export function createFlairService(deps: FlairDeps) {
       const own = [...before.kept, ...before.off].filter((graphic) => graphic.cue.edited).sort((a, b) => a.atUs - b.atUs)
       const clip: FreeClip = {
         brief: stored.brief,
+        direction: stored.outline.direction,
         level: view.flair.level,
         portrait: canvas.height > canvas.width,
         captionsFromY: captionsOf(view),
@@ -1194,7 +1199,7 @@ export function createFlairService(deps: FlairDeps) {
       )
       onStored?.()
       if (unwritten.length === 0) return { count: 0, dropped }
-      const work: WritingWork = { folder, rules, llm, canvas, about: aboutOf(stored), captionsFromY: captionsOf(view), signal }
+      const work: WritingWork = { folder, rules, llm, canvas, about: aboutOf(stored), direction: stored.outline.direction, captionsFromY: captionsOf(view), signal }
       let written = 0
       let failed = 0
       progress?.(0, unwritten.length)
@@ -1243,7 +1248,7 @@ export function createFlairService(deps: FlairDeps) {
         progress?.(0, 1)
         // a fault a render found on this machine may have been mended since: the writing looks again
         deps.graphics?.forgetMachine()
-        return calls.run(() => writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), captionsFromY: captionsOf(request.view), signal }, placed))
+        return calls.run(() => writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), direction: stored.outline.direction, captionsFromY: captionsOf(request.view), signal }, placed))
       })
       progress?.(1, 1)
       return countedOne(ended)
@@ -1273,7 +1278,7 @@ export function createFlairService(deps: FlairDeps) {
         progress?.(0, 1)
         // a fault a render found on this machine may have been mended since: the writing looks again
         deps.graphics?.forgetMachine()
-        return calls.run(() => writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), captionsFromY: captionsOf(request.view), signal }, placed, { instruction: instruction.trim(), html }))
+        return calls.run(() => writeGraphic({ folder, rules: request.rules, llm, canvas, about: aboutOf(stored), direction: stored.outline.direction, captionsFromY: captionsOf(request.view), signal }, placed, { instruction: instruction.trim(), html }))
       })
       if (ended === "failed") await restore?.()
       progress?.(1, 1)

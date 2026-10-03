@@ -76,6 +76,7 @@ test("a point's importance and type read in Thai", () => {
 
 const CLIP: TechniqueClip = {
   brief: BRIEF,
+  direction: "สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์",
   level: "medium",
   words: WORDS,
   points: POINTS,
@@ -111,6 +112,7 @@ test("the request lists the level, every word, the points, the pieces with their
       "brief",
       "- ประเภทวิดีโอ: review",
       "- คำสั่งเพิ่มเติม: เน้นราคา",
+      "- แนวทางของคลิป: สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์",
       "",
       "ระดับที่ผู้ใช้เลือก: medium",
       "",
@@ -290,7 +292,7 @@ test("the call carries the prompt, room for a long answer, and each picture's fr
 
 test("the prompt asks for moves on words and cutaways in place of zooms on points, and keeps the cutaway rules", () => {
   expect(TECHNIQUES_PROMPT.version).toBe(TECHNIQUES_PROMPT_VERSION)
-  expect(TECHNIQUES_PROMPT_VERSION).toBe("techniques-2026-10-02-moves")
+  expect(TECHNIQUES_PROMPT_VERSION).toBe("techniques-2026-10-03-direction")
   const system = TECHNIQUES_PROMPT.system
   // the plan's block, verbatim, then the cutaway part
   const moves = [
@@ -309,7 +311,8 @@ test("the prompt asks for moves on words and cutaways in place of zooms on point
   expect(moves).toHaveLength(11)
   expect(system).toContain(`\n\n${moves.join("\n")}\n\nสื่อแทรก:`)
   expect(system).toContain("มีสองอย่าง คือการเคลื่อนภาพ (ซูม) และตัดไปสื่อแทรก")
-  expect(system).toContain("ข้อมูลที่ได้: brief ของวิดีโอ ระดับที่ผู้ใช้เลือก คำพูดทุกคำพร้อมเลขและเวลา")
+  expect(system).toContain("ข้อมูลที่ได้: brief ของวิดีโอ แนวทางของคลิป ระดับที่ผู้ใช้เลือก คำพูดทุกคำพร้อมเลขและเวลา")
+  expect(system).toContain("\nทำให้เข้ากับแนวทางของคลิป ถ้าแนวทางขัดกับคำสั่งเพิ่มเติมของผู้ใช้ ให้ทำตามคำสั่งของผู้ใช้\n")
   expect(system).toContain("รูปเดียวกันใช้ได้หลายจุดถ้าเข้ากันจริงๆ")
   expect(system).not.toContain("ซูมภาพ:")
   expect(system).not.toContain("หนึ่งชิ้นซูมได้ครั้งเดียว")

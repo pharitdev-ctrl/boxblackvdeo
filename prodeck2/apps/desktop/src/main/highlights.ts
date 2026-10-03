@@ -757,6 +757,7 @@ export function createHighlightService(deps: HighlightDeps) {
         transport,
         model,
         brief: stored.brief,
+        direction: stored.outline.direction,
         durationUs: plan.durationUs,
         points: offered,
         wordsOf: wordsIn(clips),

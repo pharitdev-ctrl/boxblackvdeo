@@ -1346,6 +1346,18 @@ test("graphics are planned on the whole clip, every word numbered, and stored wi
   expect(claude.requests).toHaveLength(before)
 })
 
+test("the outline's direction reaches the techniques, the graphics plan and every graphic's writing", async () => {
+  const { flair, folder, claude, outlines } = await withPoints({}, { texts: true })
+  await outlines.update(folder, (stored) => ({ ...stored!, outline: { ...stored!.outline, direction: "ลุ้น จังหวะเร็ว" } }))
+  claude.replies.set(TECHNIQUES_PROMPT.system, { moves: [], inserts: [] })
+  await flair.planTechniques(folder, request())
+  expect(textOf(callsWith(claude, TECHNIQUES_PROMPT.system).at(-1)!.content)).toContain("\n- แนวทางของคลิป: ลุ้น จังหวะเร็ว\n")
+  claude.replies.set(FREE_PLAN_PROMPT.system, { graphics: [onPoint(1)] })
+  await flair.planGraphics(folder, request({ graphic: true }))
+  expect(textOf(callsWith(claude, FREE_PLAN_PROMPT.system).at(-1)!.content)).toContain("\n- แนวทางของคลิป: ลุ้น จังหวะเร็ว\n")
+  expect(briefs(claude).at(-1)).toContain("\n- The clip's direction: ลุ้น จังหวะเร็ว")
+})
+
 /** The brief of a free graphic written beside the text of its moment, as every graphic in BOX is on the fixture. */
 const pairsBrief = (args: Parameters<typeof motionBrief>[0]) => motionBrief({ ...args, text: { pairs: true } })
 

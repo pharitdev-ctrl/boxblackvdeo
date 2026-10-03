@@ -269,7 +269,7 @@ const textOf = (content: LlmContent[]) => content.flatMap((c) => (c.type === "te
 test("Claude gets the brief, the styles, patterns and exits it may use, and the numbered points with their kind, weight, beat, time and words", async () => {
   const { transport, requests } = fakeTransport({ style: "cute-pink", groups: [group(3, [["ทักมาได้เลย"]])] })
   const brief = { targetSeconds: 60, videoType: "review" as const, instructions: "เน้นราคา" }
-  const result = await pickHighlights({ transport, model: "claude-opus-5", brief, durationUs: 72_000_000, points, wordsOf, maxChars: 12, newId: ids(), pro: true })
+  const result = await pickHighlights({ transport, model: "claude-opus-5", brief, direction: "สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์", durationUs: 72_000_000, points, wordsOf, maxChars: 12, newId: ids(), pro: true })
   expect(result).toEqual({
     style: "cute-pink",
     dropped: 0,
@@ -282,12 +282,13 @@ test("Claude gets the brief, the styles, patterns and exits it may use, and the 
   expect(request.system).toBe(HIGHLIGHT_PROMPT.system)
   expect(request.schema).toBe(HighlightReplySchema)
   expect(HIGHLIGHT_PROMPT.version).toBe(HIGHLIGHT_PROMPT_VERSION)
-  expect(HIGHLIGHT_PROMPT_VERSION).toBe("highlights-2026-09-27-points")
+  expect(HIGHLIGHT_PROMPT_VERSION).toBe("highlights-2026-10-03-direction")
+  expect(HIGHLIGHT_PROMPT.system).toContain("ทำให้เข้ากับแนวทางของคลิป ถ้าแนวทางขัดกับคำสั่งเพิ่มเติมของผู้ใช้ ให้ทำตามคำสั่งของผู้ใช้")
   const text = textOf(request.content)
   for (const style of Object.values(HIGHLIGHT_STYLES)) expect(text).toContain(`- ${style.id}: ${style.mood}`)
   expect(text).toContain("review")
   expect(text).toContain("60 วินาที")
-  expect(text).toContain("เน้นราคา")
+  expect(text).toContain("- คำสั่งเพิ่มเติม: เน้นราคา\n- แนวทางของคลิป: สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์\n")
   expect(text).toContain("1:12")
   expect(text).toContain("ไม่เกิน 12 ตัวอักษร")
   expect(text).toContain("- bar: ")

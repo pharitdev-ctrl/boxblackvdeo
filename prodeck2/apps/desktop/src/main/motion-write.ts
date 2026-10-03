@@ -23,6 +23,8 @@ export interface PieceToWrite {
   idea: string
   /** what the clip is about, in one line */
   about: string
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   /** on a free graphic: whether it shows in place of its point's highlight text, which it is then told, or beside the text of its moment */
   text?: { replaces: string } | { pairs: true }
   /** on a free graphic reaching below where the subtitles' room starts: where that is on its stage, in its own pixels */

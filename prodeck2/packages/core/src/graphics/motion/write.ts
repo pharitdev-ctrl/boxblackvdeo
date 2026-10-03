@@ -2,7 +2,7 @@ import { TEXT_REPLY } from "../../llm/text-reply.ts"
 import type { LlmTransport } from "../../llm/types.ts"
 import { TEXT_STAGE_MIN_PX, type MotionWord } from "../plan.ts"
 
-export const MOTION_WRITE_PROMPT_VERSION = "motion-write-2026-10-01b"
+export const MOTION_WRITE_PROMPT_VERSION = "motion-write-2026-10-03-direction"
 
 /**
  * What Claude writes a motion graphic by, as the system prompt of the writing call: the one shape a fragment has,
@@ -47,6 +47,7 @@ You write ONE HTML fragment, in exactly this order: one \`<style>\` block first,
 - Timings that do not depend on a word (the way out near \`D\`, a fixed hold) may be typed numbers.
 
 **Look.**
+- When the brief gives the clip's direction (in Thai), match its mood, pace and visual style.
 - Text is Thai. The font is already set on the stage (it inherits; one bold weight; do not name fonts, do not use \`font-weight\`). Smallest text 44 px. Keep every text inside the stage with at least 40 px of margin. Do not animate Thai text letter by letter.
 - It sits on moving video: text needs an opaque shape behind it or a thick dark outline (\`-webkit-text-stroke\` with \`paint-order: stroke fill\`). No semi-transparent washes over large areas.
 - Colours come from variables: \`var(--ink)\` (dark outline and dark shapes), \`var(--paper)\` (white), \`var(--accent)\` (the main accent), \`var(--alt)\` (second colour), \`var(--bar)\` and \`var(--text)\` (a plate and the text that is readable on it). Do not type other colour codes, except a tint made with \`color-mix()\` from these.
@@ -73,6 +74,8 @@ export function motionBrief(args: {
   words: MotionWord[]
   idea: string
   about: string
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   text?: { replaces: string } | { pairs: true }
   /** the stage's own y where the subtitles start, 0 <= px < H */
   captionsFromPx?: number
@@ -95,6 +98,7 @@ export function motionBrief(args: {
     ...(args.stage.height < TEXT_STAGE_MIN_PX ? ["- The stage is too small for text: draw shapes only, with no text."] : []),
     `- What to draw: ${args.idea}`,
     `- The clip is about: ${args.about}.`,
+    ...(args.direction?.trim() ? [`- The clip's direction: ${args.direction.replace(/\s+/g, " ").trim()}`] : []),
   ].join("\n")
 }
 

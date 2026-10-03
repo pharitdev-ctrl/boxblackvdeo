@@ -12,7 +12,7 @@ import { HIGHLIGHT_STYLES, PICKABLE_STYLE_IDS, type HighlightStyleId } from "./s
 import { comparable, composeThai as composed } from "../thai.ts"
 
 // M25: picked from the emphasis points, with each group's look in the same answer
-export const HIGHLIGHT_PROMPT_VERSION = "highlights-2026-09-27-points"
+export const HIGHLIGHT_PROMPT_VERSION = "highlights-2026-10-03-direction"
 
 /**
  * What stands between the parts of a sentence Claude is shown where the cut took words out: a mark of
@@ -22,7 +22,7 @@ export const PART_BREAK = " … "
 
 const SYSTEM = `คุณทำ "ข้อความเด่น" ให้วิดีโอสั้น คือตัวหนังสือใหญ่บนภาพ ซ้อนกันทีละบรรทัดตรงจังหวะที่พูด แล้วหายไปพร้อมกัน และเลือกว่าแต่ละชุดแสดงแบบไหน
 
-ข้อมูลที่ได้: brief ของวิดีโอ สไตล์ตัวอักษร รูปแบบและแอนิเมชันที่ใช้ได้ และจุดเน้นของคลิปเรียงตามเวลา แต่ละจุดมีเลข ชนิด (คำพูดหรือภาพ) ความสำคัญ (สำคัญ รอง เสริม) ประเภท ชื่อช่วง เวลาบนวิดีโอ และเหตุผลที่เน้น
+ข้อมูลที่ได้: brief ของวิดีโอ แนวทางของคลิป สไตล์ตัวอักษร รูปแบบและแอนิเมชันที่ใช้ได้ และจุดเน้นของคลิปเรียงตามเวลา แต่ละจุดมีเลข ชนิด (คำพูดหรือภาพ) ความสำคัญ (สำคัญ รอง เสริม) ประเภท ชื่อช่วง เวลาบนวิดีโอ และเหตุผลที่เน้น
 
 เลือกจุด
 - ตัวหนังสือมาจากจุดเน้นเท่านั้น ตอบหนึ่งชุดต่อจุด point คือเลขจุด จุดหนึ่งมีได้ชุดเดียว
@@ -58,7 +58,9 @@ const SYSTEM = `คุณทำ "ข้อความเด่น" ให้ว
 - alt = สีที่สอง สลับให้คลิปไม่จำเจ
 - โทนเดียวกันติดกันไม่เกิน 3 ชุด · คำที่เน้นสี (accentWord) ยังใช้ได้ทุกโทน จะได้สีที่ต่างจากชุดนั้นเอง
 
-เลือกสไตล์หนึ่งแบบที่เข้ากับเนื้อหาและอารมณ์ของวิดีโอ ตอบด้วย id ของสไตล์`
+เลือกสไตล์หนึ่งแบบที่เข้ากับเนื้อหาและอารมณ์ของวิดีโอ ตอบด้วย id ของสไตล์
+
+ทำให้เข้ากับแนวทางของคลิป ถ้าแนวทางขัดกับคำสั่งเพิ่มเติมของผู้ใช้ ให้ทำตามคำสั่งของผู้ใช้`
 
 /** The prompt built into the app. */
 export const HIGHLIGHT_PROMPT: SystemPrompt = { system: SYSTEM, version: HIGHLIGHT_PROMPT_VERSION }
@@ -302,7 +304,7 @@ function pointLine(point: HighlightPoint, index: number): string {
   return `${head} ${body}${reason ? ` · เหตุผล: ${reason}` : ""}`
 }
 
-function describe(args: { brief: Brief; durationUs: number; maxChars: number; landscape: boolean; pro: boolean; points: HighlightPoint[] }): string {
+function describe(args: { brief: Brief; direction?: string; durationUs: number; maxChars: number; landscape: boolean; pro: boolean; points: HighlightPoint[] }): string {
   const { brief } = args
   const exits = exitsFor(args.pro)
   return [
@@ -310,6 +312,7 @@ function describe(args: { brief: Brief; durationUs: number; maxChars: number; la
     `- ประเภทวิดีโอ: ${brief.videoType ?? "ไม่ระบุ"}`,
     `- ความยาวที่ต้องการ: ${brief.targetSeconds ? `${brief.targetSeconds} วินาที` : "ไม่ระบุ"}`,
     `- คำสั่งเพิ่มเติม: ${brief.instructions.trim() || "ไม่ระบุ"}`,
+    `- แนวทางของคลิป: ${args.direction?.trim() || "ไม่มี"}`,
     "",
     `ความยาววิดีโอหลังตัด ${duration(args.durationUs)}`,
     `แต่ละบรรทัดยาวไม่เกิน ${args.maxChars} ตัวอักษร`,
@@ -333,6 +336,8 @@ export async function pickHighlights(args: {
   transport: LlmTransport
   model: string
   brief: Brief
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   durationUs: number
   points: HighlightPoint[]
   wordsOf: (videoId: string) => TimedText[]

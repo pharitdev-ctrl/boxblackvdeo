@@ -185,13 +185,14 @@ test("keptReason trims a reason and cuts it to EMPHASIS_REASON_MAX UTF-16 units 
 })
 
 test("Claude is shown the brief, the beats with their purpose, the numbered sentences and the scenes with their time, length, kind, description and the beat's picture", () => {
-  const text = describeEmphasis({ brief: { targetSeconds: 60, videoType: "review", instructions: "เน้นราคา" }, durationUs: 45_000_000, beats, sentences, scenes })
+  const text = describeEmphasis({ brief: { targetSeconds: 60, videoType: "review", instructions: "เน้นราคา" }, direction: " สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์ ", durationUs: 45_000_000, beats, sentences, scenes })
   expect(text).toBe(
     [
       "brief",
       "- ประเภทวิดีโอ: review",
       "- ความยาวที่ต้องการ: 60 วินาที",
       "- คำสั่งเพิ่มเติม: เน้นราคา",
+      "- แนวทางของคลิป: สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์",
       "",
       "ความยาววิดีโอหลังตัด 0:45",
       "",
@@ -214,7 +215,7 @@ test("Claude is shown the brief, the beats with their purpose, the numbered sent
 
 test("what is missing is said so: an empty brief, no sentences, no scenes, a beat with no picture asked for", () => {
   const text = describeEmphasis({ brief: { targetSeconds: null, videoType: null, instructions: "  " }, durationUs: 1, beats: [], sentences: [], scenes: [{ ...scenes[0]!, visual: " " }] })
-  expect(text).toContain("- ประเภทวิดีโอ: ไม่ระบุ\n- ความยาวที่ต้องการ: ไม่ระบุ\n- คำสั่งเพิ่มเติม: ไม่ระบุ")
+  expect(text).toContain("- ประเภทวิดีโอ: ไม่ระบุ\n- ความยาวที่ต้องการ: ไม่ระบุ\n- คำสั่งเพิ่มเติม: ไม่ระบุ\n- แนวทางของคลิป: ไม่มี")
   expect(text).toContain("ประโยค\nไม่มีประโยคที่พูด ตอบเฉพาะจุดจากฉาก")
   expect(text).toContain("ภาพที่บีตนี้ต้องการ: ไม่ระบุ")
   expect(describeEmphasis({ brief: { targetSeconds: null, videoType: null, instructions: "" }, durationUs: 1, beats: [], sentences, scenes: [] })).toContain("ฉากในบีตภาพ\nไม่มีฉากในบีตภาพ ตอบเฉพาะจุดจากคำพูด")
@@ -285,9 +286,10 @@ test("the reply schema takes whole sentence numbers or null, the known importanc
 })
 
 test("the prompt carries its version and the rules the spec sets", () => {
-  expect(EMPHASIS_PROMPT_VERSION).toBe("emphasis-2026-09-27")
+  expect(EMPHASIS_PROMPT_VERSION).toBe("emphasis-2026-10-03-direction")
   expect(EMPHASIS_PROMPT.version).toBe(EMPHASIS_PROMPT_VERSION)
   for (const rule of [
+    "ทำให้เข้ากับแนวทางของคลิป ถ้าแนวทางขัดกับคำสั่งเพิ่มเติมของผู้ใช้ ให้ทำตามคำสั่งของผู้ใช้",
     "จุดแรกของคลิปเป็น hook",
     "key = สิ่งที่คนดูต้องจำได้",
     "secondary = สิ่งที่ช่วยให้เข้าใจเรื่อง",

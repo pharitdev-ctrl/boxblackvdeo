@@ -306,3 +306,45 @@ test("after a beat is removed and saved, the list is asked for again", async () 
   expect(await screen.findByText("เอาล่ะครับวันนี้")).toBeTruthy()
   expect(api.calls.filter(([name]) => name === "unusedParts").length).toBeGreaterThanOrEqual(2)
 })
+
+test("shows the planner's direction and saves the user's own words for it, keeping the outline confirmed", async () => {
+  const stored = storedOutline()
+  const planned: StoredOutline = { ...stored, confirmed: true, outline: { ...stored.outline, direction: "สนุก จังหวะเร็ว" } }
+  const { api } = renderScreen({
+    ...withSaved(planned),
+    saveOutlineDirection: async (_folder, direction) => ({ ...planned, updatedAt: planned.updatedAt + 1, outline: { ...planned.outline, direction } }),
+  })
+  expect(await screen.findByText("สนุก จังหวะเร็ว")).toBeTruthy()
+  await userEvent.click(screen.getByRole("button", { name: t("outline.directionEdit") }))
+  const editor = screen.getByLabelText(t("outline.direction"))
+  await userEvent.clear(editor)
+  await userEvent.type(editor, "  เรียบ อบอุ่น  ")
+  await userEvent.click(screen.getByRole("button", { name: t("outline.directionSave") }))
+  expect(api.calls).toContainEqual(["saveOutlineDirection", FOLDER, "เรียบ อบอุ่น"])
+  await waitFor(() => expect(screen.queryByLabelText(t("outline.direction"))).toBeNull())
+  expect(screen.getByText("เรียบ อบอุ่น", { selector: ".direction-card p" })).toBeTruthy()
+})
+
+test("an outline with no direction offers to add one; cancelling leaves it as it was", async () => {
+  const { api } = renderScreen(withSaved())
+  await userEvent.click(await screen.findByRole("button", { name: t("outline.directionAdd") }))
+  await userEvent.type(screen.getByLabelText(t("outline.direction")), "สนุก")
+  await userEvent.click(screen.getByRole("button", { name: t("outline.cancel") }))
+  expect(screen.getByRole("button", { name: t("outline.directionAdd") })).toBeTruthy()
+  expect(api.calls.some(([method]) => method === "saveOutlineDirection")).toBe(false)
+})
+
+test("a direction that cannot be saved says why and keeps what was typed", async () => {
+  const stored = storedOutline()
+  renderScreen({
+    ...withSaved({ ...stored, outline: { ...stored.outline, direction: "สนุก" } }),
+    saveOutlineDirection: async () => {
+      throw new Error("disk full")
+    },
+  })
+  await userEvent.click(await screen.findByRole("button", { name: t("outline.directionEdit") }))
+  await userEvent.type(screen.getByLabelText(t("outline.direction")), " มาก")
+  await userEvent.click(screen.getByRole("button", { name: t("outline.directionSave") }))
+  expect(await screen.findByText(t("error.generic", { message: "disk full" }))).toBeTruthy()
+  expect(screen.getByLabelText(t("outline.direction"))).toHaveProperty("value", "สนุก มาก")
+})

@@ -8,11 +8,11 @@ import type { Scene } from "../vision/describe.ts"
 import { pointsOverlap } from "./filter.ts"
 import { EMPHASIS_TYPES, IMPORTANCE, keptReason, type EmphasisAnchor, type EmphasisPoint } from "./types.ts"
 
-export const EMPHASIS_PROMPT_VERSION = "emphasis-2026-09-27"
+export const EMPHASIS_PROMPT_VERSION = "emphasis-2026-10-03-direction"
 
 const SYSTEM = `คุณวาง "จุดเน้น" ให้วิดีโอสั้นที่ตัดหยาบแล้ว จุดเน้นคือสิ่งที่คลิปควรย้ำให้คนดูจำได้หรือเห็นชัด ภายหลังแอปจะวางข้อความเด่น กราฟิก ซูม สื่อแทรก และเสียงเอฟเฟคลงบนจุดเหล่านี้ คุณไม่ต้องเลือกเอฟเฟคเอง
 
-ข้อมูลที่ได้: brief ของวิดีโอ บีตตามลำดับที่เล่นพร้อมหน้าที่ของแต่ละบีต ประโยคที่พูดเรียงตามเวลา แต่ละประโยคมีเลข ช่วง และเวลาบนคลิปที่ตัดแล้ว และฉากในบีตภาพ (บีตที่เล่าด้วยภาพ ไม่มีคำพูด) แต่ละฉากมีเลข s1 s2 … ช่วง เวลา ความยาว ชนิดฉาก คำบรรยายฉาก และภาพที่บีตนั้นต้องการ
+ข้อมูลที่ได้: brief ของวิดีโอ แนวทางของคลิป บีตตามลำดับที่เล่นพร้อมหน้าที่ของแต่ละบีต ประโยคที่พูดเรียงตามเวลา แต่ละประโยคมีเลข ช่วง และเวลาบนคลิปที่ตัดแล้ว และฉากในบีตภาพ (บีตที่เล่าด้วยภาพ ไม่มีคำพูด) แต่ละฉากมีเลข s1 s2 … ช่วง เวลา ความยาว ชนิดฉาก คำบรรยายฉาก และภาพที่บีตนั้นต้องการ
 ช่วง "…" บอกว่าประโยคหรือฉากนั้นอยู่ในบีตไหน
 คำในประโยคถอดจากเสียง อาจสะกดผิด ให้อ่านความหมายจากทั้งประโยค
 
@@ -26,6 +26,7 @@ const SYSTEM = `คุณวาง "จุดเน้น" ให้วิดี
 - ไม่เลือกคำอุทาน คำชมทั่วไป หรือคำลงท้าย เช่น ว้าว สุดยอด ครับ ค่ะ นะคะ
 - ประโยคหนึ่งมีได้หลายจุดถ้าวลีไม่ทับกัน · สองจุดในประโยคเดียวกันห้ามใช้คำตรงตำแหน่งเดียวกันแม้แต่คำเดียว (คำเดียวกันที่พูดคนละที่ใช้ได้) · ฉากหนึ่งเป็นจุดเน้นได้จุดเดียว แอปจะตัดจุดที่ทับจุดก่อนหน้าทิ้งเอง
 - ไม่ต้องเน้นทุกประโยค เลือกเฉพาะที่ควรเน้นจริง ตอบเป็นรายการว่างได้
+- ทำให้เข้ากับแนวทางของคลิป ถ้าแนวทางขัดกับคำสั่งเพิ่มเติมของผู้ใช้ ให้ทำตามคำสั่งของผู้ใช้
 
 ตอบต่อจุด
 - จุดจากคำพูด: at = เลขประโยค · scene = "" · quote = วลีที่คัดลอกจากประโยคนั้นตรงตัว และสั้นกว่าทั้งประโยค ระบบใช้หาเวลาที่พูด
@@ -91,13 +92,14 @@ const duration = (us: number) => {
 const orUnknown = (text: string) => text.trim() || "ไม่ระบุ"
 
 /** The request text: brief, beats with purpose, numbered sentences with rough-cut times, scenes s1… with time, length, description, kind and visual. Exported for tests. */
-export function describeEmphasis(args: { brief: Brief; durationUs: number; beats: EmphasisBeat[]; sentences: HighlightSentence[]; scenes: EmphasisScene[] }): string {
+export function describeEmphasis(args: { brief: Brief; direction?: string; durationUs: number; beats: EmphasisBeat[]; sentences: HighlightSentence[]; scenes: EmphasisScene[] }): string {
   const { brief } = args
   return [
     "brief",
     `- ประเภทวิดีโอ: ${brief.videoType ?? "ไม่ระบุ"}`,
     `- ความยาวที่ต้องการ: ${brief.targetSeconds ? `${brief.targetSeconds} วินาที` : "ไม่ระบุ"}`,
     `- คำสั่งเพิ่มเติม: ${orUnknown(brief.instructions)}`,
+    `- แนวทางของคลิป: ${args.direction?.trim() || "ไม่มี"}`,
     "",
     `ความยาววิดีโอหลังตัด ${duration(args.durationUs)}`,
     "",
@@ -191,6 +193,8 @@ export async function planEmphasis(args: {
   transport: LlmTransport
   model: string
   brief: Brief
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   durationUs: number
   beats: EmphasisBeat[]
   sentences: HighlightSentence[]

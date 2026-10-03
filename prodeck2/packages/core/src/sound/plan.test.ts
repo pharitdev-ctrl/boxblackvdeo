@@ -20,11 +20,11 @@ function fakeTransport(output: SoundPlanReply) {
 // the prompt
 
 test("the planning prompt is the plan's, line for line, and goes by its version", () => {
-  expect(SOUND_PLAN_PROMPT_VERSION).toBe("sound-plan-2026-10-02-moves")
+  expect(SOUND_PLAN_PROMPT_VERSION).toBe("sound-plan-2026-10-03-direction")
   expect(SOUND_PLAN_PROMPT.split("\n")).toEqual([
     "You are the sound designer of a short vertical video. You decide where it gets a sound effect and what each one does, and you set the clip's sound palette so all of them sound like one score. Another call then composes each sound as code from what you write here.",
     "",
-    "You are given the clip as it plays after the rough cut: every spoken word with its number and its time, the beats, the emphasis points with their importance, the highlight text lines, the graphics with their idea, and the HTML that draws them when it is drawn already, the camera moves, the cutaways, and the level of decoration the user chose.",
+    "You are given the clip's direction (in Thai, written when the story was planned, or none), and the clip as it plays after the rough cut: every spoken word with its number and its time, the beats, the emphasis points with their importance, the highlight text lines, the graphics with their idea, and the HTML that draws them when it is drawn already, the camera moves, the cutaways, and the level of decoration the user chose.",
     "",
     "Answer with:",
     "- palette: at most eight short lines in English: the key; the tempo feel; the instruments, as synthesised sounds a Web Audio programmer can build (for example bright square-wave plucks, soft sine bells, marimba-like mallets, filtered noise whooshes, a punchy synth kick, brass-like sawtooth stabs); the character; one short recurring motif as note names; what to avoid.",
@@ -38,6 +38,7 @@ test("the planning prompt is the plan's, line for line, and goes by its version"
     '  - loudness: "soft", "normal" or "strong".',
     "",
     "How to choose:",
+    "- Follow the clip's direction: its mood and pace, and which parts it wants rich or plain.",
     "- Score the clip, not every word. A sound earns its place when it makes a moment land: a reveal, a punchline, a turn, a count, a list, a question, something appearing or moving on screen, a change of beat that needs a lift. Silence is part of the score.",
     "- light is only the moments that matter most; medium adds the clear supporting ones; heavy scores the clip richly. Give every sound the lowest level it should play at, so one answer serves all three levels. Plan for the level the user chose at least as fully as the level asks.",
     "- A graphic whose motion has hits (things appearing, counting, landing) gets a sound that follows its motion.",
@@ -51,6 +52,7 @@ test("the planning prompt is the plan's, line for line, and goes by its version"
 /** The countdown of draft 0917, made small: a question, then three, two, one over a graphic that counts them, and a push in on the last. */
 const CLIP: SoundClip = {
   about: "ขึ้นอวกาศใน 3 2 1",
+  direction: "  สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์ ",
   level: "medium",
   words: [
     { text: "นักบิน", atUs: 2_200_000 },
@@ -80,6 +82,7 @@ test("the request lists every word with its number and time, then the beats, poi
   expect(describeSoundClip(CLIP)).toBe(
     [
       "The clip: ขึ้นอวกาศใน 3 2 1",
+      "Direction: สนุก จังหวะเร็ว ช่วงราคาเป็นไฮไลต์",
       "Level: medium",
       "Words:",
       "1. 0:02.2 นักบิน",
@@ -112,7 +115,7 @@ test("the request lists every word with its number and time, then the beats, poi
 test("an empty list says none", () => {
   const bare: SoundClip = { about: "คลิปเงียบ", level: "light", words: [], beats: [], points: [], lines: [], graphics: [], moves: [], inserts: [{ what: "รูปจรวด", atUs: 1_000_000 }] }
   expect(describeSoundClip(bare)).toBe(
-    ["The clip: คลิปเงียบ", "Level: light", "Words: none", "Beats: none", "Emphasis points: none", "Highlight text lines: none", "Graphics: none", "Camera moves: none", "Cutaways:", "- 0:01.0 รูปจรวด"].join("\n"),
+    ["The clip: คลิปเงียบ", "Direction: none", "Level: light", "Words: none", "Beats: none", "Emphasis points: none", "Highlight text lines: none", "Graphics: none", "Camera moves: none", "Cutaways:", "- 0:01.0 รูปจรวด"].join("\n"),
   )
 })
 

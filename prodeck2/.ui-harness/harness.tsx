@@ -89,7 +89,7 @@ const BEATS = [
 let outline: any = null
 const makeStored = (brief: any, confirmed = false, beats = BEATS) => storedOutline({
   folder: FOLDER, videoIds: ["a", "b", "c"], brief, confirmed, model: "claude-opus-5-5",
-  updatedAt: Date.parse("2026-09-30T10:05:00Z"), outline: { title: "รีวิวเซรั่มผิวฉ่ำ", summary: "จากปัญหาผิวแห้ง สู่ผิวฉ่ำ แล้วปิดด้วยโปรลด 50%", omitted: "ช่วงแนะนำตัว 40 วินาที และเทคที่พูดราคาผิด", beats, warnings: [] },
+  updatedAt: Date.parse("2026-09-30T10:05:00Z"), outline: { title: "รีวิวเซรั่มผิวฉ่ำ", summary: "จากปัญหาผิวแห้ง สู่ผิวฉ่ำ แล้วปิดด้วยโปรลด 50%", omitted: "ช่วงแนะนำตัว 40 วินาที และเทคที่พูดราคาผิด", direction: "สดใส จังหวะเร็ว เปิดด้วยปัญหาผิวแห้งให้ลุ้น ช่วงผลลัพธ์ผิวฉ่ำและโปรลด 50% เป็นไฮไลต์ ใส่กราฟิกและเสียงเต็มที่ ช่วงวิธีใช้ให้เรียบ อ่านง่าย โทนสีพาสเทลอบอุ่น", beats, warnings: [] },
 })
 
 /* ---------- the rough cut ---------- */
@@ -251,6 +251,7 @@ const api: any = fakeApi({
   planOutline: async (_f: string, _ids: string[], brief: any) => { await sleep(2600); return (outline = makeStored(brief)) },
   reviseOutline: async (_f: string, _i: string, brief: any) => { await sleep(1800); return (outline = makeStored(brief, false, BEATS.filter((b) => b.id !== "b4").concat([]))) },
   saveOutlineEdits: async (_f: string, ids: string[], confirmed: boolean) => (outline = { ...outline, outline: { ...outline.outline, beats: ids.map((id) => BEATS.find((b) => b.id === id)!) }, confirmed }),
+  saveOutlineDirection: async (_f: string, direction: string) => (outline = { ...outline, outline: { ...outline.outline, direction: direction.trim() }, updatedAt: Date.now() }),
   unusedParts: async () => [],
   previewCut: async () => CUT,
   previewSubtitles: async () => SUBS,

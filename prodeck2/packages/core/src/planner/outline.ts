@@ -17,6 +17,8 @@ export const OutlineReplySchema = z.object({
   ),
   /** what the planner left out and why */
   omitted: z.string(),
+  /** how the whole clip should be decorated after the cut: mood, pacing, which beats carry the weight, visual style */
+  direction: z.string(),
 })
 
 export type OutlineReply = z.infer<typeof OutlineReplySchema>
@@ -46,6 +48,8 @@ export interface Outline {
   title: string
   summary: string
   omitted: string
+  /** the planner's direction for decorating the clip, which the user may edit; absent on outlines from before 0.8.4 */
+  direction?: string
   beats: Beat[]
   /** beats the planner referenced that could not be used, numbered as the planner gave them */
   warnings: OutlineWarning[]
@@ -113,7 +117,7 @@ export function resolveOutline(reply: OutlineReply, index: FootageIndex): Outlin
     beats.push(buildBeat(clip, kind, fromIndex, toIndex, { tag: String(n), name: planned.name, purpose: planned.purpose }))
   })
 
-  return { title: reply.title, summary: reply.summary, omitted: reply.omitted, beats, warnings }
+  return { title: reply.title, summary: reply.summary, omitted: reply.omitted, direction: reply.direction.trim(), beats, warnings }
 }
 
 export function outlineDurationUs(outline: Outline): number {

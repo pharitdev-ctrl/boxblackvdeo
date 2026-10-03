@@ -12,7 +12,7 @@ import { SOUND_LOUDNESS, SOUND_ROLE_MAX, SOUND_SECONDS_MAX, SOUND_SECONDS_MIN, t
  * word or with a graphic. Each sound is composed afterwards by a call of its own (write.ts).
  */
 
-export const SOUND_PLAN_PROMPT_VERSION = "sound-plan-2026-10-02-moves"
+export const SOUND_PLAN_PROMPT_VERSION = "sound-plan-2026-10-03-direction"
 
 /**
  * What Claude plans the clip's sounds by, as the system prompt of the planning call: what it is shown, the palette
@@ -21,7 +21,7 @@ export const SOUND_PLAN_PROMPT_VERSION = "sound-plan-2026-10-02-moves"
  */
 export const SOUND_PLAN_PROMPT = `You are the sound designer of a short vertical video. You decide where it gets a sound effect and what each one does, and you set the clip's sound palette so all of them sound like one score. Another call then composes each sound as code from what you write here.
 
-You are given the clip as it plays after the rough cut: every spoken word with its number and its time, the beats, the emphasis points with their importance, the highlight text lines, the graphics with their idea, and the HTML that draws them when it is drawn already, the camera moves, the cutaways, and the level of decoration the user chose.
+You are given the clip's direction (in Thai, written when the story was planned, or none), and the clip as it plays after the rough cut: every spoken word with its number and its time, the beats, the emphasis points with their importance, the highlight text lines, the graphics with their idea, and the HTML that draws them when it is drawn already, the camera moves, the cutaways, and the level of decoration the user chose.
 
 Answer with:
 - palette: at most eight short lines in English: the key; the tempo feel; the instruments, as synthesised sounds a Web Audio programmer can build (for example bright square-wave plucks, soft sine bells, marimba-like mallets, filtered noise whooshes, a punchy synth kick, brass-like sawtooth stabs); the character; one short recurring motif as note names; what to avoid.
@@ -35,6 +35,7 @@ Answer with:
   - loudness: "soft", "normal" or "strong".
 
 How to choose:
+- Follow the clip's direction: its mood and pace, and which parts it wants rich or plain.
 - Score the clip, not every word. A sound earns its place when it makes a moment land: a reveal, a punchline, a turn, a count, a list, a question, something appearing or moving on screen, a change of beat that needs a lift. Silence is part of the score.
 - light is only the moments that matter most; medium adds the clear supporting ones; heavy scores the clip richly. Give every sound the lowest level it should play at, so one answer serves all three levels. Plan for the level the user chose at least as fully as the level asks.
 - A graphic whose motion has hits (things appearing, counting, landing) gets a sound that follows its motion.
@@ -48,6 +49,8 @@ How to choose:
 export interface SoundClip {
   /** what the clip is about, in a line */
   about: string
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   /** the level of decoration the user chose */
   level: FlairLevel
   /** every word spoken, with when it starts */
@@ -152,6 +155,7 @@ export function describeSoundClip(clip: SoundClip): string {
   const list = <T>(heading: string, items: T[], line: (item: T, i: number) => string[]) => (items.length === 0 ? [`${heading} none`] : [heading, ...items.flatMap(line)])
   return [
     `The clip: ${clip.about}`,
+    `Direction: ${clip.direction?.replace(/\s+/g, " ").trim() || "none"}`,
     `Level: ${clip.level}`,
     ...list("Words:", clip.words, (word, i) => [`${i + 1}. ${clock(word.atUs)} ${word.text}`]),
     ...list("Beats:", clip.beats, (beat) => [`- ${clock(beat.startUs)} ${beat.name}`]),

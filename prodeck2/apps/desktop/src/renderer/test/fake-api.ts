@@ -351,6 +351,10 @@ export function fakeApi(overrides: Partial<RendererApi> = {}, capcut = { running
       const beats = beatIds.map((id) => base.outline.beats.find((b) => b.id === id)!)
       return { ...base, outline: { ...base.outline, beats }, confirmed }
     },
+    saveOutlineDirection: async (_folder, direction) => {
+      const base = storedOutline()
+      return { ...base, outline: { ...base.outline, direction: direction.trim() } }
+    },
     cancelPlanning: async () => {},
     beatThumbnail: async () => null,
     previewCut: async () => cutPlan(),

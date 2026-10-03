@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import type { Beat, Brief, ProjectDetail, RendererApi, StoredOutline } from "../../../shared/api.ts"
 import { BeatList } from "../outline/BeatList.tsx"
 import { BriefPanel } from "../outline/BriefPanel.tsx"
+import { DirectionCard } from "../outline/DirectionCard.tsx"
 import { UnusedParts } from "../outline/UnusedParts.tsx"
 import { formatDuration } from "../format.ts"
 import { t } from "../i18n.ts"
@@ -95,6 +96,17 @@ export function OutlineScreen({ api, project, videoIds, onConfirmed, onStored }:
       .finally(() => setSaving(false))
   }
 
+  /** Saves the user's words for the clip's direction; the outline stays as confirmed as it was. */
+  const saveDirection = async (direction: string) => {
+    setError(null)
+    try {
+      setStored(await api.saveOutlineDirection(folder, direction))
+    } catch (e) {
+      setError((e as Error).message)
+      throw e
+    }
+  }
+
   /** Marks the outline ready for the timeline; a refusal (a beat the outline no longer has) says why. */
   const confirm = async () => {
     setError(null)
@@ -149,6 +161,9 @@ export function OutlineScreen({ api, project, videoIds, onConfirmed, onStored }:
                     : t("outline.lengthNoTarget", { total: formatDuration(totalUs) })}
                 </span>
               </div>
+
+              {/* remounted for every outline from the store, so an edit left open does not outlive the outline it was on */}
+              <DirectionCard key={`direction-${stored.updatedAt}`} direction={stored.outline.direction} disabled={saving || planning} onSave={saveDirection} />
 
               {stored.outline.warnings.length > 0 && <p className="notice warn-text">{t("outline.warnings", { count: stored.outline.warnings.length })}</p>}
 

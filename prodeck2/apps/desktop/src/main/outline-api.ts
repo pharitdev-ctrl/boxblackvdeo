@@ -3,7 +3,7 @@ import type { PlannerService } from "./planner.ts"
 
 type OutlineApi = Pick<
   DesktopApi,
-  "getOutline" | "planOutline" | "regenerateOutline" | "reviseOutline" | "saveOutlineEdits" | "cancelPlanning" | "beatThumbnail" | "unusedParts" | "addOutlinePart"
+  "getOutline" | "planOutline" | "regenerateOutline" | "reviseOutline" | "saveOutlineEdits" | "saveOutlineDirection" | "cancelPlanning" | "beatThumbnail" | "unusedParts" | "addOutlinePart"
 >
 
 export function createOutlineApi(deps: {
@@ -17,6 +17,7 @@ export function createOutlineApi(deps: {
     regenerateOutline: (folder, brief) => planner.regenerate(folder, brief),
     reviseOutline: (folder, instruction, brief) => planner.revise(folder, instruction, brief),
     saveOutlineEdits: (folder, beatIds, confirmed) => planner.saveEdits(folder, beatIds, confirmed),
+    saveOutlineDirection: (folder, direction) => planner.saveDirection(folder, direction),
     async cancelPlanning() {
       planner.cancel()
     },

@@ -378,6 +378,7 @@ export function createEmphasisService(deps: EmphasisDeps) {
         transport,
         model,
         brief: stored.brief,
+        direction: stored.outline.direction,
         durationUs: plan.durationUs,
         beats: stored.outline.beats.map((beat) => ({ id: beat.id, name: beat.name, purpose: beat.purpose })),
         sentences,

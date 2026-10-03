@@ -58,6 +58,7 @@ export const API_METHODS = [
   "regenerateOutline",
   "reviseOutline",
   "saveOutlineEdits",
+  "saveOutlineDirection",
   "cancelPlanning",
   "beatThumbnail",
   "previewCut",
@@ -200,6 +201,8 @@ export interface DesktopApi {
   reviseOutline(folder: string, instruction: string, brief: Brief): Promise<StoredOutline>
   /** Saves the user's reordering and removals; `confirmed` marks the outline ready for the timeline. */
   saveOutlineEdits(folder: string, beatIds: string[], confirmed: boolean): Promise<StoredOutline>
+  /** Saves the user's own words for the clip's direction; the outline stays as confirmed as it was. */
+  saveOutlineDirection(folder: string, direction: string): Promise<StoredOutline>
   cancelPlanning(): Promise<void>
   /** A JPEG data URL of the frame at `atUs`, or null when it cannot be made. */
   beatThumbnail(folder: string, videoId: string, atUs: number): Promise<string | null>

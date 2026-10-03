@@ -22,7 +22,8 @@ const said = (html: string) => lintFragment(html).join("\n")
 // the contract
 
 test("the contract opens with its title and what to return, has its six sections in order, and goes by its version", () => {
-  expect(MOTION_WRITE_PROMPT_VERSION).toBe("motion-write-2026-10-01b")
+  expect(MOTION_WRITE_PROMPT_VERSION).toBe("motion-write-2026-10-03-direction")
+  expect(section("Look")).toContain("- When the brief gives the clip's direction (in Thai), match its mood, pace and visual style.\n")
   expect(MOTION_CONTRACT.startsWith("# Contract for one free-form motion graphic\n\nYou write ONE HTML fragment, in exactly this order: one `<style>` block first, then markup, then (optionally) one plain `<script>` block as the very last thing. Return only the fragment, with no code fence and no explanation.\n")).toBe(true)
   const headings = MOTION_CONTRACT.split("\n").flatMap((line) => /^\*\*([^*]+)\*\*/.exec(line)?.[1] ?? [])
   expect(headings).toEqual(["Shape, checked by a linter that refuses anything else.", "The script, when there is one.", "Where it goes.", "Time.", "Words are variables.", "Look."])
@@ -414,6 +415,13 @@ test("the brief gives the stage, the length, the words in order with their varia
     '- What to draw: ตัวเลขวิ่งจาก 0 ถึง 28,000 แล้วหยุดพอดีคำว่า "สองหมื่นแปดพัน"',
     "- The clip is about: การไปอวกาศ (อธิบาย).",
   ])
+})
+
+test("the brief ends with the clip's direction on one line when the outline has one, and leaves it out when not", () => {
+  const brief = (direction?: string) => motionBrief({ stage: { width: 1080, height: 700 }, seconds: 3, words: [], idea: "ดาว", about: "อวกาศ", direction }).split("\n")
+  expect(brief(" สนุก\nจังหวะเร็ว ").at(-1)).toBe("- The clip's direction: สนุก จังหวะเร็ว")
+  expect(brief().at(-1)).toBe("- The clip is about: อวกาศ.")
+  expect(brief("  ").at(-1)).toBe("- The clip is about: อวกาศ.")
 })
 
 test("a word's time is written to two decimals, the length as the number it is, and one word has no separator", () => {

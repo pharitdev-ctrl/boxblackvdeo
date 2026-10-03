@@ -51,7 +51,7 @@ const broll: FootageClip = {
 
 const { index } = describeFootage([talk, broll])
 
-const reply = (beats: OutlineReply["beats"]): OutlineReply => ({ title: "นักบินอวกาศ", summary: "สรุป", omitted: "", beats })
+const reply = (beats: OutlineReply["beats"]): OutlineReply => ({ title: "นักบินอวกาศ", summary: "สรุป", omitted: "", direction: "", beats })
 const beat = (clip: string, from: string, to: string, name = "ช่วง") => ({ name, purpose: "เหตุผล", clip, from, to })
 
 test("a speech beat runs from the first utterance's start to the last one's end", () => {

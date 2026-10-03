@@ -54,6 +54,8 @@ export interface SoundWorkDeps {
 /** What the clip is made of, as work 4 gathers it from the rough cut, before it is told to Claude. */
 export interface SoundClipInput {
   about: string
+  /** the outline's direction for decorating the clip; absent on outlines from before 0.8.4 */
+  direction?: string
   level: FlairLevel
   /** the sentences the rough cut plays, whose words are the clip's */
   sentences: SpokenSentence[]
@@ -97,6 +99,7 @@ export function soundClipOf(input: SoundClipInput): { clip: SoundClip; sources: 
   const graphics = input.graphics.filter((graphic) => (input.drawing === true || graphic.cue.spec.html !== null) && graphic.stale !== true).sort(byTime)
   const clip: SoundClip = {
     about: input.about,
+    ...(input.direction === undefined ? {} : { direction: input.direction }),
     level: input.level,
     words: words.map(({ text, atUs }) => ({ text, atUs })),
     beats: input.beats,
@@ -206,6 +209,7 @@ export function createSoundWork(deps: SoundWorkDeps) {
     })
     const { clip, sources } = soundClipOf({
       about: deps.about(stored),
+      direction: stored.outline.direction,
       level: view.flair.level,
       sentences,
       beats,

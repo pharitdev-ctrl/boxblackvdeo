@@ -3,7 +3,7 @@ import type { Brief, VideoType } from "./brief.ts"
 import { describeFootage, type FootageClip } from "./footage.ts"
 import { outlineAsText, OutlineReplySchema, resolveOutline, type Outline } from "./outline.ts"
 
-export const PLANNER_PROMPT_VERSION = "planner-2026-09-17-retakes"
+export const PLANNER_PROMPT_VERSION = "planner-2026-10-03-direction"
 
 const TYPE_NAMES: Record<VideoType, string> = {
   review: "รีวิว",
@@ -28,7 +28,11 @@ const SYSTEM = `คุณเป็นบรรณาธิการวิดี�
 เลี่ยงช่วงที่มีปัญหาภาพเว้นแต่จำเป็นต่อเรื่อง ท่าทางที่ไปกับคำพูด เช่น ชูนิ้วนับ ชี้ หรือยื่นของให้ดู ไม่ใช่ปัญหาภาพ
 ถ้ามีความยาวเป้าหมาย ให้ความยาวรวมใกล้เป้าหมาย
 
+หลังตัดแล้ว โปรแกรมจะตกแต่งคลิปต่อให้: ซูมและขยับภาพ แทรกรูปหรือคลิปจากโปรเจค ข้อความเด่นบนจอ กราฟิกเคลื่อนไหว เสียงประกอบ และซับ
+เลือกช่วงโดยคิดถึงสิ่งเหล่านี้ด้วย เช่น ช่วงที่พูดถึงตัวเลขหรือขั้นตอนทำเป็นกราฟิกได้ ช่วงภาพนิ่งที่เนื้อหาดีใช้ซูมหรือภาพแทรกช่วยได้ ไม่ต้องตัดทิ้งเพียงเพราะภาพเรียบ
+
 name คือชื่อสั้นของช่วง purpose คือหน้าที่ของช่วงนั้นในเรื่อง title คือชื่อเรื่องสั้นๆ summary คือเรื่องย่อหนึ่งถึงสองประโยค omitted คือสิ่งสำคัญที่ตัดออกและเหตุผลสั้นๆ
+direction คือแนวทางตกแต่งของทั้งคลิป สองถึงห้าประโยค: อารมณ์และจังหวะ ช่วงไหนเป็นไฮไลต์ที่ควรตกแต่งหนัก ช่วงไหนควรเรียบ และสไตล์ภาพที่เข้ากับเนื้อหา อ้างช่วงด้วยชื่อช่วง ไม่ใช้เลขลำดับ
 เขียนทุกอย่างเป็นภาษาไทย`
 
 /** The prompt built into the app; the license server may hand out another. */
@@ -41,6 +45,11 @@ function briefText(brief: Brief): string {
     `ประเภทคลิป: ${brief.videoType ? TYPE_NAMES[brief.videoType] : "ไม่ระบุ"}`,
     `คำสั่งเพิ่มเติม: ${brief.instructions.trim() || "ไม่มี"}`,
   ].join("\n")
+}
+
+/** The direction an earlier outline carries, as a revision or a fresh take is shown it; outlines from before 0.8.4 have none. */
+function directionText(outline: Outline): string {
+  return `แนวทางตกแต่งฉบับปัจจุบัน: ${outline.direction?.trim() || "ไม่มี"}`
 }
 
 /**
@@ -69,12 +78,12 @@ export async function planOutline(args: {
   if (args.previous && args.instruction?.trim()) {
     content.push({
       type: "text",
-      text: `โครงเรื่องฉบับปัจจุบัน (ผู้ใช้อาจสลับลำดับหรือลบช่วงเองมาแล้ว)\n${outlineAsText(args.previous, index)}\n\nคำสั่งแก้จากผู้ใช้: ${args.instruction.trim()}\nแก้ตามคำสั่ง ส่วนที่คำสั่งไม่ได้พูดถึงให้คงไว้`,
+      text: `โครงเรื่องฉบับปัจจุบัน (ผู้ใช้อาจสลับลำดับหรือลบช่วงเองมาแล้ว)\n${outlineAsText(args.previous, index)}\n\n${directionText(args.previous)}\n\nคำสั่งแก้จากผู้ใช้: ${args.instruction.trim()}\nแก้ตามคำสั่ง ส่วนที่คำสั่งไม่ได้พูดถึงให้คงไว้ คง direction ไว้ถ้าคำสั่งไม่เกี่ยวกับเรื่องนี้ แต่ปรับให้ตรงกับช่วงที่เปลี่ยน`,
     })
   } else if (args.previous) {
     content.push({
       type: "text",
-      text: `โครงเรื่องฉบับก่อน\n${outlineAsText(args.previous, index)}\n\nเสนอโครงเรื่องแบบใหม่ที่ต่างจากฉบับก่อนอย่างชัดเจน`,
+      text: `โครงเรื่องฉบับก่อน\n${outlineAsText(args.previous, index)}\n\n${directionText(args.previous)}\n\nเสนอโครงเรื่องแบบใหม่ที่ต่างจากฉบับก่อนอย่างชัดเจน`,
     })
   } else {
     content.push({ type: "text", text: "วางโครงเรื่อง" })

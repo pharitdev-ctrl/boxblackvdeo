@@ -159,6 +159,20 @@ export function createPlannerService(deps: PlannerDeps) {
       })
     },
 
+    /**
+     * Saves the user's own words for the clip's direction. The cut does not change, so the outline stays as confirmed
+     * as it was, and nothing planned on it is touched: the works read the new direction from their next run.
+     */
+    async saveDirection(folder: string, direction: string): Promise<StoredOutline> {
+      if (typeof direction !== "string") throw new Error("bad direction")
+      const text = direction.trim().slice(0, OUTLINE_DIRECTION_MAX)
+      await existing(folder)
+      return deps.store.update(folder, (stored) => {
+        if (!stored) throw new Error("this project has no outline yet")
+        return { ...stored, outline: { ...stored.outline, direction: text }, updatedAt: Date.now() }
+      })
+    },
+
     async unused(folder: string): Promise<UnusedPart[]> {
       const stored = await existing(folder)
       return unusedParts(await loadFootage(deps, folder, stored.videoIds), stored.outline)
@@ -187,3 +201,6 @@ export function createPlannerService(deps: PlannerDeps) {
 }
 
 export type PlannerService = ReturnType<typeof createPlannerService>
+
+/** The most characters of a direction the user saves. */
+export const OUTLINE_DIRECTION_MAX = 1000

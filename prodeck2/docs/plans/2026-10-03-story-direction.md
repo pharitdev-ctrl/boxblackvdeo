@@ -46,8 +46,8 @@
 
 ## Task 1: Planner (core)
 
-- [ ] `outline.ts`: add `direction: z.string()` to `OutlineReplySchema`; add `direction?: string` to `Outline`; `resolveOutline` copies `reply.direction.trim()`.
-- [ ] `plan.ts`: add to `SYSTEM`, after the pacing paragraph:
+- [x] `outline.ts`: add `direction: z.string()` to `OutlineReplySchema`; add `direction?: string` to `Outline`; `resolveOutline` copies `reply.direction.trim()`.
+- [x] `plan.ts`: add to `SYSTEM`, after the pacing paragraph:
 
 ```
 หลังตัดแล้ว โปรแกรมจะตกแต่งคลิปต่อให้: ซูมและขยับภาพ แทรกรูปหรือคลิปจากโปรเจค ข้อความเด่นบนจอ กราฟิกเคลื่อนไหว เสียงประกอบ และซับ
@@ -57,9 +57,9 @@ direction คือแนวทางตกแต่งของทั้งค�
 ```
 
   and add `direction` to the field list line ("name คือ… omitted คือ…").
-- [ ] Revision (`previous && instruction`) and fresh take (`previous` only): append `แนวทางตกแต่งฉบับปัจจุบัน: ${previous.direction || "ไม่มี"}` to the text. For revisions add "คง direction ไว้ถ้าคำสั่งไม่ได้เกี่ยวกับเรื่องนี้ ปรับให้ตรงกับโครงเรื่องใหม่ถ้าช่วงเปลี่ยน".
-- [ ] `PLANNER_PROMPT_VERSION = "planner-2026-10-03-direction"`.
-- [ ] Tests (`outline.test.ts`, `plan.test.ts`): reply with direction resolves to a trimmed `direction`; the system text mentions the decorations and `direction`; a revision request carries the previous direction; a previous outline without `direction` sends "ไม่มี".
+- [x] Revision (`previous && instruction`) and fresh take (`previous` only): append `แนวทางตกแต่งฉบับปัจจุบัน: ${previous.direction || "ไม่มี"}` to the text. For revisions add "คง direction ไว้ถ้าคำสั่งไม่ได้เกี่ยวกับเรื่องนี้ ปรับให้ตรงกับโครงเรื่องใหม่ถ้าช่วงเปลี่ยน".
+- [x] `PLANNER_PROMPT_VERSION = "planner-2026-10-03-direction"`.
+- [x] Tests (`outline.test.ts`, `plan.test.ts`): reply with direction resolves to a trimmed `direction`; the system text mentions the decorations and `direction`; a revision request carries the previous direction; a previous outline without `direction` sends "ไม่มี".
 
 ## Task 2: Post works read the direction (core)
 
@@ -84,28 +84,35 @@ Each `SYSTEM` gets "แนวทางของคลิป" in its "ข้อ�
 | writing request (`graphics/motion/write.ts`) | `motion-write-2026-10-03-direction` |
 | `describeSounds` / plan call (`sound/plan.ts`) | `sound-plan-2026-10-03-direction` |
 
-- [ ] Implement the six; keep every other line of each request byte-identical so cached prefixes stay valid where they are cached.
-- [ ] Tests: per file, the request shows the direction line with a direction and with "ไม่มี" without one; the system text contains the rule.
+- [x] Implement the six; keep every other line of each request byte-identical so cached prefixes stay valid where they are cached.
+- [x] Tests: per file, the request shows the direction line with a direction and with "ไม่มี" without one; the system text contains the rule.
 
 ## Task 3: Main passes it on
 
-- [ ] `emphasis.ts` (plan call near line 380), `flair.ts` (techniques clip near line 603, graphics plan, graphic writing beside the "about" line at line 122), `highlights.ts` (`pickHighlights` near line 756), `sound-work.ts` (`planComposedSounds`): pass `stored.outline.direction`.
-- [ ] Redo / edit-by-instruction of moves, graphics and sounds go through the same request builders; check each passes the direction too.
-- [ ] `planner.ts`: `saveOutlineDirection(folder, text)` sets `outline.direction` (trimmed, max 1,000 characters) and `updatedAt`; leaves `confirmed`, highlights, flair and emphasis as they are. Add to `DesktopApi` in `shared/api.ts`, `API_METHODS`, preload.
-- [ ] Tests (`planner.test.ts`, `emphasis.test.ts`, `flair.test.ts`, `highlights.test.ts`): the stored direction reaches each fake transport's request; saving a direction keeps `confirmed`.
+- [x] `emphasis.ts` (plan call near line 380), `flair.ts` (techniques clip near line 603, graphics plan, graphic writing beside the "about" line at line 122), `highlights.ts` (`pickHighlights` near line 756), `sound-work.ts` (`planComposedSounds`): pass `stored.outline.direction`.
+- [x] Redo / edit-by-instruction of moves, graphics and sounds go through the same request builders; check each passes the direction too.
+- [x] `planner.ts`: `saveOutlineDirection(folder, text)` sets `outline.direction` (trimmed, max 1,000 characters) and `updatedAt`; leaves `confirmed`, highlights, flair and emphasis as they are. Add to `DesktopApi` in `shared/api.ts`, `API_METHODS`, preload.
+- [x] Tests (`planner.test.ts`, `emphasis.test.ts`, `flair.test.ts`, `highlights.test.ts`): the stored direction reaches each fake transport's request; saving a direction keeps `confirmed`.
 
 ## Task 4: Outline screen
 
-- [ ] Under the summary on `OutlineScreen.tsx`: a section "แนวทางตกแต่ง" showing the direction, with an edit button that turns it into a textarea (save / cancel). Hidden when the outline has no direction and the user has not added one; an "เพิ่มแนวทาง" link instead.
-- [ ] Saving calls `saveOutlineDirection`; the screen shows the stored result.
-- [ ] Strings in `i18n.ts`. Test in `OutlineScreen.test.tsx`: shows the direction, edits and saves it, no section on an old outline.
+- [x] Under the summary on `OutlineScreen.tsx`: a section "แนวทางตกแต่ง" showing the direction, with an edit button that turns it into a textarea (save / cancel). Hidden when the outline has no direction and the user has not added one; an "เพิ่มแนวทาง" link instead.
+- [x] Saving calls `saveOutlineDirection`; the screen shows the stored result.
+- [x] Strings in `i18n.ts`. Test in `OutlineScreen.test.tsx`: shows the direction, edits and saves it, no section on an old outline.
 
 ## Task 5: Check
 
-- [ ] `npm test` and `npm run typecheck` from `prodeck2/`.
-- [ ] UI harness (`?outlined`): fake outline with a direction; capture the outline screen and look at it.
-- [ ] Bump the app version (patch) and note the change where the repo keeps release notes.
-- [ ] Commit and push on `claude/quirky-wozniak-3fhi7t`.
+- [x] `npm test` and `npm run typecheck` from `prodeck2/`.
+- [x] UI harness (`?outlined`): fake outline with a direction; capture the outline screen and look at it.
+- [ ] Bump the app version (patch). Left to the owner: versions are bumped by hand at release (0.8.1 → 0.8.3 in one commit), and the repo keeps no release notes file. Code comments call the change 0.8.4.
+- [x] Commit and push on `claude/quirky-wozniak-3fhi7t`.
+
+## Result (2026-10-03)
+
+- `npm test`: 3,121 passed. 10 failed in 8 files (`asr/models`, `capcut/write`, `sound/lint`, `sound/write`, `bundled-ffmpeg`, `bundled-whisper`, `graphics-files`, `graphics-pack`): the same 10 fail on the code before this change (macOS binaries, disk-error simulation as root), so none is from it.
+- `npm run typecheck`: the only errors are the 8 in `renderer/src/edit/GraphicsTab.tsx`, there before this change.
+- Outline screen checked in the UI harness (`?outlined`), light and dark: direction shown, edited, saved.
+- Found while testing: `DirectionCard` and `UnusedParts` both keyed by `stored.updatedAt` as siblings made React keep a stale editor; the card's key is now `direction-${updatedAt}`.
 
 ## Risks
 

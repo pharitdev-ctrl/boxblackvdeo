@@ -451,6 +451,15 @@ async function seed(outlines: OutlineStore, folder: string, points: EmphasisPoin
   await outlines.update(folder, (stored) => ({ ...stored!, emphasis: { points, version: 1, plannedOn: { graphics: null, sounds: null }, transcripts: { [CLIP_ID]: FINGERPRINT }, ...extra } }))
 }
 
+test("Claude is told the outline's direction, or that there is none", async () => {
+  const { emphasis, folder, outlines, requests } = await withEmphasis()
+  await emphasis.plan(folder, DEFAULT_CUT_RULES)
+  expect(textOf(requests[0]!.content)).toContain("\n- แนวทางของคลิป: ไม่มี\n")
+  await outlines.update(folder, (stored) => ({ ...stored!, outline: { ...stored!.outline, direction: "ลุ้น จังหวะเร็ว" } }))
+  await emphasis.plan(folder, DEFAULT_CUT_RULES)
+  expect(textOf(requests.at(-1)!.content)).toContain("\n- แนวทางของคลิป: ลุ้น จังหวะเร็ว\n")
+})
+
 test("Claude plans the points from the beats and sentences of the rough cut; they are stored with the transcripts they were made on", async () => {
   const { emphasis, folder, outlines, requests } = await withEmphasis()
   expect(await emphasis.plan(folder, DEFAULT_CUT_RULES)).toEqual({ count: 2, dropped: 0 })

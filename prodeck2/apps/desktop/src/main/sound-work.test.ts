@@ -161,12 +161,13 @@ test("Claude is shown the clip as it plays after the other works: every word, th
     edited: false,
     off: false,
   }
-  await h.outlines.update(h.folder, (stored) => ({ ...stored!, flair: { ...stored!.flair!, zooms: [{ anchor: countPiece.anchor, kind: "punch", edited: false, pointId: "p-count" }], moves: [move], inserts: [cutaway] } }))
+  await h.outlines.update(h.folder, (stored) => ({ ...stored!, outline: { ...stored!.outline, direction: "ลุ้น จังหวะเร็ว" }, flair: { ...stored!.flair!, zooms: [{ anchor: countPiece.anchor, kind: "punch", edited: false, pointId: "p-count" }], moves: [move], inserts: [cutaway] } }))
   h.claude.replies.set(SOUND_PLAN_PROMPT, { palette: PALETTE, sounds: [] })
   await h.plan(request({ graphic: true }))
   const text = textOf(h.claude.requests[0]!.content)
-  expect(text.split("\n").slice(0, 13)).toEqual([
+  expect(text.split("\n").slice(0, 14)).toEqual([
     `The clip: ${ABOUT}`,
+    "Direction: ลุ้น จังหวะเร็ว",
     "Level: medium",
     "Words:",
     "1. 0:00.2 ขึ้น",

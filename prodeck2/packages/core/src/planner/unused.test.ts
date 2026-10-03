@@ -53,6 +53,7 @@ const outline: Outline = resolveOutline(
     title: "t",
     summary: "",
     omitted: "",
+    direction: "",
     beats: [
       { name: "คำถาม", purpose: "เปิด", clip: "v1", from: "u3", to: "u4" },
       { name: "คำตอบ", purpose: "เฉลย", clip: "v1", from: "u6", to: "u6" },
