@@ -60,7 +60,8 @@
     "./sound/lint": "./src/sound/lint.ts",
     "./sound/write": "./src/sound/write.ts",
     "./sound/harness": "./src/sound/harness.ts",
-    "./sound/plan": "./src/sound/plan.ts"
+    "./sound/plan": "./src/sound/plan.ts",
+    "./preview": "./src/preview/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
