@@ -38,6 +38,9 @@ import { createGraphicsPack } from "./graphics-pack.ts"
 import { createGraphicsRenderer } from "./graphics-render.ts"
 import { cleanGraphicFiles, graphicFilesInfo } from "./graphics-files.ts"
 import { createSettingsApi } from "./settings-api.ts"
+import { AgentStore, createAgentService } from "./agent.ts"
+import { createAgentApi } from "./agent-api.ts"
+import { createAgentWiring } from "./agent-wiring.ts"
 import { TimelineStore } from "./timeline-store.ts"
 import { createTimelineService } from "./timeline.ts"
 import { createTimelineApi } from "./timeline-api.ts"
@@ -322,6 +325,12 @@ void app.whenReady().then(async () => {
   const soundPage = createSealedPage({ BrowserWindow, session })
   // each render that ends is told to the page, which reads its sounds again: a row would otherwise stay on กำลังเรนเดอร์…
   const soundRenderer = createSoundRenderer({ dir: soundsDir, ffmpeg: () => tools.ffmpeg, page: soundPage, onSettled: () => send({ type: "sounds-rendered" }) })
+  const highlightAssets = createHighlightAssets({
+    sourceDir: join(resourcesDir, "fonts"),
+    // CapCut is sandboxed to ~/Movies, where its own drafts live too
+    fontDir: join(homedir(), "Movies", "CapCut", "BOXBLACK", "fonts"),
+    effectCache: join(homedir(), "Library/Containers/com.lemon.lvoverseas/Data/Movies/CapCut/User Data/Cache/effect"),
+  })
   const timeline = createTimelineService({
     settings,
     transcripts,
@@ -343,12 +352,7 @@ void app.whenReady().then(async () => {
     isCapCutRunning,
     llm: () => editingLlm("polishing subtitles"),
     polishDir: join(userData, "subtitle-polish"),
-    highlightAssets: createHighlightAssets({
-      sourceDir: join(resourcesDir, "fonts"),
-      // CapCut is sandboxed to ~/Movies, where its own drafts live too
-      fontDir: join(homedir(), "Movies", "CapCut", "BOXBLACK", "fonts"),
-      effectCache: join(homedir(), "Library/Containers/com.lemon.lvoverseas/Data/Movies/CapCut/User Data/Cache/effect"),
-    }),
+    highlightAssets,
     sounds,
     media,
     graphics: graphicsRenderer,
@@ -411,6 +415,26 @@ void app.whenReady().then(async () => {
   // cancelAi stops it, between two works too
   const post = createPostPlanService({ outlines, emphasis, highlights, flair, timeline, send, stopSignal: () => aiCalls.signal() })
 
+  // the agent editor: a conversation with Claude per project, on its own working timeline
+  const agentWiring = createAgentWiring({
+    timeline,
+    outlines,
+    settings,
+    highlightAssets,
+    sounds,
+    graphics: graphicsRenderer,
+    soundRenderer,
+    llm: () => editingLlm("the agent editor"),
+  })
+  const agent = createAgentService({
+    store: new AgentStore(join(userData, "agent")),
+    llm: () => editingLlm("the agent editor"),
+    footage: (folder) => agentWiring.footage(folder),
+    clip: (folder) => agentWiring.clip(folder),
+    makers: (folder) => agentWiring.makers(folder),
+    send: (view) => send({ type: "agent", view }),
+  })
+
   const thumbnail = createThumbnailer({
     inspect: (folder) => projects.inspectProject(folder),
     extract: (input, atUs) => (tools.ffmpeg ? frameFiles.one(input, atUs) : Promise.reject(new Error("ffmpeg-missing"))),
@@ -444,6 +468,7 @@ void app.whenReady().then(async () => {
       ...createClaudeCodeApi({ claudeCode }),
       ...createTimelineApi({ timeline }),
       ...createHighlightApi({ highlights, flair, emphasis, post }),
+      ...createAgentApi({ agent, wiring: agentWiring, timeline }),
       ...(license ? createLicenseApi({ license }) : noLicenseApi()),
       cancelAi: async () => aiCalls.cancel(),
       updateState: async () => updater.state(),

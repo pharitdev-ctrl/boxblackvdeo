@@ -3,6 +3,9 @@ import type { LlmTransport, LlmUsage, SystemPrompt } from "@boxblack/core/llm/ty
 import { describeTimeline, type AgentTimeline } from "@boxblack/core/timeline"
 import { runAction, type AgentClip, type AgentMakers } from "./agent-actions.ts"
 import { ProjectFiles } from "./project-files.ts"
+import type { AgentPieceView, AgentView } from "../shared/api.ts"
+
+export type { AgentPieceView, AgentView }
 
 /** The most rounds Claude works for one message of the user's before it sums up and asks whether to go on (spec §5.1). */
 export const ROUNDS_PER_MESSAGE = 25
@@ -19,32 +22,6 @@ export interface AgentSession {
 }
 
 export class AgentStore extends ProjectFiles<AgentSession> {}
-
-/** One piece as the tab lists it. */
-export interface AgentPieceView {
-  id: string
-  kind: string
-  startUs: number
-  endUs: number
-  label: string
-  by: "pipeline" | "claude" | "user"
-  locked: boolean
-}
-
-export interface AgentView {
-  folder: string
-  turns: AgentTurn[]
-  running: boolean
-  /** the round under way or last run for the latest message, and how many it may have */
-  round: number
-  rounds: number
-  usage: LlmUsage
-  costUsd: number
-  direction: string
-  pieces: AgentPieceView[]
-  /** set when the last message used all its rounds: the tab offers "ทำต่อ" */
-  summed: boolean
-}
 
 /** $ per million tokens: input, output, cache read, cache write (1.25 × input). */
 const PRICES: Record<string, [number, number, number, number]> = {

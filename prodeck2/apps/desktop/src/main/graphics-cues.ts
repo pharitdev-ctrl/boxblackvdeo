@@ -43,7 +43,7 @@ export interface GroupBand extends Span {
 }
 
 /** The family name each shipped highlight font declares, which the graphic's page asks for. */
-const FONT_FAMILY: Record<HighlightFontId, string> = { kanit: "Kanit", mali: "Mali", chonburi: "Chonburi" }
+export const FONT_FAMILY: Record<HighlightFontId, string> = { kanit: "Kanit", mali: "Mali", chonburi: "Chonburi" }
 
 const overlaps = (a: Span, b: Span) => a.startUs < b.endUs && b.startUs < a.endUs
 const covers = (box: GraphicBox, band: Band) => box.y1 > band.fromY && box.y0 < band.toY

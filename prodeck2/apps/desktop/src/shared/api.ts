@@ -1,3 +1,4 @@
+import type { AgentTurn } from "@boxblack/core/agent"
 import type { AsrEngineId, ModelState, SpokenLanguage, VideoStatus } from "@boxblack/core/asr"
 import type { ProjectDetail, ProjectSummary } from "@boxblack/core/capcut"
 import type { CutPlan } from "@boxblack/core/cut"
@@ -59,6 +60,13 @@ export const API_METHODS = [
   "reviseOutline",
   "saveOutlineEdits",
   "saveOutlineDirection",
+  "agentOpen",
+  "agentSend",
+  "agentStop",
+  "agentReset",
+  "agentLock",
+  "agentRemove",
+  "agentWrite",
   "cancelPlanning",
   "beatThumbnail",
   "previewCut",
@@ -203,6 +211,17 @@ export interface DesktopApi {
   saveOutlineEdits(folder: string, beatIds: string[], confirmed: boolean): Promise<StoredOutline>
   /** Saves the user's own words for the clip's direction; the outline stays as confirmed as it was. */
   saveOutlineDirection(folder: string, direction: string): Promise<StoredOutline>
+  /** The project's conversation with Claude, started from the pipeline's timeline under this request when it has none. */
+  agentOpen(folder: string, request: AgentRequest): Promise<AgentView>
+  /** A message to Claude; answers once its rounds are over (the tab follows them through "agent" events). */
+  agentSend(folder: string, text: string): Promise<AgentView>
+  agentStop(folder: string): Promise<void>
+  /** Starts the conversation again from the pipeline's timeline; Claude's pieces and the conversation go. */
+  agentReset(folder: string, request: AgentRequest): Promise<AgentView>
+  agentLock(folder: string, id: string, locked: boolean): Promise<AgentView>
+  agentRemove(folder: string, id: string): Promise<AgentView>
+  /** Writes the conversation's timeline to the draft, with the same checks and backup as a write. */
+  agentWrite(folder: string, expectedSegments: number): Promise<{ backup: BackupInfo; durationUs: number; segmentCount: number }>
   cancelPlanning(): Promise<void>
   /** A JPEG data URL of the frame at `atUs`, or null when it cannot be made. */
   beatThumbnail(folder: string, videoId: string, atUs: number): Promise<string | null>
@@ -578,6 +597,8 @@ export type AppEvent =
   | { type: "post-plan-finished"; folder: string }
   | { type: "license"; state: LicenseState }
   | { type: "update"; state: UpdateState }
+  /** how a conversation with Claude stands, after every change while it works */
+  | { type: "agent"; view: AgentView }
   /** `progress` is a line the installer printed; `error` is why an install or login stopped */
   | { type: "claude-code"; status: ClaudeCodeStatus; progress?: string; error?: string }
 
@@ -1132,3 +1153,39 @@ export type { ClaudeModelId, LlmTransportId } from "@boxblack/core/llm/types"
 export type { Beat, Brief, Outline, OutlineWarning, UnusedPart, VideoType } from "@boxblack/core/planner"
 export type { Scene, VideoInsight, VisionStatus } from "@boxblack/core/vision"
 export type { EmphasisAnchor, EmphasisPatch, EmphasisPoint, EmphasisType, Importance, StoredEmphasis } from "@boxblack/core/emphasis/types"
+
+/** What the agent tab opens a conversation with: the rules and the request its write button would send. */
+export interface AgentRequest {
+  rules: CutRules
+  subtitles: SubtitleRequest | null
+  highlights: HighlightRequest | null
+}
+
+/** One piece as the agent tab lists it. */
+export interface AgentPieceView {
+  id: string
+  kind: string
+  startUs: number
+  endUs: number
+  label: string
+  by: "pipeline" | "claude" | "user"
+  locked: boolean
+}
+
+/** How a project's conversation with Claude stands. */
+export interface AgentView {
+  folder: string
+  turns: AgentTurn[]
+  running: boolean
+  /** the round under way or last run for the latest message, and how many it may have */
+  round: number
+  rounds: number
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }
+  costUsd: number
+  direction: string
+  pieces: AgentPieceView[]
+  /** the last message used all its rounds: the tab offers "ทำต่อ" */
+  summed: boolean
+}
+
+export type { AgentTurn } from "@boxblack/core/agent"

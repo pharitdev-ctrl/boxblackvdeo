@@ -1,6 +1,7 @@
 import { EXIT_ANIMATIONS } from "@boxblack/core/flair/catalogue"
 import { DEFAULT_HIGHLIGHT_OPTIONS } from "@boxblack/core/highlights/styles"
 import type {
+  AgentView,
   AppEvent,
   BackupInfo,
   Beat,
@@ -351,6 +352,13 @@ export function fakeApi(overrides: Partial<RendererApi> = {}, capcut = { running
       const beats = beatIds.map((id) => base.outline.beats.find((b) => b.id === id)!)
       return { ...base, outline: { ...base.outline, beats }, confirmed }
     },
+    agentOpen: async (folder) => agentView(folder),
+    agentSend: async (folder, text) => agentView(folder, { turns: [{ role: "user", text }, { role: "claude", say: "รับทราบ", actions: [] }] }),
+    agentStop: async () => {},
+    agentReset: async (folder) => agentView(folder),
+    agentLock: async (folder) => agentView(folder),
+    agentRemove: async (folder) => agentView(folder),
+    agentWrite: async () => ({ backup: { id: "b1", createdAt: "2026-10-04T00:00:00.000Z", segmentCount: 0, durationUs: 0 } as never, durationUs: 22_000_000, segmentCount: 51 }),
     saveOutlineDirection: async (_folder, direction) => {
       const base = storedOutline()
       return { ...base, outline: { ...base.outline, direction: direction.trim() } }
@@ -437,4 +445,21 @@ export function fakeApi(overrides: Partial<RendererApi> = {}, capcut = { running
     ]),
   ) as unknown as RendererApi
   return { ...recorded, calls, emit: (event) => listeners.forEach((listener) => listener(event)) }
+}
+
+/** A conversation with Claude as the agent tab shows it: nothing said yet, unless `extra` says otherwise. */
+export function agentView(folder: string, extra: Partial<AgentView> = {}): AgentView {
+  return {
+    folder,
+    turns: [],
+    running: false,
+    round: 0,
+    rounds: 25,
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    costUsd: 0,
+    direction: "",
+    pieces: [],
+    summed: false,
+    ...extra,
+  }
 }
