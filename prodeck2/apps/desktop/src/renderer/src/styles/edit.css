@@ -1042,3 +1042,10 @@ h2.tab-section {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.crash pre {
+  white-space: pre-wrap;
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+}

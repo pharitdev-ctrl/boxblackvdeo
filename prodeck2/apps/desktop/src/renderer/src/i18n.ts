@@ -754,6 +754,7 @@ const th = {
   "license.expiresSoon": "license หมดอายุ {date} — ต่ออายุกับผู้ขายเพื่อใช้งานต่อ",
 
   "error.generic": "เกิดข้อผิดพลาด: {message}",
+  "crash.retry": "ลองใหม่",
   "error.noClaude": "ยังไม่ได้เชื่อมต่อ Claude — เลือกการเชื่อมต่อในหน้าตั้งค่าก่อน",
 } as const
 
