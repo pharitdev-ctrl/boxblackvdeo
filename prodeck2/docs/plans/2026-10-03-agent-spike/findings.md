@@ -72,4 +72,16 @@ track's audio; 22 s in 17 s. The audio lines up with the export at zero lag (50 
 against −26.1 dB). The envelopes cannot be compared closely yet: the old export was made before "ทำทั้งหมด" was run
 again, which composed new sounds.
 
-Next: the graphics (`.mov` with alpha), then a fresh export of this exact draft to compare frame by frame.
+**Graphics** (third run, 2 of the 9 files: `aae7db1841d00e70.mov` "อร่อย!" and `61747949ce01f947.mov` the "5 บาท"
+tag): ProRes 4444 with alpha (`yuva444p12le`), 3–7 MB for about 1.3 s, which is why they are too big to send by
+chat. Extracted to PNG with alpha and drawn at the segment's place (scale 1 fits the file in the canvas, then the
+clip's scale and position); both land where their `.json` `place` says, and the "5 บาท" tag now plays for its whole
+1.27 s at the end (`preview-graphics.png`).
+
+**Verdict:** a preview Claude can judge is feasible from the draft alone, fast enough to run after every round of
+changes. The approach is frame extraction, a canvas page in Playwright for the layout, and ffmpeg for encoding and
+audio; ffmpeg's own scale/crop expressions are not needed. In the app the files are on the same machine, so the size
+of the graphics does not matter.
+
+Still open: one fresh export of this exact draft, to check graphic placement and the sounds against CapCut frame by
+frame; then a fresh export of this exact draft to compare frame by frame.
