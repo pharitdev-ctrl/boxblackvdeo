@@ -13,3 +13,4 @@ apps/server/tsconfig.tsbuildinfo
 
 # desktop packaging output
 apps/desktop/release/
+.spikes/
