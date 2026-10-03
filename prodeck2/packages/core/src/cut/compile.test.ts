@@ -478,3 +478,28 @@ test("a piece of picture the user cuts goes from a scene beat", () => {
   // flipping a bad-picture cut keeps only the problem that made it
   expect(rowsOf(plan)).toContainEqual(["cut", "bad-picture", 6.0, 6.8, "", { type: "problems", ranges: [{ startUs: s(6.0), endUs: s(6.8) }], keep: true }])
 })
+
+test("a held end keeps footage after the clip's last word, up to the next spoken word and the end of the video", () => {
+  const two = [beat("b1", "talk", "speech", 1.0, 1.8), beat("b2", "talk", "speech", 6.0, 7.2)]
+  const plain = compileCuts({ beats: two, clips: [TALK], rules: rules() })
+  const held = compileCuts({ beats: two, clips: [TALK], rules: rules(), endHoldUs: s(1.5) })
+  // only the last beat's end moves: 1.5 s after ตัวใหม่, clear of ขอบคุณ at 9.0
+  expect(held.beats[0]).toEqual(plain.beats[0])
+  expect(held.beats[1]!.pieces.at(-1)!.endUs).toBe(s(8.7))
+  expect(held.durationUs - plain.durationUs).toBe(s(8.7) - plain.beats[1]!.pieces.at(-1)!.endUs)
+  expect(held.cuts.at(-1)).toEqual({ binId: "talk", sourceStartUs: held.beats[1]!.pieces.at(-1)!.startUs, sourceDurationUs: s(8.7) - held.beats[1]!.pieces.at(-1)!.startUs })
+
+  // the next word stops it: ขอบคุณ starts 1.8 s after ตัวใหม่ ends, but only 0.6 s after ครับ
+  const early = compileCuts({ beats: [beat("b1", "talk", "speech", 1.0, 1.8)], clips: [TALK], rules: rules(), endHoldUs: s(1.5) })
+  expect(early.beats[0]!.pieces.at(-1)!.endUs).toBe(s(2.6))
+  // so does the end of the video
+  const clip = talk("end", 2, ["จบ@1.5-1.95"], "จบ@1.50-1.95")
+  const end = compileCuts({ beats: [beat("b1", "end", "speech", 1.5, 1.95)], clips: [clip], rules: rules(), endHoldUs: s(1.5) })
+  expect(ranges(end.beats[0]!.pieces)).toEqual([[1.35, 2.0]])
+})
+
+test("a held end leaves a scene beat at the end as it is", () => {
+  const clip = broll("shots", 10, { sceneCutsUs: [s(2), s(6)] })
+  const last = [beat("b1", "shots", "scenes", 2.0, 6.0)]
+  expect(compileCuts({ beats: last, clips: [clip], rules: rules(), endHoldUs: s(1.5) })).toEqual(compileCuts({ beats: last, clips: [clip], rules: rules() }))
+})

@@ -75,6 +75,7 @@ function speechCut(
   rules: CutRules,
   preset: CutPreset,
   decisions: VideoCutDecisions | undefined,
+  endHoldUs?: number,
 ): Omit<BeatCut, "beatId" | "videoId" | "originalUs" | "keptUs"> {
   const words = clip.transcript?.words ?? []
   const inBeat = words.flatMap((word, index) => {
@@ -227,8 +228,12 @@ function speechCut(
     startUs = nextStartUs
   }
 
-  const rawEndUs = Math.min(words[lastIndex]!.endUs + paddingUs, words[lastIndex + 1]?.startUs ?? Infinity, clip.durationUs)
-  const endUs = snap(rawEndUs, Math.max(startUs, wordMid(lastIndex)), Math.min(lastIndex + 1 < words.length ? wordMid(lastIndex + 1) : Infinity, clip.durationUs))
+  const rawEndUs = Math.min(words[lastIndex]!.endUs + (endHoldUs ?? paddingUs), words[lastIndex + 1]?.startUs ?? Infinity, clip.durationUs)
+  // a held end is silence already, and snapping could pull it back toward the word it is there to give room after
+  const endUs =
+    endHoldUs === undefined
+      ? snap(rawEndUs, Math.max(startUs, wordMid(lastIndex)), Math.min(lastIndex + 1 < words.length ? wordMid(lastIndex + 1) : Infinity, clip.durationUs))
+      : Math.max(rawEndUs, startUs)
   if (endUs - startUs >= MIN_SPEECH_PIECE_US) pieces.push({ startUs, endUs })
   if (lastIndex < inBeat.at(-1)!) removals.push(removal(lastIndex, inBeat.at(-1)! + 1, endUs, words[inBeat.at(-1)!]!.endUs))
 
@@ -316,15 +321,21 @@ export function compileCuts(args: {
   presets?: Record<CutPresetId, CutPreset>
   /** the user's keep and cut decisions, per video */
   decisions?: CutDecisions
+  /**
+   * footage kept after the last word of the clip, in place of the preset's padding, when the outline ends on a speech
+   * beat: room for what sits on the last words to show. It never reaches the next spoken word or past the video's end
+   */
+  endHoldUs?: number
 }): CutPlan {
   const preset = (args.presets ?? CUT_PRESETS)[args.rules.preset]
   const clips = new Map(args.clips.map((clip) => [clip.id, clip]))
 
-  const beats = args.beats.map((beat): BeatCut => {
+  const beats = args.beats.map((beat, index): BeatCut => {
     const clip = clips.get(beat.videoId)
     if (!clip) throw new Error(`beat "${beat.name}" uses video ${beat.videoId}, which has not been analysed`)
     const decisions = args.decisions?.[beat.videoId]
-    const result = beat.kind === "speech" ? speechCut(beat, clip, args.rules, preset, decisions) : sceneCut(beat, clip, args.rules, decisions)
+    const hold = index === args.beats.length - 1 ? args.endHoldUs : undefined
+    const result = beat.kind === "speech" ? speechCut(beat, clip, args.rules, preset, decisions, hold) : sceneCut(beat, clip, args.rules, decisions)
     return { beatId: beat.id, videoId: beat.videoId, ...result, originalUs: beat.endUs - beat.startUs, keptUs: length(result.pieces) }
   })
 

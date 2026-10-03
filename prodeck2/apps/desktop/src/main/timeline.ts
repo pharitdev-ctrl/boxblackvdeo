@@ -43,6 +43,7 @@ import type { LlmTransport } from "@boxblack/core/llm"
 import { LOUDNESS_STEP_US, type Loudness } from "@boxblack/core/media"
 import { buildCaptions, captionLimits, polishSubtitles, SUBTITLE_POLISH_PROMPT, type Caption, type SubtitleLength } from "@boxblack/core/subtitles"
 import type { AppEvent, BackupInfo, HighlightRequest, HighlightViewOptions, StoredOutline, SubtitleLine, SubtitleRequest, WriteResult } from "../shared/api.ts"
+import { END_HOLD_US, endsOnPoint } from "./end-hold.ts"
 import { loadFootage, transcriptFingerprint, type FootageDeps } from "./footage.ts"
 import type { HighlightAssets } from "./highlight-assets.ts"
 import { isReplaced, replacedPoints, zoomedFaces } from "./graphics-cues.ts"
@@ -257,7 +258,10 @@ export function createTimelineService(deps: TimelineDeps) {
       const made = stored.cutDecisions?.[clip.id]
       if (made && made.transcript === transcriptFingerprint(clip.transcript)) decisions[clip.id] = made
     }
-    return { stored, plan: compileCuts({ beats: stored.outline.beats, clips, rules, presets: await deps.presets?.(), decisions }), clips }
+    const asked = { beats: stored.outline.beats, clips, rules, presets: await deps.presets?.(), decisions }
+    const plan = compileCuts(asked)
+    // the last words carry a point: the cut keeps footage after them so what sits on it can show before the clip ends
+    return { stored, plan: endsOnPoint(stored, plan, clips) ? compileCuts({ ...asked, endHoldUs: END_HOLD_US }) : plan, clips }
   }
 
   /** The frame size the rough cut plays at, which follows its first video; null when nothing is kept. */

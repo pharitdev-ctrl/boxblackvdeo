@@ -14,7 +14,7 @@ import type { LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
 import type { Beat } from "@boxblack/core/planner"
 import { cardFraming } from "../../../../packages/core/src/capcut/framing.ts"
 import { makeDraftRoot } from "../../../../packages/core/test/fixture-root.ts"
-import { CLIP_ID, countdown, heard, readInfo, s, segments, setup, transcript, word } from "./timeline-fixture.ts"
+import { CLIP_ID, countdown, heard, readInfo, s, segments, setup, storePoints, transcript, word } from "./timeline-fixture.ts"
 import { transcriptFingerprint } from "./footage.ts"
 import type { AppEvent } from "../shared/api.ts"
 import { problemFor, type RenderJob } from "./graphics-render.ts"
@@ -1985,4 +1985,23 @@ test("two sounds made of the same file share one entry in the media bin", async 
   const entries = (await imported(folder)).filter((item) => item.file_Path.startsWith(soundsDir))
   expect(entries).toHaveLength(1)
   expect(composedSegments(await readInfo(folder)).map(({ material }) => material.local_material_id)).toEqual([entries[0]!.id, entries[0]!.id])
+})
+
+test("when the clip's last words carry a point, the rough cut holds its end for what sits on them; a point earlier, or on a changed transcript, leaves it", async () => {
+  const { service, folder, deps } = await setup()
+  const endOf = async () => (await service.preview(folder, DEFAULT_CUT_RULES)).beats.at(-1)!.pieces.at(-1)!.endUs
+  const plain = await endOf()
+  const point = (from: number, to: number): EmphasisPoint => ({ id: `p${from}`, anchor: { kind: "speech", videoId: CLIP_ID, from, to, beatId: "beat-1" }, importance: "key", type: "number", reason: "", source: "ai", edited: false })
+
+  // ขึ้นไปในอวกาศ is said well before the end
+  await storePoints(deps.outlines, folder, [point(0, 3)])
+  expect(await endOf()).toBe(plain)
+
+  // สอง หนึ่ง are the last words: 1.5 s after หนึ่ง, which ends at 25.25 s, with no word after it in the video
+  await storePoints(deps.outlines, folder, [point(0, 3), point(9, 10)])
+  expect(await endOf()).toBe(s(25.25) + 1_500_000)
+
+  // the same point on a transcript that has changed since is not the clip's any more
+  await deps.outlines.update(folder, (stored) => ({ ...stored!, emphasis: { ...stored!.emphasis!, transcripts: { [CLIP_ID]: "older" } } }))
+  expect(await endOf()).toBe(plain)
 })
