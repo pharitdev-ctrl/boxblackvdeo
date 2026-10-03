@@ -456,6 +456,7 @@ export function agentView(folder: string, extra: Partial<AgentView> = {}): Agent
     turns: [],
     running: false,
     looks: 0,
+    stale: false,
     round: 0,
     rounds: 25,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },

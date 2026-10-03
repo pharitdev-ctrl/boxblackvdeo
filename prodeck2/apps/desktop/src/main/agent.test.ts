@@ -4,7 +4,7 @@ import type { HighlightLook } from "@boxblack/core/capcut"
 import type { LlmContent, LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm/types"
 import { pipelinePieces, TIMELINE_VERSION, type AgentTimeline } from "@boxblack/core/timeline"
 import type { AgentClip, AgentMakers } from "./agent-actions.ts"
-import { costOf, createAgentService, REVIEW_ASK, ROUNDS_PER_MESSAGE, type AgentLook, type AgentSession, type AgentView } from "./agent.ts"
+import { costOf, createAgentService, REVIEW_ASK, ROUNDS_PER_MESSAGE, sameCut, STALE_MESSAGE, type AgentLook, type AgentSession, type AgentView, type CutPiece } from "./agent.ts"
 
 const s = (seconds: number) => Math.round(seconds * 1_000_000)
 const FOLDER = "/drafts/1003"
@@ -56,7 +56,7 @@ function fakeClaude(replies: unknown[], respond?: (request: LlmRequest<unknown>)
   return { transport, requests }
 }
 
-function setup(claude: ReturnType<typeof fakeClaude>, look?: (span: { startUs: number; endUs: number } | null) => Promise<AgentLook>) {
+function setup(claude: ReturnType<typeof fakeClaude>, look?: (span: { startUs: number; endUs: number } | null) => Promise<AgentLook>, cut?: () => CutPiece[]) {
   const files = new Map<string, AgentSession>()
   const views: AgentView[] = []
   const service = createAgentService({
@@ -67,6 +67,7 @@ function setup(claude: ReturnType<typeof fakeClaude>, look?: (span: { startUs: n
     makers: () => makers,
     send: (view) => views.push(view),
     now: () => 0,
+    ...(cut ? { cut: async () => cut() } : {}),
     ...(look ? { look: (_folder: string, _timeline: AgentTimeline, span: { startUs: number; endUs: number } | null) => look(span) } : {}),
   })
   return { service, views, files }
@@ -239,4 +240,33 @@ test("no look before the end when Claude looked after its last change, when noth
   const view = await c.service.send(FOLDER, "ทักทาย")
   expect(view.turns.find((turn) => turn.role === "results")).toMatchObject({ lines: ["✓ add_text: ใส่ข้อความ highlight-1 ที่ 0.00s", "✗ look: เครื่องนี้วาดภาพตัวอย่างไม่ได้"] })
   expect(blind.requests).toHaveLength(2)
+})
+
+test("a session whose cut has changed under it says so, asks Claude nothing, and is itself again after a reset", async () => {
+  let cut: CutPiece[] = [{ binId: "v", sourceStartUs: 0, sourceDurationUs: s(10) }]
+  const claude = fakeClaude([{ say: "ok", done: true, actions: [] }])
+  const { service, views } = setup(claude, undefined, () => cut)
+  expect((await service.open(FOLDER, start)).stale).toBe(false)
+  // the outline is planned again: the cut is now two pieces
+  cut = [
+    { binId: "v", sourceStartUs: 0, sourceDurationUs: s(4) },
+    { binId: "v", sourceStartUs: s(6), sourceDurationUs: s(4) },
+  ]
+  expect((await service.open(FOLDER, start)).stale).toBe(true)
+  await expect(service.send(FOLDER, "ซูมตอนชูขนม")).rejects.toThrow(STALE_MESSAGE)
+  expect(claude.requests).toHaveLength(0)
+  expect(views.at(-1)!.stale).toBe(true)
+  // starting again takes the new cut
+  const startNew = async (): Promise<AgentTimeline> => ({ ...(await start()), cuts: pipelinePieces("cut", cut) })
+  expect((await service.reset(FOLDER, startNew)).stale).toBe(false)
+  expect((await service.send(FOLDER, "ซูมตอนชูขนม")).stale).toBe(false)
+  expect(claude.requests).toHaveLength(1)
+})
+
+test("the same cut is the same pieces in order, each within a frame", async () => {
+  const timeline = await start()
+  expect(sameCut(timeline, [{ binId: "v", sourceStartUs: 20_000, sourceDurationUs: s(10) - 30_000 }])).toBe(true)
+  expect(sameCut(timeline, [{ binId: "v", sourceStartUs: s(0.1), sourceDurationUs: s(10) }])).toBe(false)
+  expect(sameCut(timeline, [{ binId: "w", sourceStartUs: 0, sourceDurationUs: s(10) }])).toBe(false)
+  expect(sameCut(timeline, [])).toBe(false)
 })

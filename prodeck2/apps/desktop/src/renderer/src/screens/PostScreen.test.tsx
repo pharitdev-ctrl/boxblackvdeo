@@ -4666,3 +4666,17 @@ test("the preview button makes the conversation's preview and plays it in a shee
   fireEvent.change(screen.getByLabelText(t("player.seek")), { target: { value: "1" } })
   expect(screen.getByAltText(t("player.frame", { at: "1.0" })).getAttribute("src")).toBe(previewMediaUrl("0123456789abcdef01234567", "00016.jpg"))
 })
+
+test("a conversation whose cut has changed shows why over the chat, with the way to start again, and takes no message", async () => {
+  const { api } = renderScreen({ agentOpen: async (folder: string) => agentView(folder, { stale: true }) })
+  await ready()
+  await openTab("agent")
+  expect(await screen.findByText(t("agent.stale"))).toBeTruthy()
+  expect((screen.getByLabelText(t("agent.input")) as HTMLTextAreaElement).disabled).toBe(true)
+  const alert = screen.getByRole("alert")
+  await userEvent.click(within(alert).getByRole("button", { name: t("agent.reset") }))
+  // the reset there is, after its question
+  expect(await screen.findByText(t("agent.resetBody"))).toBeTruthy()
+  await userEvent.click(screen.getByRole("button", { name: t("agent.resetConfirm") }))
+  expect(calls(api, "agentReset")).toHaveLength(1)
+})

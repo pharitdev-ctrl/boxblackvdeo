@@ -33,6 +33,28 @@ export interface AgentLook {
 export const REVIEW_ASK = "ตรวจภาพก่อนจบ: นี่คือภาพตัวอย่างของช่วงที่เปลี่ยนในข้อความนี้ ถ้าดีแล้วตอบ done เป็น true โดยไม่ต้องสั่งอะไร ถ้ายังไม่ดี (อ่านยาก บังหน้าคนหรือของที่โชว์ ทับกัน ขนาดหรือจังหวะไม่พอดี) ให้แก้"
 /** The kinds of piece that are on screen: a change to one is looked at before a message ends. */
 const ON_SCREEN = new Set(["highlight", "move", "graphic", "caption", "zoom", "insert"])
+/** Two cut pieces within this much of each other are the same piece (a frame at 30 fps, and a little). */
+const CUT_SLACK_US = 40_000
+
+/** A piece of the rough cut, as the session's timeline and the outline's compiled cut both have it. */
+export interface CutPiece {
+  binId: string
+  sourceStartUs: number
+  sourceDurationUs: number
+}
+
+/** Whether the session's timeline is on the cut the outline compiles to now: the same pieces, each within a frame. */
+export function sameCut(timeline: AgentTimeline, cut: CutPiece[]): boolean {
+  const mine = timeline.cuts.map((piece) => piece.item)
+  return (
+    mine.length === cut.length &&
+    mine.every((piece, i) => piece.binId === cut[i]!.binId && Math.abs(piece.sourceStartUs - cut[i]!.sourceStartUs) <= CUT_SLACK_US && Math.abs(piece.sourceDurationUs - cut[i]!.sourceDurationUs) <= CUT_SLACK_US)
+  )
+}
+
+/** Why a session on another cut is not worked on (plan 2026-10-05-agent-stale-session.md). */
+export const STALE_MESSAGE = "โครงเรื่องหรือการตัดเปลี่ยนไปหลังเริ่มแชทนี้ กด เริ่มใหม่จาก ทำทั้งหมด ก่อนคุยต่อ"
+
 /** A look before done reaches this far either side of what changed. */
 const REVIEW_MARGIN_US = 500_000
 
@@ -94,6 +116,8 @@ export interface AgentDeps {
   now?: () => number
   /** a look at a timeline as it would come out; absent where the preview cannot be drawn */
   look?: (folder: string, timeline: AgentTimeline, span: { startUs: number; endUs: number } | null, signal: AbortSignal) => Promise<AgentLook>
+  /** the cut the outline compiles to now, which a session must still be on */
+  cut?: (folder: string) => Promise<CutPiece[]>
 }
 
 /**
@@ -107,6 +131,18 @@ export function createAgentService(deps: AgentDeps) {
   const progress = new Map<string, { round: number; summed: boolean }>()
   /** the last look of each project, which the tab shows the user; kept in memory only */
   const looks = new Map<string, { count: number; what: string; sheets: Buffer[] }>()
+  /** the projects whose session is on another cut than the outline's now */
+  const stale = new Set<string>()
+
+  /** Checks a session's cut against the outline's now; a cut that cannot be compiled is not taken for a change. */
+  async function checkCut(session: AgentSession): Promise<boolean> {
+    if (!deps.cut) return true
+    const cut = await deps.cut(session.folder).catch(() => null)
+    const same = cut === null || sameCut(session.timeline, cut)
+    if (same) stale.delete(session.folder)
+    else stale.add(session.folder)
+    return same
+  }
   const now = deps.now ?? Date.now
 
   const viewOf = (session: AgentSession): AgentView => ({
@@ -121,6 +157,7 @@ export function createAgentService(deps: AgentDeps) {
     pieces: piecesOf(session.timeline),
     summed: progress.get(session.folder)?.summed ?? false,
     looks: looks.get(session.folder)?.count ?? 0,
+    stale: stale.has(session.folder),
   })
 
   async function save(session: AgentSession): Promise<AgentSession> {
@@ -185,8 +222,12 @@ export function createAgentService(deps: AgentDeps) {
     /** The project's session, started from `start` (the pipeline's timeline) when it has none. */
     async open(folder: string, start: () => Promise<AgentTimeline>): Promise<AgentView> {
       const found = await deps.store.get(folder)
-      if (found) return viewOf(found)
+      if (found) {
+        await checkCut(found)
+        return viewOf(found)
+      }
       const { model } = await deps.llm()
+      stale.delete(folder)
       return viewOf(await save({ folder, timeline: await start(), turns: [], usage: NO_USAGE, model, updatedAt: now() }))
     },
 
@@ -195,6 +236,7 @@ export function createAgentService(deps: AgentDeps) {
       if (running.has(folder)) throw new Error("Claude is working on this project; stop it first")
       const { model } = await deps.llm()
       progress.delete(folder)
+      stale.delete(folder)
       return viewOf(await save({ folder, timeline: await start(), turns: [], usage: NO_USAGE, model, updatedAt: now() }))
     },
 
@@ -234,6 +276,11 @@ export function createAgentService(deps: AgentDeps) {
       if (running.has(folder)) throw new Error("Claude is already working on this project")
       const message = text.trim()
       if (!message) throw new Error("the message is empty")
+      // nothing is asked of Claude on a session whose cut has changed under it: its pieces would land elsewhere
+      if (!(await checkCut(await existing(folder)))) {
+        deps.send?.(viewOf(await existing(folder)))
+        throw new Error(STALE_MESSAGE)
+      }
       const controller = new AbortController()
       running.set(folder, controller)
       progress.set(folder, { round: 0, summed: false })

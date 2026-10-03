@@ -25,8 +25,15 @@ click.
 
 ## Tasks
 
-- [ ] **1. The check.** `agent-wiring.ts`: `cutOf(folder)` (the plan's cuts). `agent.ts`: `sameCut(timeline, cuts)`;
+- [x] **1. The check.** `agent-wiring.ts`: `cutOf(folder)` (the plan's cuts). `agent.ts`: `sameCut(timeline, cuts)`;
   `open` and `send` mark the view `stale`; `send` refuses a stale session before any call. Tests: a session whose cut
   differs by a piece or by a length beyond a frame is stale and its send asks nothing; one within a frame is not.
-- [ ] **2. The tab.** Banner and button, input off while stale; i18n; test.
-- [ ] **3. Check and push.** Full tests, typecheck, commit, push.
+- [x] **2. The tab.** Banner and button, input off while stale; i18n; test.
+- [x] **3. Check and push.** Full tests, typecheck, commit, push.
+
+## Results
+
+Done. `sameCut` (40 ms slack per piece) in `agent.ts`; the wiring's `cut(folder)` compiles the outline as the tab's
+request does; `open` marks the view, `send` refuses a stale session before any call (and sends the view, so the tab
+shows the banner even when the outline changed while it was open). The banner uses the warning block with the reset
+button, which asks first as it does elsewhere. Tests: 3 new; full run the same 10 known failures.

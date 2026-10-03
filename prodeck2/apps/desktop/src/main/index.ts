@@ -442,6 +442,7 @@ void app.whenReady().then(async () => {
     footage: (folder) => agentWiring.footage(folder),
     clip: (folder) => agentWiring.clip(folder),
     makers: (folder) => agentWiring.makers(folder),
+    cut: (folder) => agentWiring.cut(folder),
     send: (view) => send({ type: "agent", view }),
     look: tools.ffmpeg ? (folder, agentTimeline, span, signal) => preview.look(folder, agentTimeline, span, signal) : undefined,
   })

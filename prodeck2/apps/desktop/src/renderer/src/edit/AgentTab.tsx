@@ -155,6 +155,14 @@ export function AgentTab(): ReactElement {
   return (
     <div className="agent-tab">
       <div className="agent-chat">
+        {view.stale && (
+          <div className="notice warning-block" role="alert">
+            <p>{t("agent.stale")}</p>
+            <Button size="sm" variant="primary" disabled={running} onClick={() => setAsking("reset")}>
+              {t("agent.reset")}
+            </Button>
+          </div>
+        )}
         <ol className="agent-turns" aria-live="polite">
           {view.turns.length === 0 && <li className="hint">{t("agent.empty")}</li>}
           {view.turns.map((turn, i) => (
@@ -186,7 +194,7 @@ export function AgentTab(): ReactElement {
             aria-label={t("agent.input")}
             placeholder={t("agent.placeholder")}
             value={draft}
-            disabled={running}
+            disabled={running || view.stale}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) send(draft)
@@ -195,7 +203,7 @@ export function AgentTab(): ReactElement {
           {running ? (
             <Button onClick={() => void api.agentStop(folder)}>{t("agent.stop")}</Button>
           ) : (
-            <Button type="submit" variant="primary" disabled={!draft.trim()}>
+            <Button type="submit" variant="primary" disabled={!draft.trim() || view.stale}>
               {t("agent.send")}
             </Button>
           )}

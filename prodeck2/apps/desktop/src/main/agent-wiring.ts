@@ -102,6 +102,12 @@ export function createAgentWiring(deps: AgentWiringDeps) {
       }
     },
 
+    /** The cut the outline compiles to now, which the project's session must still be on. */
+    async cut(folder: string) {
+      const { plan } = await deps.timeline.compiled(folder, requestOf(folder).rules)
+      return plan.cuts.map((cut) => ({ binId: cut.binId, sourceStartUs: cut.sourceStartUs, sourceDurationUs: cut.sourceDurationUs }))
+    },
+
     async clip(folder: string): Promise<AgentClip> {
       const { stored, plan, clips, canvas, words } = await project(folder)
       if (!canvas) throw new Error("the rough cut is empty")

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest"
 import { DEFAULT_CUT_RULES } from "@boxblack/core/cut/rules"
 import type { LlmRequest, LlmResponse, LlmTransport } from "@boxblack/core/llm"
+import { sameCut } from "./agent.ts"
 import { createAgentWiring } from "./agent-wiring.ts"
 import { setup } from "./timeline-fixture.ts"
 
@@ -26,6 +27,8 @@ test("the agent reads the clip from the confirmed outline: the words on the roug
 
   const timeline = await start()
   expect(timeline.cuts).toHaveLength(plan.cuts.length)
+  // a session started now is on the cut the outline compiles to: it is not taken for a changed one
+  expect(sameCut(timeline, await wiring.cut(folder))).toBe(true)
   // nothing analysed: no scenes, nothing to keep clear, a gentle push passes
   expect(footage.scenes).toEqual([])
   expect(clip.room.keepIn({ startUs: 0, endUs: clip.durationUs }, [])).toEqual([])

@@ -1194,6 +1194,8 @@ export interface AgentView {
   summed: boolean
   /** how many looks Claude has had at the project since the app started: the tab reads the last one when this changes */
   looks: number
+  /** the outline's cut has changed since the session started: its pieces would land elsewhere, so it must start again */
+  stale: boolean
 }
 
 /** The user's preview of the agent's timeline: `frames` JPEGs at `fps` (00001.jpg on) and, with `audio`, audio.wav. */
