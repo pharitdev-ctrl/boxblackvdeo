@@ -447,14 +447,14 @@ export function createTimelineService(deps: TimelineDeps) {
   }
 
   /** The write itself; `write` below lets only one run on a draft at a time. */
-  async function writeNow(
-    folder: string,
-    rules: CutRules,
-    expectedSegments: number,
-    subtitles: SubtitleRequest | null,
-    highlights: HighlightRequest | null,
-  ): Promise<WriteResult> {
-    await assertCapCutClosed(deps.isCapCutRunning)
+  /**
+   * Every piece a write of this request lays, at its times, as a timeline: what `writeNow` writes, and what the agent
+   * editor starts from. `write` makes it the write's own: CapCut must be closed, the graphics and composed sounds are
+   * waited for (rendered first when need be), and the draft must still have `expectedSegments`. Without it, a dry run:
+   * nothing is waited for or checked against CapCut, and a graphic or sound not made yet is left out, as a write
+   * leaves out one whose render failed.
+   */
+  async function assemble(folder: string, rules: CutRules, subtitles: SubtitleRequest | null, highlights: HighlightRequest | null, write: { expectedSegments: number } | null) {
     const { stored, plan: cutPlan, clips } = await compile(folder, rules)
     if (cutPlan.cuts.length === 0) throw new Error("the rough cut is empty: every beat was cut away")
 
@@ -480,7 +480,7 @@ export function createTimelineService(deps: TimelineDeps) {
       })
       unmade = inForce.kept.length - withJobs.length
       const jobs = withJobs.map(({ job }) => job)
-      if (jobs.length > 0) {
+      if (write && jobs.length > 0) {
         const notInstalled = "the graphics renderer is not installed: install it in settings, or turn graphics off"
         const renderer = deps.graphics
         if (!renderer) throw new Error(notInstalled)
@@ -499,8 +499,8 @@ export function createTimelineService(deps: TimelineDeps) {
         const settled = new Set([...ready, ...failed])
         const unsettled = jobs.filter((job) => !settled.has(renderer.hashOf(job)))
         if (unsettled.length > 0) throw unfit() ?? new Error("the graphics were stopped before they were made; the draft was not changed")
-        waitedFor.push(...withJobs)
       }
+      waitedFor.push(...withJobs)
     }
 
     // the composed sounds are waited for in the same way, for the same reason. Only the written and fresh ones are
@@ -519,7 +519,7 @@ export function createTimelineService(deps: TimelineDeps) {
         } else soundsWaitedFor.push(placed)
       }
       const jobs = soundsWaitedFor.map(soundJobOf)
-      if (jobs.length > 0) {
+      if (write && jobs.length > 0) {
         const renderer = deps.soundRenderer
         if (!renderer) throw new Error("the sounds cannot be made: there is no sound renderer; the draft was not changed")
         // a machine an earlier render found unfit may be fit by now (the page restarted, ffmpeg found again): it is tried again
@@ -539,12 +539,12 @@ export function createTimelineService(deps: TimelineDeps) {
       }
     }
     // CapCut may have been opened while the graphics and sounds rendered: a write it would refuse must not take a backup first
-    await assertCapCutClosed(deps.isCapCutRunning)
+    if (write) await assertCapCutClosed(deps.isCapCutRunning)
 
     const draft = await loadDraft(folder)
     const current = segmentCount(draft.info)
-    if (current !== expectedSegments) {
-      throw new Error(`the timeline changed after it was checked (it now has ${current} segments, not ${expectedSegments}); check it again before writing`)
+    if (write && current !== write.expectedSegments) {
+      throw new Error(`the timeline changed after it was checked (it now has ${current} segments, not ${write.expectedSegments}); check it again before writing`)
     }
     const time = now()
     // the rough cut alone, for where its pieces play once on frames; the whole timeline is written from it below
@@ -664,7 +664,7 @@ export function createTimelineService(deps: TimelineDeps) {
     // the graphics laid, which the sounds tied to them need
     const graphicsLaid: PlacedGraphic[] = []
     for (const { graphic, job } of waitedFor) {
-      const file = await deps.graphics!.rendered(job)
+      const file = deps.graphics ? await deps.graphics.rendered(job) : null
       // its render failed, or it was made and its file is gone since
       if (!file) {
         graphicsSkipped++
@@ -700,8 +700,12 @@ export function createTimelineService(deps: TimelineDeps) {
         continue
       }
       const job = soundJobOf(placed)
-      const renderer = deps.soundRenderer!
-      // its render failed, or it was made and its file is gone since, cannot be read, or holds no sound
+      const renderer = deps.soundRenderer
+      if (!renderer) {
+        composedLeftOut.failed++
+        continue
+      }
+      // its render failed (or, in a dry run, is not made yet), or it was made and its file is gone since, cannot be read, or holds no sound
       const durationUs = (await renderer.statusOf(job)) === "ready" ? await wavLengthUs(renderer.fileOf(job)).catch(() => null) : null
       if (durationUs === null || durationUs <= 0) {
         composedLeftOut.failed++
@@ -739,6 +743,29 @@ export function createTimelineService(deps: TimelineDeps) {
       sounds: pipelinePieces("sound", sounds.cues),
       binItems,
     }
+    return {
+      timeline,
+      draft,
+      time,
+      movesDropped: moved.dropped,
+      // the moves with no place on the cut are counted with the zooms whose piece is gone, as the preview counts them
+      zoomsLost: zoomed.lost + moved.lost,
+      graphicsSkipped,
+      composedLeftOut,
+      emphasisCount,
+      proLeftOut: { exits: exitsHeld, sounds: sounds.pro },
+    }
+  }
+
+  async function writeNow(
+    folder: string,
+    rules: CutRules,
+    expectedSegments: number,
+    subtitles: SubtitleRequest | null,
+    highlights: HighlightRequest | null,
+  ): Promise<WriteResult> {
+    await assertCapCutClosed(deps.isCapCutRunning)
+    const { timeline, draft, time, movesDropped, ...counts } = await assemble(folder, rules, subtitles, highlights, { expectedSegments })
     // build first: a timeline the writers reject must not leave a backup behind for nothing
     const written = writeTimeline(draft.info, binVideos(draft.meta), timeline, {
       subtitleGroupId: `boxblack_${time.getTime()}`,
@@ -746,7 +773,7 @@ export function createTimelineService(deps: TimelineDeps) {
     })
     const { info } = written
     // the moves the checks turned down are counted with those the writer left out
-    const laid = { ...written.laid, moves: { kept: written.laid.moves?.kept ?? 0, dropped: (written.laid.moves?.dropped ?? 0) + moved.dropped } }
+    const laid = { ...written.laid, moves: { kept: written.laid.moves?.kept ?? 0, dropped: (written.laid.moves?.dropped ?? 0) + movesDropped } }
     const dir = await backupDraft(draft, deps.backupRoot, time)
     await writeDraft(draft, info, { isCapCutRunning: deps.isCapCutRunning, bin: written.bin })
     // what was written, for the agent editor and for reading the draft back later; a failure here leaves the write as it is
@@ -761,13 +788,31 @@ export function createTimelineService(deps: TimelineDeps) {
       captionCount: textSegments(1),
       highlightCount: textSegments(0),
       ...tally(laid),
-      // the moves with no place on the cut are counted with the zooms whose piece is gone, as the preview counts them
-      zoomsLost: zoomed.lost + moved.lost,
-      graphicsSkipped,
-      composedLeftOut,
-      emphasisCount,
-      proLeftOut: { exits: exitsHeld, sounds: sounds.pro },
+      ...counts,
     }
+  }
+
+  /**
+   * Writes a timeline made elsewhere (the agent editor's) with the same care as a write: CapCut closed, the draft
+   * unchanged since it was checked, a backup first, and the timeline kept as the project's last write.
+   */
+  async function writeTimelineNow(folder: string, timeline: AgentTimeline, expectedSegments: number): Promise<{ backup: BackupInfo; durationUs: number; segmentCount: number }> {
+    await assertCapCutClosed(deps.isCapCutRunning)
+    const draft = await loadDraft(folder)
+    const current = segmentCount(draft.info)
+    if (current !== expectedSegments) {
+      throw new Error(`the timeline changed after it was checked (it now has ${current} segments, not ${expectedSegments}); check it again before writing`)
+    }
+    const time = now()
+    const written = writeTimeline(draft.info, binVideos(draft.meta), timeline, {
+      subtitleGroupId: `boxblack_${time.getTime()}`,
+      prune: (await liveTimelines(draft)) <= 1 ? { graphicsDir: deps.graphicsDir, soundsDir: deps.soundsDir } : null,
+    })
+    const dir = await backupDraft(draft, deps.backupRoot, time)
+    await writeDraft(draft, written.info, { isCapCutRunning: deps.isCapCutRunning, bin: written.bin })
+    await deps.timelines?.put({ folder, writtenAt: time.getTime(), timeline }).catch(() => undefined)
+    const { backup } = await describe(basename(dir))
+    return { backup, durationUs: written.info.duration, segmentCount: segmentCount(written.info) }
   }
 
   const service = {
@@ -929,6 +974,18 @@ export function createTimelineService(deps: TimelineDeps) {
           deps.send?.({ type: "timeline-write", folder, state: "failed", error: (error as Error).message })
           throw error
         }
+      })
+    },
+
+    /** The timeline a write of this request would lay, without writing or waiting for renders: where the agent editor starts. */
+    dryAssemble: async (folder: string, rules: CutRules, subtitles: SubtitleRequest | null, highlights: HighlightRequest | null): Promise<AgentTimeline> =>
+      (await assemble(folder, rules, subtitles, highlights, null)).timeline,
+
+    /** Writes the agent editor's timeline, one write at a time per draft, as `write` does. */
+    async writeTimeline(folder: string, timeline: AgentTimeline, expectedSegments: number) {
+      return alone(folder, "write", async () => {
+        writesStarted++
+        return writeTimelineNow(folder, timeline, expectedSegments)
       })
     },
 

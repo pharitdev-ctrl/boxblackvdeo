@@ -2028,3 +2028,26 @@ test("each write keeps the timeline it wrote, which describes the draft; a refus
   expect(kept!.timeline.durationUs).toBe(info.duration)
   expect(kept!.timeline.cuts.every((piece) => piece.by === "pipeline" && !piece.locked)).toBe(true)
 })
+
+test("a dry assemble is the timeline a write of the same request lays, and the agent's write of it gives the same draft", async () => {
+  const { folder, deps, dir, capcut } = await setup()
+  const timelines = new TimelineStore(join(dir, "timelines"))
+  const service = createTimelineService({ ...deps, timelines })
+
+  const dry = await service.dryAssemble(folder, DEFAULT_CUT_RULES, null, null)
+  await service.write(folder, DEFAULT_CUT_RULES, 0)
+  const byPipeline = await readInfo(folder)
+  expect((await timelines.get(folder))!.timeline).toEqual(dry)
+
+  // the agent's write checks as a write does
+  capcut.running = true
+  await expect(service.writeTimeline(folder, dry, segments(byPipeline))).rejects.toThrow()
+  capcut.running = false
+  await expect(service.writeTimeline(folder, dry, 0)).rejects.toThrow(/timeline changed/)
+
+  const result = await service.writeTimeline(folder, dry, segments(byPipeline))
+  const byAgent = await readInfo(folder)
+  expect(result).toMatchObject({ durationUs: byAgent.duration, segmentCount: segments(byAgent) })
+  const shape = (info: typeof byAgent) => info.tracks.map((track) => track.segments.map((segment) => [segment.source_timerange?.start, segment.target_timerange.start, segment.target_timerange.duration]))
+  expect(shape(byAgent)).toEqual(shape(byPipeline))
+})
