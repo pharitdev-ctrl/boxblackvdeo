@@ -38,6 +38,7 @@ import { createGraphicsPack } from "./graphics-pack.ts"
 import { createGraphicsRenderer } from "./graphics-render.ts"
 import { cleanGraphicFiles, graphicFilesInfo } from "./graphics-files.ts"
 import { createSettingsApi } from "./settings-api.ts"
+import { TimelineStore } from "./timeline-store.ts"
 import { createTimelineService } from "./timeline.ts"
 import { createTimelineApi } from "./timeline-api.ts"
 import { createFlairService } from "./flair.ts"
@@ -335,6 +336,7 @@ void app.whenReady().then(async () => {
       if (!known.some((project) => project.folder === folder)) throw new Error(`${folder} is not a CapCut project`)
     },
     outlines,
+    timelines: new TimelineStore(join(userData, "timelines")),
     loudness: new MediaCache<Loudness, { stepUs: number }>(join(userData, "loudness")),
     measureLoudness: (input) => (tools.ffmpeg ? measureLoudness({ ffmpeg: tools.ffmpeg, input }) : Promise.reject(new Error("ffmpeg-missing"))),
     backupRoot,

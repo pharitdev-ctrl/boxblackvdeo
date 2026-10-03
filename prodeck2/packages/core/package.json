@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./capcut": "./src/capcut/index.ts",
+    "./timeline": "./src/timeline/index.ts",
     "./capcut/sounds": "./src/capcut/sounds.ts",
     "./capcut/composed-sounds": "./src/capcut/composed-sounds.ts",
     "./capcut/zoom": "./src/capcut/zoom.ts",

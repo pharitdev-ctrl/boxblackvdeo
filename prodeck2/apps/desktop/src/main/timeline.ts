@@ -3,8 +3,6 @@ import { existsSync } from "node:fs"
 import { readdir, readFile } from "node:fs/promises"
 import { basename, join } from "node:path"
 import {
-  addHighlightTracks,
-  addSubtitleTrack,
   assertCapCutClosed,
   backupDraft,
   binVideos,
@@ -19,7 +17,7 @@ import {
   type DraftInfo,
   type IsCapCutRunning,
   type RootMetaEntry,
-  type Written,
+  type TimelineCaption,
 } from "@boxblack/core/capcut"
 import { writeFileAtomic } from "@boxblack/core/atomic-write"
 import type { MediaCache } from "@boxblack/core/cache"
@@ -51,25 +49,27 @@ import { heldExits, hiddenWords, looksInForce, placedPoints, placementOf, placeS
 import { cuesInForce, samePlace, slotsFor } from "./sound-cues.ts"
 import { itemPlaceOf, keepClearAt, placeOf, type SpareMedia } from "./insert-media.ts"
 import { spokenSentences, wordsIn } from "./spoken.ts"
-import { addInsertTrack, type TimelineInsert } from "@boxblack/core/capcut/inserts"
+import type { TimelineInsert } from "@boxblack/core/capcut/inserts"
 import { faceYOf, pieceKey, punchAtUs, zoomSlotsFor, zoomsInForce } from "./zoom-cues.ts"
-import { addZooms, type TimelineZoom } from "@boxblack/core/capcut/zoom"
-import { addMoves, zoomsBesideMoves, type TimelineMove } from "@boxblack/core/capcut/moves"
+import type { TimelineZoom } from "@boxblack/core/capcut/zoom"
+import { zoomsBesideMoves, type TimelineMove } from "@boxblack/core/capcut/moves"
 import type { PlacedInsert } from "@boxblack/core/flair/plan"
 import { movesOnCut, type PlacedMove } from "./move-cues.ts"
 import type { SoundLibrary } from "./sound-library.ts"
-import { addSoundTrack, type TimelineSoundCue } from "@boxblack/core/capcut/sounds"
+import type { TimelineSoundCue } from "@boxblack/core/capcut/sounds"
 import type { FlairOptions } from "@boxblack/core/flair/catalogue"
 import { soundNeedsPro } from "@boxblack/core/flair/sound-catalogue"
 import type { PlacedPoint, PointFilter } from "@boxblack/core/emphasis"
-import { addGraphicTrack, type TimelineGraphic } from "@boxblack/core/capcut/graphics"
-import { addBinItems, binIdOf, graphicBinItem, pruneBinItems, soundBinItem } from "@boxblack/core/capcut/bin"
-import { addComposedSoundTrack, type TimelineComposedSound } from "@boxblack/core/capcut/composed-sounds"
+import type { TimelineGraphic } from "@boxblack/core/capcut/graphics"
+import { binIdOf, graphicBinItem, soundBinItem } from "@boxblack/core/capcut/bin"
+import type { TimelineComposedSound } from "@boxblack/core/capcut/composed-sounds"
 import { soundJobOf, type PlacedComposed } from "./composed-cues.ts"
 import type { SoundRenderer } from "./sound-render.ts"
 import type { PlacedGraphic } from "@boxblack/core/graphics/plan"
 import type { GraphicsRenderer, RenderJob } from "./graphics-render.ts"
 import type { OutlineStore } from "./planner.ts"
+import type { TimelineStore } from "./timeline-store.ts"
+import { pipelinePieces, TIMELINE_VERSION, writeTimeline, type AgentTimeline } from "@boxblack/core/timeline"
 
 export interface TimelineDeps extends FootageDeps {
   /** Rejects folders CapCut has not registered. Unlike inspect, it does not need the draft to be readable, so a broken draft can still be restored. */
@@ -116,6 +116,8 @@ export interface TimelineDeps extends FootageDeps {
   soundsDir?: string
   /** tells the app when a write starts and how it ended */
   send?: (event: AppEvent) => void
+  /** where the timeline of each write is kept; without it nothing is kept */
+  timelines?: Pick<TimelineStore, "put">
 }
 
 /** The parts of backupDraft's manifest.json this service reads. */
@@ -544,11 +546,11 @@ export function createTimelineService(deps: TimelineDeps) {
     if (current !== expectedSegments) {
       throw new Error(`the timeline changed after it was checked (it now has ${current} segments, not ${expectedSegments}); check it again before writing`)
     }
-    // build first: a cut the writer rejects must not leave a backup behind for nothing
     const time = now()
-    let info = buildRoughCut(draft.info, cutPlan.cuts, binVideos(draft.meta))
+    // the rough cut alone, for where its pieces play once on frames; the whole timeline is written from it below
+    const rough = buildRoughCut(draft.info, cutPlan.cuts, binVideos(draft.meta))
     // the segment each cut became; its frame-rounded times are where the words really play
-    const video = info.tracks[0]!.segments
+    const video = rough.tracks[0]!.segments
     const at = (cut: number, sourceUs: number) => video[cut]!.target_timerange.start - video[cut]!.source_timerange!.start + sourceUs
     const played = onFrames(cutPlan, at)
     // the emphasis points placed on this rough cut (without a highlight request nothing below reads them)
@@ -569,25 +571,26 @@ export function createTimelineService(deps: TimelineDeps) {
       ? movesOnCut({ stored, plan: cutPlan, clips, canvas, flair: highlights.flair, points, groups: timedBefore, pictures, passes: show.passes, at: beforeRounding })
       : { kept: [], off: [], dropped: 0, lost: 0, inserts: [] }
 
+    let captions: TimelineCaption[] = []
     if (subtitles) {
       // with the text off no group is placed, so none hides a word; nor does a replaced group, which is not drawn
       const hidden = highlights?.hideSubtitles ? hiddenFor(stored, cutPlan, clips, draft, show, replaced) : new Map<number, Set<number>>()
-      const captions = captionsFor(cutPlan, clips, draft, subtitles.length, hidden)
-      if (captions.length !== subtitles.texts.length) {
-        throw new Error(`the subtitles changed since they were shown (${captions.length} lines now, not ${subtitles.texts.length}); look at them again before writing`)
+      const shown = captionsFor(cutPlan, clips, draft, subtitles.length, hidden)
+      if (shown.length !== subtitles.texts.length) {
+        throw new Error(`the subtitles changed since they were shown (${shown.length} lines now, not ${subtitles.texts.length}); look at them again before writing`)
       }
-      const timed = captions.map((caption, i) => ({ startUs: at(caption.cut, caption.startUs), endUs: at(caption.cut, caption.endUs), text: subtitles.texts[i]! }))
-      info = addSubtitleTrack(info, timed, `boxblack_${time.getTime()}`)
+      captions = shown.map((caption, i) => ({ startUs: at(caption.cut, caption.startUs), endUs: at(caption.cut, caption.endUs), text: subtitles.texts[i]! }))
     }
 
     // read once, so the text and the sounds are written under the same CapCut Pro setting
     const settings = await deps.settings.read()
     // the groups' exits left out for want of CapCut Pro, counted over the groups written
     let exitsHeld = 0
+    let highlightText: AgentTimeline["highlights"] = null
     if (highlights) {
       // every group the rules show, the replaced ones among them, as the preview lists them: they are timed and
       // given their looks together, since a group ends where the next begins and a run of looks counts them all
-      const groups = timeHighlights(placed, at, info.duration)
+      const groups = timeHighlights(placed, at, rough.duration)
       if (groups.length !== highlights.groupCount) {
         throw new Error(`the highlight text changed since it was shown (${groups.length} groups now, not ${highlights.groupCount}); look at it again before writing`)
       }
@@ -627,39 +630,30 @@ export function createTimelineService(deps: TimelineDeps) {
             })),
           }
         })
-        info = addHighlightTracks(info, laidOut, {
-          fontPath: await deps.highlightAssets.fontPath(style.font),
-          strokeWidth: style.strokeWidth,
-          barRoundness: style.barRoundness,
-          palette: style.palette,
-          animation: { ...style.animation, path: await deps.highlightAssets.animationPath(style.animation.resourceId) },
-        })
+        highlightText = {
+          look: {
+            fontPath: await deps.highlightAssets.fontPath(style.font),
+            strokeWidth: style.strokeWidth,
+            barRoundness: style.barRoundness,
+            palette: style.palette,
+            animation: { ...style.animation, path: await deps.highlightAssets.animationPath(style.animation.resourceId) },
+          },
+          groups: pipelinePieces("highlight", laidOut, (group) => group.lines.map((line) => line.text.trim()).join(" / ")),
+        }
       }
-    }
-
-    // each writer's answer: the draft after it, and what it placed and left out, which the result counts (tally)
-    const laid: Partial<Record<LaidKind, { kept: number; dropped: number }>> = {}
-    const lay = (kind: LaidKind, result: Written) => {
-      const { info: after, ...counts } = result
-      info = after
-      laid[kind] = counts
     }
 
     // the picture moves before anything is laid on top of it: Claude's moves on their pieces, and the legacy zooms on
     // the pieces no move plays on, since a piece has one set of keyframes and the move wins. The moves the checks
     // turned down are counted with those the writer left out
     const moves: TimelineMove[] = moved.kept.flatMap((move) => (move.cut !== undefined ? [{ cut: move.cut, startUs: move.startUs, poses: move.poses }] : []))
-    if (moves.length > 0) lay("moves", addMoves(info, moves))
-    laid.moves = { kept: laid.moves?.kept ?? 0, dropped: (laid.moves?.dropped ?? 0) + moved.dropped }
     const zoomed = highlights ? zoomsFor(stored, cutPlan, placed, clips, highlights.flair, show.passes) : { zooms: [], lost: 0 }
     const beside = zoomsBesideMoves(zoomed.zooms, moves).zooms
-    if (beside.length > 0) lay("zooms", addZooms(info, beside))
 
     // the cutaways sit over the picture but under the text, each with the move kept on it
     // timed like the text, on the frames the picture really starts on
     const inserts = highlights && highlights.flair.insert && deps.media ? insertCutaways(moved.inserts, moved.kept, cutPlan, clips, played) : []
     // a move on a cutaway the overlay writer leaves out goes with it, counted as that cutaway, not as a move
-    if (inserts.length > 0) lay("inserts", addInsertTrack(info, inserts))
 
     // the graphics sit over the cutaways but under the text, timed like the cutaways
     const graphics: TimelineGraphic[] = []
@@ -695,7 +689,6 @@ export function createTimelineService(deps: TimelineDeps) {
         place: file.place,
       })
     }
-    if (graphics.length > 0) lay("graphics", addGraphicTrack(info, graphics))
 
     // the composed sounds go on above the graphics, each for its file's own length, timed like the graphics; one tied
     // to a graphic the write left out goes with it, as stale
@@ -721,26 +714,43 @@ export function createTimelineService(deps: TimelineDeps) {
       binItems.push(soundBinItem({ id: binId, path, durationUs, nowMs: time.getTime() }))
       composed.push({ atUs: played(placed.atUs), durationUs, path, binId })
     }
-    if (composed.length > 0) lay("composed", addComposedSoundTrack(info, composed))
 
     // the sound effects go on last, so their track sits above the text
     const sounds = highlights ? await soundCues(stored, cutPlan, placed, clips, highlights.flair, show.passes, points, played, settings.capcut.pro) : { cues: [], pro: 0 }
-    if (sounds.cues.length > 0) lay("sounds", addSoundTrack(info, sounds.cues))
 
     // the bin is brought in line on every write, graphics and sounds on or off, so graphics and composed sounds this
     // timeline no longer plays leave the user's media panel. Only files in BOXBLACK's own graphics and sounds folders
     // are ever taken out, each folder kept to what this timeline plays from it, and the write replaces the whole
     // timeline — unless the project holds other timelines, which share this bin and may still play older ones
-    const prunes: [dir: string, keep: Set<string>][] = []
-    if ((await liveTimelines(draft)) <= 1) {
-      if (deps.graphicsDir) prunes.push([deps.graphicsDir, new Set(graphics.map((graphic) => graphic.binId))])
-      if (deps.soundsDir) prunes.push([deps.soundsDir, new Set(composed.map((sound) => sound.binId))])
+    const timeline: AgentTimeline = {
+      version: TIMELINE_VERSION,
+      direction: stored.outline.direction ?? "",
+      canvas,
+      durationUs: rough.duration,
+      cuts: pipelinePieces("cut", cutPlan.cuts),
+      subtitles: subtitles !== null,
+      captions: pipelinePieces("caption", captions, (caption) => caption.text),
+      highlights: highlightText,
+      moves: pipelinePieces("move", moves),
+      zooms: pipelinePieces("zoom", beside),
+      inserts: pipelinePieces("insert", inserts),
+      graphics: pipelinePieces("graphic", graphics, (graphic) => graphic.name),
+      composed: pipelinePieces("composed", composed),
+      sounds: pipelinePieces("sound", sounds.cues),
+      binItems,
     }
-    const dir = await backupDraft(draft, deps.backupRoot, time)
-    await writeDraft(draft, info, {
-      isCapCutRunning: deps.isCapCutRunning,
-      bin: (meta) => addBinItems(prunes.reduce((pruned, [folder, keep]) => pruneBinItems(pruned, folder, keep), meta), binItems),
+    // build first: a timeline the writers reject must not leave a backup behind for nothing
+    const written = writeTimeline(draft.info, binVideos(draft.meta), timeline, {
+      subtitleGroupId: `boxblack_${time.getTime()}`,
+      prune: (await liveTimelines(draft)) <= 1 ? { graphicsDir: deps.graphicsDir, soundsDir: deps.soundsDir } : null,
     })
+    const { info } = written
+    // the moves the checks turned down are counted with those the writer left out
+    const laid = { ...written.laid, moves: { kept: written.laid.moves?.kept ?? 0, dropped: (written.laid.moves?.dropped ?? 0) + moved.dropped } }
+    const dir = await backupDraft(draft, deps.backupRoot, time)
+    await writeDraft(draft, info, { isCapCutRunning: deps.isCapCutRunning, bin: written.bin })
+    // what was written, for the agent editor and for reading the draft back later; a failure here leaves the write as it is
+    await deps.timelines?.put({ folder, writtenAt: time.getTime(), timeline }).catch(() => undefined)
 
     const { backup } = await describe(basename(dir))
     const textSegments = (flag: number) => info.tracks.filter((track) => track.type === "text" && track.flag === flag).reduce((sum, track) => sum + track.segments.length, 0)

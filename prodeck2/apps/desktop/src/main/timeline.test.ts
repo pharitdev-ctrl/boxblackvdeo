@@ -21,6 +21,7 @@ import { problemFor, type RenderJob } from "./graphics-render.ts"
 import { beatsKey } from "./highlight-state.ts"
 import { createHighlightService, type HighlightService } from "./highlights.ts"
 import { createTimelineService, tally, wavLengthUs, type TimelineDeps } from "./timeline.ts"
+import { TimelineStore } from "./timeline-store.ts"
 import { SOUND_VERSION, type ComposedSound } from "@boxblack/core/sound/spec"
 import { hashOfHtml, soundJobOf, soundStatusOf } from "./composed-cues.ts"
 import { samePlace } from "./sound-cues.ts"
@@ -2004,4 +2005,26 @@ test("when the clip's last words carry a point, the rough cut holds its end for 
   // the same point on a transcript that has changed since is not the clip's any more
   await deps.outlines.update(folder, (stored) => ({ ...stored!, emphasis: { ...stored!.emphasis!, transcripts: { [CLIP_ID]: "older" } } }))
   expect(await endOf()).toBe(plain)
+})
+
+test("each write keeps the timeline it wrote, which describes the draft; a refused write keeps nothing", async () => {
+  const { folder, deps, dir, capcut } = await setup()
+  const timelines = new TimelineStore(join(dir, "timelines"))
+  const service = createTimelineService({ ...deps, timelines })
+
+  capcut.running = true
+  await expect(service.write(folder, DEFAULT_CUT_RULES, 0)).rejects.toThrow()
+  expect(await timelines.get(folder)).toBeNull()
+
+  capcut.running = false
+  await service.write(folder, DEFAULT_CUT_RULES, 0)
+  const kept = await timelines.get(folder)
+  const info = await readInfo(folder)
+  expect(kept!.writtenAt).toBe(Date.parse("2026-09-17T08:01:00.000Z"))
+  // the cuts as the writer is given them; it puts their edges on frames, so each is within a frame of what it wrote
+  const written = info.tracks[0]!.segments.map((segment) => segment.source_timerange!.start)
+  expect(kept!.timeline.cuts).toHaveLength(written.length)
+  kept!.timeline.cuts.forEach((piece, i) => expect(Math.abs(piece.item.sourceStartUs - written[i]!)).toBeLessThan(1_000_000 / 30))
+  expect(kept!.timeline.durationUs).toBe(info.duration)
+  expect(kept!.timeline.cuts.every((piece) => piece.by === "pipeline" && !piece.locked)).toBe(true)
 })

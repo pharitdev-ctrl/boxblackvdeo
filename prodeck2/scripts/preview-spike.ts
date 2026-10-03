@@ -237,7 +237,7 @@ await page.evaluate(() => document.fonts.ready)
 const composeStarted = Date.now()
 for (let n = 0; n < frameCount; n++) {
   await page.evaluate(
-    async ({ items, W, H, canvasW, pxPerSize, fonts, fallbackFont }) => {
+    async ({ items, W, H, canvasW, pxPerSize, fonts, fallbackFont }: any) => {
       const c = document.getElementById("c") as HTMLCanvasElement
       const ctx = c.getContext("2d")!
       ctx.fillStyle = "#000"
