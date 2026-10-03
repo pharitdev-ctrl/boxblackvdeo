@@ -67,4 +67,9 @@ drafts share):
   Bold, so the letter shapes differ a little.
 - **Not drawn:** CapCut text animations and effects, text templates, stickers from CapCut's cache.
 
-Next: the graphics (`.mov` with alpha) and sounds, then a fresh export of this exact draft to compare frame by frame.
+**Sounds** (second run, 13 WAVs from the user): all placed at their times with their volumes and mixed over the main
+track's audio; 22 s in 17 s. The audio lines up with the export at zero lag (50 ms steps) and is as loud (−24.5 dB
+against −26.1 dB). The envelopes cannot be compared closely yet: the old export was made before "ทำทั้งหมด" was run
+again, which composed new sounds.
+
+Next: the graphics (`.mov` with alpha), then a fresh export of this exact draft to compare frame by frame.
