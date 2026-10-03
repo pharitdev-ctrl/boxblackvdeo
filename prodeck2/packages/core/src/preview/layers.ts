@@ -48,8 +48,10 @@ export type PreviewLayer =
       lines: PreviewRun[][]
       /** the size in pixels of the draft's canvas */
       sizePx: number
-      /** the font file's name without its extension, or "" for CapCut's own font */
+      /** the font file's name without its extension, or "" for CapCut's own font: the family the page draws it in */
       font: string
+      /** the font file as the draft names it, which the page loads when it is on this machine */
+      fontFile: string
       subtitle: boolean
       look: PreviewLook
     }
@@ -130,7 +132,7 @@ export function valueAt(keyframes: Points[], property: string, sourceUs: number)
 }
 
 /** The lines of a text material, each split into runs of one colour by its styles' ranges (in code points). */
-function linesOf(material: Json): { lines: PreviewRun[][]; size: number; font: string } {
+function linesOf(material: Json): { lines: PreviewRun[][]; size: number; font: string; fontFile: string } {
   let text = ""
   let styles: Json[] = []
   try {
@@ -168,7 +170,7 @@ function linesOf(material: Json): { lines: PreviewRun[][]; size: number; font: s
     })
   }
   const fontPath = String(first.font?.path ?? material.font_path ?? "")
-  return { lines: lines.filter((line) => line.length > 0), size: Number(first.size ?? material.font_size ?? 15), font: fontPath ? basename(fontPath).replace(/\.(ttf|otf)$/i, "") : "" }
+  return { lines: lines.filter((line) => line.length > 0), size: Number(first.size ?? material.font_size ?? 15), font: fontPath ? basename(fontPath).replace(/\.(ttf|otf)$/i, "") : "", fontFile: fontPath }
 }
 
 /**
@@ -229,11 +231,11 @@ export function readPreviewDraft(info: DraftInfo, local: (path: string) => strin
         const native = { width: Number(m.width) || canvas.width, height: Number(m.height) || canvas.height }
         placed.push({ ...base, order, layer: (sourceUs, look) => ({ kind: "video", file, photo: m.type === "photo", sourceUs, native, look, overlay: !isMain }) })
       } else if (kind === "texts") {
-        const { lines, size, font } = linesOf(m)
+        const { lines, size, font, fontFile } = linesOf(m)
         if (lines.length === 0) continue
         const subtitle = m.type === "subtitle"
         const sizePx = size * (subtitle ? SUBTITLE_PX_PER_SIZE : TEXT_PX_PER_SIZE) * textScale
-        placed.push({ ...base, order, layer: (_, look) => ({ kind: "text", lines, sizePx, font, subtitle, look }) })
+        placed.push({ ...base, order, layer: (_, look) => ({ kind: "text", lines, sizePx, font, fontFile, subtitle, look }) })
       } else if (kind === "shapes" || m.type === "shape") {
         const [width, height] = (m.shape_size as [number, number] | undefined) ?? [0, 0]
         const solid = m.fill_render_style?.color?.solid
