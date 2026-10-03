@@ -47,6 +47,24 @@ user's. A known segment that is gone was deleted by the user. Keyframes are comp
 Not tested yet: splitting a segment in two (one keeps the id, one is new?), copy and paste, undo after save, and a
 draft moved to another Mac. Worth a second round before phase 5.
 
-## Spike B: preview
+## Spike B: preview (first round, 2026-10-03)
 
-Waiting for the draft folder, the source video and `~/Movies/CapCut/BOXBLACK` from the user.
+`scripts/preview-spike.ts` on the draft of "1003 (1)" (after the user's five edits), with the source video sent at
+720x1280 (`avconvert --preset Preset1280x720`). The rendered graphics and sounds have not arrived yet, so they and
+the user's sticker (a file in CapCut's own cache) are left out; the main track's own audio is mixed.
+
+**Speed:** 22 s of timeline at 540x960, 10 fps: extract 2 s, compose 8 s, encode 3 s (13 s in all, in this container).
+
+**Against CapCut's export** (`1003_1.mov`, exported before the end hold and the edits, so compared at times the two
+drafts share):
+
+- **Main video:** the same frame at the same time at every time compared (0.5, 3, 6, 10, 12, 15.5, 18 s); framing
+  and the zoom keyframes match by eye. Keyframes are timed in the source file (`time_offset`), positions in halves of
+  the canvas from its centre (x right, y up), scale 1 fits the material inside the canvas.
+- **Highlight text** (Mali-Bold, which the app ships): same font, size, place and outline once the text size is read
+  as `size × 4.8 px` on a 1080-wide canvas, times the segment's scale.
+- **Subtitles** (CapCut's system font, which is not ours): same place and size at `size × 3.9 px`; drawn in Loma
+  Bold, so the letter shapes differ a little.
+- **Not drawn:** CapCut text animations and effects, text templates, stickers from CapCut's cache.
+
+Next: the graphics (`.mov` with alpha) and sounds, then a fresh export of this exact draft to compare frame by frame.
